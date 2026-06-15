@@ -1,0 +1,6 @@
+{
+  "auth": {
+    "signIn": "Se connecter",
+    "welcome": "Bienvenue {name}"
+  }
+}

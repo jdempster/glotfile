@@ -1,0 +1,5 @@
+/* A leading block comment */
+"Tap to start" = "Tap to start";
+// a line comment
+"Quotes \"here\"" = "Quotes \"here\"";
+"Multi line" = "Line one\nLine two";

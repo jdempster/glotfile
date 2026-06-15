@@ -1,0 +1,5 @@
+{
+  "@@locale": "en",
+  "deliveries_failed": "{count, plural, =1{Failed to collect delivery} other{Failed to collect deliveries}}",
+  "@deliveries_failed": { "placeholders": { "count": {} } }
+}

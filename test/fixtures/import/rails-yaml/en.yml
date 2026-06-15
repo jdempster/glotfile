@@ -1,0 +1,16 @@
+---
+# English locale file
+en:
+  auth:
+    sign_in: "Sign in"
+    welcome: "Welcome %{name}"
+    # reserved word used as a key
+    "yes": "Yes please"
+  tricky: "He said \"hi\" \\ bye\nnext line"
+  plain: Hello there # trailing comment
+  single: 'It''s fine'
+  cart:
+    items:
+      one: "%{count} item"
+      other: "%{count} items"
+  empty: ""

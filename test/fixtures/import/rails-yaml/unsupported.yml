@@ -1,0 +1,10 @@
+en:
+  defaults: &defaults
+    nope: "anchored, skipped"
+  block: |
+    line one
+    line two
+  list:
+    - "first"
+    - "second"
+  ok: "still parsed"

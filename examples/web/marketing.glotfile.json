@@ -1,0 +1,144 @@
+{
+  "$schema": "https://glotfile.dev/schema/v1.json",
+  "config": {
+    "autoExport": true,
+    "format": {
+      "finalNewline": true,
+      "indent": 2,
+      "sortKeys": true
+    },
+    "locales": [
+      "en",
+      "de",
+      "es",
+      "fr",
+      "pt",
+      "zh"
+    ],
+    "outputs": [
+      {
+        "adapter": "i18next-json",
+        "path": ".glotfile/public/locales/{locale}/common.json"
+      }
+    ],
+    "sourceLocale": "en",
+    "spelling": {
+      "customWords": []
+    }
+  },
+  "glossary": [],
+  "keys": {
+    "footer.copyright": {
+      "tags": [
+        "footer"
+      ],
+      "values": {
+        "en": {
+          "state": "source",
+          "value": "© 2026 Acme Inc. All rights reserved."
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "© 2026 Acme Inc. Tous droits réservés."
+        }
+      }
+    },
+    "hero.cta": {
+      "maxLength": 20,
+      "tags": [
+        "landing",
+        "button"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Kostenlos starten"
+        },
+        "en": {
+          "state": "source",
+          "value": "Get started free"
+        },
+        "es": {
+          "state": "reviewed",
+          "value": "Empieza gratis"
+        },
+        "fr": {
+          "state": "needs-review",
+          "value": "Commencer gratuitement"
+        },
+        "pt": {
+          "source": "ai",
+          "state": "machine",
+          "updatedAt": "2026-04-02T09:00:00.000Z",
+          "value": "Comece gratuitamente"
+        },
+        "zh": {
+          "state": "reviewed",
+          "value": "免费开始"
+        }
+      }
+    },
+    "hero.headline": {
+      "tags": [
+        "landing",
+        "hero"
+      ],
+      "values": {
+        "de": {
+          "source": "ai",
+          "state": "machine",
+          "updatedAt": "2026-04-01T10:00:00.000Z",
+          "value": "Übersetzungen schneller ausliefern"
+        },
+        "en": {
+          "state": "source",
+          "value": "Ship translations faster"
+        },
+        "es": {
+          "source": "ai",
+          "state": "machine",
+          "updatedAt": "2026-04-01T10:00:00.000Z",
+          "value": "Publica traducciones más rápido"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Livrez vos traductions plus vite"
+        }
+      }
+    },
+    "nav.pricing": {
+      "tags": [
+        "nav"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Preise"
+        },
+        "en": {
+          "state": "source",
+          "value": "Pricing"
+        },
+        "es": {
+          "state": "reviewed",
+          "value": "Precios"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Tarifs"
+        },
+        "pt": {
+          "state": "reviewed",
+          "value": "Preços"
+        },
+        "zh": {
+          "source": "ai",
+          "state": "machine",
+          "updatedAt": "2026-04-01T10:00:00.000Z",
+          "value": "定价"
+        }
+      }
+    }
+  },
+  "version": 1
+}

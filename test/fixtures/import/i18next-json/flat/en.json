@@ -1,0 +1,15 @@
+{
+  "auth": {
+    "signIn": "Sign in {{name}}",
+    "title": "Welcome"
+  },
+  "items_one": "{{count}} item",
+  "items_other": "{{count}} items",
+  "files_zero": "no files",
+  "files_one": "one file",
+  "files_other": "{{count}} files",
+  "legacy_one": "not a plural",
+  "empty": "",
+  "bad": null,
+  "greeting": "Hello"
+}

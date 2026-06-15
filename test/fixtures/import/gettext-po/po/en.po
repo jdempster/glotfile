@@ -1,0 +1,39 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: en\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#. A sign-in button label
+#: src/auth.ts:12
+msgctxt "auth.signIn"
+msgid "Sign in"
+msgstr "Sign in"
+
+msgctxt "msg.escaped"
+msgid "Say \"hi\"\tnow \\ done"
+msgstr "Say \"hi\"\tnow \\ done"
+
+msgctxt "msg.multiline"
+msgid ""
+"Line one\n"
+"Line two"
+msgstr ""
+"Line one\n"
+"Line two"
+
+msgctxt "cart.items"
+msgid "%d item"
+msgid_plural "%d items"
+msgstr[0] "%d item"
+msgstr[1] "%d items"
+
+msgctxt "cart.empty"
+msgid "%d thing"
+msgid_plural "%d things"
+msgstr[0] "%d thing"
+msgstr[1] "%d things"
+
+msgctxt "only.en"
+msgid "Pending"
+msgstr "Pending"

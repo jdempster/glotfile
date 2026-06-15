@@ -1,0 +1,5 @@
+{
+  "@@locale": "fr",
+  "signIn": "Se connecter",
+  "welcome": "Bienvenue {name}"
+}

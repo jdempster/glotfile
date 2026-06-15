@@ -1,0 +1,131 @@
+{
+  "$schema": "https://glotfile.dev/schema/v1.json",
+  "config": {
+    "autoExport": true,
+    "format": {
+      "finalNewline": true,
+      "indent": 2,
+      "sortKeys": true
+    },
+    "locales": [
+      "en",
+      "de",
+      "fr",
+      "ja"
+    ],
+    "outputs": [
+      {
+        "adapter": "flutter-arb",
+        "path": ".glotfile/lib/l10n/app_{locale}.arb"
+      }
+    ],
+    "sourceLocale": "en",
+    "spelling": {
+      "customWords": []
+    }
+  },
+  "glossary": [],
+  "keys": {
+    "onboarding.welcome.subtitle": {
+      "tags": [
+        "onboarding"
+      ],
+      "values": {
+        "de": {
+          "source": "ai",
+          "state": "machine",
+          "updatedAt": "2026-06-10T09:43:30.598Z",
+          "value": "In Sekunden loslegen"
+        },
+        "en": {
+          "state": "source",
+          "value": "Get started in seconds"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Commencez en quelques secondes"
+        },
+        "ja": {
+          "source": "ai",
+          "state": "machine",
+          "updatedAt": "2026-06-10T09:43:23.435Z",
+          "value": "すぐに始められます"
+        }
+      }
+    },
+    "onboarding.welcome.title": {
+      "tags": [
+        "onboarding"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Willkommen in der App"
+        },
+        "en": {
+          "state": "source",
+          "value": "Welcome to the app"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Bienvenue dans l'application"
+        },
+        "ja": {
+          "source": "ai",
+          "state": "machine",
+          "updatedAt": "2026-05-10T08:00:00.000Z",
+          "value": "アプリへようこそ"
+        }
+      }
+    },
+    "tab.home": {
+      "tags": [
+        "nav"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Startseite"
+        },
+        "en": {
+          "state": "source",
+          "value": "Home"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Accueil"
+        },
+        "ja": {
+          "state": "reviewed",
+          "value": "ホーム"
+        }
+      }
+    },
+    "tab.profile": {
+      "tags": [
+        "nav"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Profil"
+        },
+        "en": {
+          "state": "source",
+          "value": "Profile"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Profil"
+        },
+        "ja": {
+          "source": "ai",
+          "state": "machine",
+          "updatedAt": "2026-05-10T08:00:00.000Z",
+          "value": "プロフィール"
+        }
+      }
+    }
+  },
+  "version": 1
+}

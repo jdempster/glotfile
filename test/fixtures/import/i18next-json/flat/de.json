@@ -1,0 +1,8 @@
+{
+  "auth": {
+    "signIn": "Anmelden {{name}}"
+  },
+  "items_one": "{{count}} Artikel",
+  "items_other": "{{count}} Artikel",
+  "greeting": ""
+}
