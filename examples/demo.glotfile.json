@@ -1,0 +1,451 @@
+{
+  "$schema": "https://glotfile.dev/schema/v1.json",
+  "config": {
+    "autoExport": true,
+    "format": {
+      "finalNewline": true,
+      "indent": 2,
+      "sortKeys": true
+    },
+    "locales": [
+      "en",
+      "de",
+      "es",
+      "fr",
+      "ja"
+    ],
+    "outputs": [
+      {
+        "adapter": "i18next-json",
+        "path": ".glotfile/src/locales/{locale}.json"
+      },
+      {
+        "adapter": "flutter-arb",
+        "path": ".glotfile/lib/l10n/app_{locale}.arb"
+      }
+    ],
+    "sourceLocale": "en",
+    "spelling": {
+      "customWords": []
+    }
+  },
+  "glossary": [
+    {
+      "caseSensitive": true,
+      "doNotTranslate": true,
+      "notes": "Product name — never translate or inflect.",
+      "term": "Glotfile"
+    },
+    {
+      "doNotTranslate": true,
+      "notes": "Technical term, keep in English.",
+      "term": "source locale"
+    }
+  ],
+  "keys": {
+    "account.email.change.confirmed.description": {
+      "context": "Body text shown on the email-change confirmation page after the user clicks the link.",
+      "tags": [
+        "account",
+        "email"
+      ],
+      "values": {
+        "de": {
+          "source": "ai",
+          "state": "machine",
+          "updatedAt": "2026-05-24T14:00:00.000Z",
+          "value": "Ihre E-Mail-Adresse wurde erfolgreich aktualisiert. Sie können sich jetzt mit Ihrer neuen Adresse anmelden."
+        },
+        "en": {
+          "state": "source",
+          "value": "Your email address has been updated successfully. You can now sign in with your new address."
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Votre adresse e-mail a été mise à jour avec succès. Vous pouvez maintenant vous connecter avec votre nouvelle adresse."
+        }
+      }
+    },
+    "common.cancel": {
+      "tags": [
+        "common",
+        "button"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Abbrechen"
+        },
+        "en": {
+          "state": "source",
+          "value": "Cancel"
+        },
+        "es": {
+          "state": "reviewed",
+          "value": "Cancelar"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Annuler"
+        },
+        "ja": {
+          "state": "reviewed",
+          "value": "キャンセル"
+        }
+      }
+    },
+    "common.delete": {
+      "tags": [
+        "common",
+        "button"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Löschen"
+        },
+        "en": {
+          "state": "source",
+          "value": "Delete"
+        },
+        "es": {
+          "source": "ai",
+          "state": "machine",
+          "updatedAt": "2026-05-21T09:14:00.000Z",
+          "value": "Eliminar"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Supprimer"
+        },
+        "ja": {
+          "source": "ai",
+          "state": "machine",
+          "updatedAt": "2026-05-21T09:14:00.000Z",
+          "value": "削除"
+        }
+      }
+    },
+    "common.save": {
+      "tags": [
+        "common",
+        "button"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Speichern"
+        },
+        "en": {
+          "state": "source",
+          "value": "Save"
+        },
+        "es": {
+          "state": "reviewed",
+          "value": "Guardar"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Enregistrer"
+        },
+        "ja": {
+          "state": "reviewed",
+          "value": "保存"
+        }
+      }
+    },
+    "editor.addKey": {
+      "tags": [
+        "editor",
+        "button"
+      ],
+      "values": {
+        "de": {
+          "state": "needs-review",
+          "value": "Schlüssel hinzufügen"
+        },
+        "en": {
+          "state": "source",
+          "value": "Add key"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Ajouter une clé"
+        }
+      }
+    },
+    "editor.exportPreview": {
+      "maxLength": 24,
+      "tags": [
+        "editor",
+        "button"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Exportvorschau"
+        },
+        "en": {
+          "state": "source",
+          "value": "Export preview"
+        },
+        "es": {
+          "source": "ai",
+          "state": "machine",
+          "updatedAt": "2026-05-23T07:00:00.000Z",
+          "value": "Vista previa de exportación"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Aperçu de l'export"
+        }
+      }
+    },
+    "editor.keyCount": {
+      "context": "Count badge in the editor header. {count} is the number of visible keys.",
+      "tags": [
+        "editor",
+        "plural"
+      ],
+      "values": {
+        "de": {
+          "source": "ai",
+          "state": "machine",
+          "updatedAt": "2026-05-20T08:00:00.000Z",
+          "value": "{count, plural, one {# Schlüssel} other {# Schlüssel}}"
+        },
+        "en": {
+          "state": "source",
+          "value": "{count, plural, one {# key} other {# keys}}"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "{count, plural, one {# clé} other {# clés}}"
+        }
+      }
+    },
+    "editor.searchPlaceholder": {
+      "context": "Placeholder text in the key search input.",
+      "tags": [
+        "editor"
+      ],
+      "values": {
+        "de": {
+          "source": "ai",
+          "state": "machine",
+          "updatedAt": "2026-05-22T11:30:00.000Z",
+          "value": "Schlüssel suchen…"
+        },
+        "en": {
+          "state": "source",
+          "value": "Search keys…"
+        },
+        "es": {
+          "source": "ai",
+          "state": "machine",
+          "updatedAt": "2026-05-22T11:30:00.000Z",
+          "value": "Buscar claves…"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Rechercher des clés…"
+        }
+      }
+    },
+    "editor.title": {
+      "context": "Page title for the translation editor view.",
+      "tags": [
+        "editor",
+        "nav"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Editor"
+        },
+        "en": {
+          "state": "source",
+          "value": "Editor"
+        },
+        "es": {
+          "state": "reviewed",
+          "value": "Editor"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Éditeur"
+        },
+        "ja": {
+          "state": "reviewed",
+          "value": "エディター"
+        }
+      }
+    },
+    "editor.translateSelected": {
+      "context": "Button label when one or more keys are selected. {count} is the selection size.",
+      "tags": [
+        "editor",
+        "button",
+        "placeholder"
+      ],
+      "values": {
+        "en": {
+          "state": "source",
+          "value": "Translate {count} selected"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Traduire {count} sélectionnés"
+        }
+      }
+    },
+    "glossary.addTerm": {
+      "tags": [
+        "glossary",
+        "button"
+      ],
+      "values": {
+        "de": {
+          "source": "ai",
+          "state": "machine",
+          "updatedAt": "2026-05-19T16:45:00.000Z",
+          "value": "Begriff hinzufügen"
+        },
+        "en": {
+          "state": "source",
+          "value": "Add term"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Ajouter un terme"
+        }
+      }
+    },
+    "glossary.title": {
+      "tags": [
+        "glossary",
+        "nav"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Glossar"
+        },
+        "en": {
+          "state": "source",
+          "value": "Glossary"
+        },
+        "es": {
+          "state": "reviewed",
+          "value": "Glosario"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Glossaire"
+        },
+        "ja": {
+          "state": "reviewed",
+          "value": "用語集"
+        }
+      }
+    },
+    "settings.sourceLocale": {
+      "context": "Label for the source locale selector in settings.",
+      "tags": [
+        "settings"
+      ],
+      "values": {
+        "de": {
+          "source": "ai",
+          "state": "machine",
+          "updatedAt": "2026-05-18T13:20:00.000Z",
+          "value": "Ausgangssprache"
+        },
+        "en": {
+          "state": "source",
+          "value": "Source locale"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Langue source"
+        }
+      }
+    },
+    "settings.title": {
+      "tags": [
+        "settings",
+        "nav"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Einstellungen"
+        },
+        "en": {
+          "state": "source",
+          "value": "Settings"
+        },
+        "es": {
+          "state": "reviewed",
+          "value": "Ajustes"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Paramètres"
+        },
+        "ja": {
+          "state": "reviewed",
+          "value": "設定"
+        }
+      }
+    },
+    "translate.done": {
+      "context": "Toast shown when an AI translation batch finishes.",
+      "tags": [
+        "translate"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Übersetzung abgeschlossen"
+        },
+        "en": {
+          "state": "source",
+          "value": "Translation complete"
+        },
+        "es": {
+          "source": "ai",
+          "state": "machine",
+          "updatedAt": "2026-05-17T10:05:00.000Z",
+          "value": "Traducción completada"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Traduction terminée"
+        },
+        "ja": {
+          "state": "needs-review",
+          "value": "翻訳が完了しました"
+        }
+      }
+    },
+    "translate.running": {
+      "context": "Progress message shown while AI translation is in progress. {count} is the number of keys being translated.",
+      "tags": [
+        "translate",
+        "placeholder"
+      ],
+      "values": {
+        "en": {
+          "state": "source",
+          "value": "Translating {count} keys…"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Traduction de {count} clés en cours…"
+        }
+      }
+    }
+  },
+  "version": 1
+}

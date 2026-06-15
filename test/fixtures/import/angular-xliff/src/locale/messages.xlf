@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file source-language="en-US" datatype="plaintext" original="ng2.template">
+    <body>
+      <trans-unit id="01d37830d7001a7739c544c7570df79399d1dc31" datatype="html">
+        <source>Your apps</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/components/app-switcher/app-switcher.component.html</context>
+          <context context-type="linenumber">14</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="welcomehash00000000000000000000000000000" datatype="html">
+        <source>Welcome <x id="INTERPOLATION" equiv-text="{{ name }}"/>!</source>
+      </trans-unit>
+      <trans-unit id="boldhash00000000000000000000000000000000" datatype="html">
+        <source><x id="START_TAG_STRONG" ctype="x-strong" equiv-text="&lt;strong&gt;"/>Bold<x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="&lt;/strong&gt;"/> move</source>
+      </trans-unit>
+      <trans-unit id="exprhash00000000000000000000000000000000" datatype="html">
+        <source>Made by <x id="INTERPOLATION" equiv-text="APP_TITLE"/></source>
+      </trans-unit>
+      <trans-unit id="entityhash0000000000000000000000000000000" datatype="html">
+        <source>Fish &amp; chips &lt;tasty&gt;</source>
+      </trans-unit>
+      <trans-unit id="bareph0000000000000000000000000000000000" datatype="html">
+        <source>Count: <x id="PH" /></source>
+      </trans-unit>
+      <trans-unit id="pluralhash000000000000000000000000000000" datatype="html">
+        <source>{VAR_PLURAL, plural, =0 {no items} one {one item} other {<x id="INTERPOLATION" equiv-text="{{ count }}"/> items}}</source>
+      </trans-unit>
+      <trans-unit id="multiloc0000000000000000000000000000000" datatype="html">
+        <source>Save</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/a.component.html</context>
+          <context context-type="linenumber">3</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/b.component.html</context>
+          <context context-type="linenumber">9</context>
+        </context-group>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>

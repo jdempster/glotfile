@@ -1,0 +1,7 @@
+{
+  "@@locale": "en",
+  "signIn": "Sign in",
+  "@signIn": { "description": "Sign in button" },
+  "welcome": "Welcome {name}",
+  "@welcome": { "placeholders": { "name": { "type": "String", "example": "Sam" } } }
+}

@@ -1,0 +1,93 @@
+{
+  "name": "glotfile",
+  "version": "1.0.0",
+  "description": "Local-first, git-native translation management.",
+  "license": "MIT",
+  "author": "James Dempster",
+  "homepage": "https://glotfile.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jdempster/glotfile.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jdempster/glotfile/issues"
+  },
+  "keywords": [
+    "i18n",
+    "l10n",
+    "translation",
+    "localization",
+    "internationalization",
+    "arb",
+    "gettext",
+    "xliff",
+    "cli"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "bin": {
+    "glotfile": "bin/glotfile.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "skill"
+  ],
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "scripts": {
+    "dev": "concurrently --names \"ui,api\" -c \"green,gray\" --prefix \"[{name}]\" \"vite\" \"tsx watch src/server/cli.ts serve --dev\"",
+    "build": "npm run build:ui && npm run build:server",
+    "build:ui": "vite build",
+    "build:server": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.100.1",
+    "@hono/node-server": "^2.0.4",
+    "dictionary-es": "^4.0.0",
+    "dictionary-fr": "^3.0.0",
+    "hono": "^4.12.23",
+    "open": "^11.0.0"
+  },
+  "optionalDependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1063.0",
+    "dictionary-en": "^4.0.0",
+    "nspell": "^2.1.5",
+    "openai": "^6.42.0"
+  },
+  "devDependencies": {
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@fontsource/ibm-plex-sans": "^5.2.8",
+    "@tailwindcss/typography": "^0.5.20",
+    "@tailwindcss/vite": "^4.3.0",
+    "@tanstack/vue-table": "^8.21.3",
+    "@tanstack/vue-virtual": "^3.13.28",
+    "@types/node": "^25.9.1",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vue/test-utils": "^2.4.11",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "concurrently": "^10.0.3",
+    "flag-icons": "^7.5.0",
+    "happy-dom": "^20.10.1",
+    "lucide-vue-next": "^1.0.0",
+    "marked": "^18.0.5",
+    "reka-ui": "^2.9.9",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4.3.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.22.4",
+    "tw-animate-css": "^1.4.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.8",
+    "vue": "^3.5.35"
+  }
+}

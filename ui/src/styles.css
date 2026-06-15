@@ -1,0 +1,152 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: oklch(0.99 0 0);
+  --foreground: oklch(0.21 0.01 270);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.21 0.01 270);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.01 270);
+  --primary: oklch(0.51 0.23 277);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.97 0.005 270);
+  --secondary-foreground: oklch(0.21 0.01 270);
+  --muted: oklch(0.97 0.005 270);
+  --muted-foreground: oklch(0.55 0.02 270);
+  --accent: oklch(0.95 0.02 277);
+  --accent-foreground: oklch(0.3 0.1 277);
+  --destructive: oklch(0.62 0.22 18);
+  --border: oklch(0.92 0.005 270);
+  --input: oklch(0.92 0.005 270);
+  --ring: oklch(0.51 0.23 277);
+  --rail: oklch(0.24 0.07 277);
+  --rail-foreground: oklch(0.86 0.03 277);
+  --state-source: oklch(0.62 0.02 270);
+  --state-machine: oklch(0.76 0.15 70);
+  --state-reviewed: oklch(0.7 0.16 155);
+  --state-needs-review: oklch(0.64 0.2 18);
+  --radius: 0.5rem;
+  --border-soft: oklch(0.945 0.003 285);
+  --primary-soft: oklch(0.955 0.035 285);
+  --primary-border: oklch(0.86 0.06 284);
+  --destructive-soft: oklch(0.965 0.03 28);
+  --machine: oklch(0.62 0.13 70);
+  --machine-soft: oklch(0.965 0.04 80);
+  --review: oklch(0.56 0.115 158);
+  --review-soft: oklch(0.96 0.04 160);
+  --zebra: oklch(0.978 0.004 285);
+  --ph-bg: oklch(0.95 0.045 285);
+  --ph-fg: oklch(0.5 0.2 281);
+  --warning: oklch(0.52 0.12 75);
+  --warning-bg: oklch(0.97 0.03 80);
+  --warning-border: oklch(0.9 0.05 80);
+  --success: oklch(0.56 0.13 152);
+  --success-bg: oklch(0.96 0.04 155);
+  --success-border: oklch(0.88 0.06 155);
+}
+.dark {
+  --background: oklch(0.17 0.01 270);
+  --foreground: oklch(0.95 0 0);
+  --card: oklch(0.21 0.012 270);
+  --card-foreground: oklch(0.95 0 0);
+  --popover: oklch(0.21 0.012 270);
+  --popover-foreground: oklch(0.95 0 0);
+  --primary: oklch(0.7 0.17 277);
+  --primary-foreground: oklch(0.17 0.01 270);
+  --secondary: oklch(0.26 0.012 270);
+  --secondary-foreground: oklch(0.95 0 0);
+  --muted: oklch(0.26 0.012 270);
+  --muted-foreground: oklch(0.7 0.02 270);
+  --accent: oklch(0.3 0.04 277);
+  --accent-foreground: oklch(0.92 0.02 277);
+  --destructive: oklch(0.62 0.22 18);
+  --border: oklch(0.3 0.01 270);
+  --input: oklch(0.32 0.01 270);
+  --ring: oklch(0.7 0.17 277);
+  --rail: oklch(0.15 0.03 277);
+  --rail-foreground: oklch(0.82 0.03 277);
+  --border-soft: oklch(0.275 0.015 285);
+  --primary-soft: oklch(0.30 0.05 284);
+  --primary-border: oklch(0.42 0.09 284);
+  --destructive-soft: oklch(0.30 0.06 26);
+  --machine: oklch(0.76 0.12 75);
+  --machine-soft: oklch(0.31 0.05 78);
+  --review: oklch(0.72 0.13 160);
+  --review-soft: oklch(0.30 0.05 160);
+  --zebra: oklch(0.258 0.015 285);
+  --ph-bg: oklch(0.32 0.06 284);
+  --ph-fg: oklch(0.82 0.12 285);
+  --warning: oklch(0.84 0.14 85);
+  --warning-bg: oklch(0.27 0.04 85);
+  --warning-border: oklch(0.37 0.05 85);
+  --success: oklch(0.8 0.18 150);
+  --success-bg: oklch(0.26 0.05 155);
+  --success-border: oklch(0.37 0.06 155);
+}
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-rail: var(--rail);
+  --color-rail-foreground: var(--rail-foreground);
+  --color-state-source: var(--state-source);
+  --color-state-machine: var(--state-machine);
+  --color-state-reviewed: var(--state-reviewed);
+  --color-state-needs-review: var(--state-needs-review);
+  --color-border-soft: var(--border-soft);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-border: var(--primary-border);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-machine: var(--machine);
+  --color-machine-soft: var(--machine-soft);
+  --color-review: var(--review);
+  --color-review-soft: var(--review-soft);
+  --color-zebra: var(--zebra);
+  --color-ph-bg: var(--ph-bg);
+  --color-ph-fg: var(--ph-fg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-border: var(--warning-border);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-success-border: var(--success-border);
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+@layer base {
+  * { border-color: var(--color-border); }
+  body { background-color: var(--color-background); color: var(--color-foreground); font-family: var(--font-sans); }
+  /* Tailwind v4 Preflight resets buttons to cursor: default; restore the pointer for interactive controls. */
+  button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+}
+
+/* Import wizard motion — spinner + content fade. Transform-only so the resting
+   state is always visible; honours reduced-motion. */
+@keyframes gf-spin { to { transform: rotate(360deg); } }
+.gf-spin { animation: gf-spin 0.7s linear infinite; }
+@keyframes gf-content-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.gf-content-fade { animation: gf-content-fade 0.2s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .gf-spin, .gf-content-fade { animation: none !important; }
+}

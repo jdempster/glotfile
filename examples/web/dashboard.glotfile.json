@@ -1,0 +1,98 @@
+{
+  "$schema": "https://glotfile.dev/schema/v1.json",
+  "config": {
+    "autoExport": true,
+    "format": {
+      "finalNewline": true,
+      "indent": 2,
+      "sortKeys": true
+    },
+    "locales": [
+      "en",
+      "de",
+      "es",
+      "fr"
+    ],
+    "outputs": [
+      {
+        "adapter": "i18next-json",
+        "path": ".glotfile/public/locales/{locale}/dashboard.json"
+      }
+    ],
+    "sourceLocale": "en",
+    "spelling": {
+      "customWords": []
+    }
+  },
+  "glossary": [],
+  "keys": {
+    "chart.noData": {
+      "tags": [
+        "chart"
+      ],
+      "values": {
+        "de": {
+          "source": "ai",
+          "state": "machine",
+          "updatedAt": "2026-05-15T12:00:00.000Z",
+          "value": "Keine Daten für diesen Zeitraum verfügbar"
+        },
+        "en": {
+          "state": "source",
+          "value": "No data available for this period"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Aucune donnée disponible pour cette période"
+        }
+      }
+    },
+    "filter.dateRange.label": {
+      "tags": [
+        "filter"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Datumsbereich"
+        },
+        "en": {
+          "state": "source",
+          "value": "Date range"
+        },
+        "es": {
+          "state": "reviewed",
+          "value": "Rango de fechas"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Plage de dates"
+        }
+      }
+    },
+    "table.rowCount": {
+      "context": "{count} is the number of rows shown.",
+      "tags": [
+        "table",
+        "plural"
+      ],
+      "values": {
+        "de": {
+          "source": "ai",
+          "state": "machine",
+          "updatedAt": "2026-05-15T12:00:00.000Z",
+          "value": "{count, plural, one {# Zeile} other {# Zeilen}}"
+        },
+        "en": {
+          "state": "source",
+          "value": "{count, plural, one {# row} other {# rows}}"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "{count, plural, one {# ligne} other {# lignes}}"
+        }
+      }
+    }
+  },
+  "version": 1
+}

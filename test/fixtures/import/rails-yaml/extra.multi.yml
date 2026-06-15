@@ -1,0 +1,5 @@
+# Rails allows several locales in one document; the filename is not the locale.
+de:
+  greeting: "Hallo"
+es:
+  greeting: "Hola"

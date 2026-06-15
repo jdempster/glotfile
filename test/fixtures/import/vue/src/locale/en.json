@@ -1,0 +1,6 @@
+{
+  "auth": {
+    "signIn": "Sign in",
+    "welcome": "Welcome {name}"
+  }
+}

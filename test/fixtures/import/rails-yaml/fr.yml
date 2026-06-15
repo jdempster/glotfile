@@ -1,0 +1,8 @@
+fr:
+  auth:
+    sign_in: "Se connecter"
+    welcome: "Bienvenue %{name}"
+  cart:
+    items:
+      one: "%{count} article"
+      other: "%{count} articles"

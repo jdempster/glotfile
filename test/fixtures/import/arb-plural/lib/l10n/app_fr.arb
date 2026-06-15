@@ -1,0 +1,4 @@
+{
+  "@@locale": "fr",
+  "deliveries_failed": "{count, plural, =1{Échec de la collecte} other{Échecs de la collecte}}"
+}

@@ -1,0 +1,5 @@
+.env
+/.glotfile
+dist/
+node_modules/
+.worktrees/
