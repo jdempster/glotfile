@@ -21,7 +21,7 @@ to make.
 
 ## Getting started
 
-Glotfile runs with no install via `npx`. It's pre-1.0, so expect rough edges:
+Glotfile runs with no install via `npx`:
 
 ```bash
 npx glotfile
