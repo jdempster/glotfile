@@ -20,7 +20,7 @@ Or install it globally:
 npm i -g glotfile
 ```
 
-> **⚠ Pre-1.0** — Glotfile is published to npm but still pre-1.0, so expect occasional breaking changes; pin a version (e.g. `npx glotfile@0.8.7`) if you need stability.
+> **Tip:** Glotfile follows semantic versioning — pin a major version (e.g. `npx glotfile@1`) if you want to take upgrades deliberately rather than always getting the latest.
 
 Throughout these docs, `glotfile <command>` and `node bin/glotfile.js <command>` are interchangeable.
 
