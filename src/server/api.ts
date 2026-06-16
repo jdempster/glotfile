@@ -12,11 +12,9 @@ import { acceptFindings } from "./lint/accept.js";
 import { findMissing, loadUsageCache, computeUsedKeys, literalMatcher } from "./scan.js";
 import { runScan } from "./scanner.js";
 import {
-  selectContextTargets, extractSnippets, applyContext,
+  selectContextTargets, attachUsageSnippets, applyContext,
   buildContextSystemPrompt, buildContextBatchPrompt, CONTEXT_BATCH_SCHEMA,
-  type ContextRequest,
 } from "./ai/context.js";
-import type { UsageCacheFile } from "./scan.js";
 import { computeStats } from "./stats.js";
 import { runChecks, CHECK_IDS, type CheckId } from "./checks.js";
 import { runLint, sortFindings, countSeverities } from "./lint/run.js";
@@ -33,7 +31,7 @@ import { submitBatchTranslation, applyBatchResults } from "./ai/batch-run.js";
 import { loadPendingBatch, clearPendingBatch } from "./ai/pending-batch.js";
 import { submitContextBatch, applyContextBatchResults } from "./ai/context-batch-run.js";
 import { loadPendingContextBatch, clearPendingContextBatch } from "./ai/pending-context-batch.js";
-import { estimateTranslation } from "./ai/estimate.js";
+import { estimateTranslation, estimateContext } from "./ai/estimate.js";
 import { usageCostUsd } from "./ai/pricing.js";
 import { appendLog, readLog, type LogEntry } from "./log.js";
 import { GlotfileError, validate, type Config, type State } from "./schema.js";
@@ -93,18 +91,6 @@ export interface ApiDeps {
 
 // Fill each target's usageSnippets from the scan index — shared by the
 // streaming context build and the context batch submit.
-function attachUsageSnippets(targets: ContextRequest[], cache: UsageCacheFile, projectRoot: string): void {
-  const fileCache = new Map<string, string[]>();
-  for (const target of targets) {
-    const allRefs = Object.entries(cache.files).flatMap(([file, entry]) =>
-      entry.refs.filter((r) => r.key === target.key).map((r) => ({
-        key: r.key, file, line: r.line, col: r.col, scanner: r.scanner,
-      }))
-    );
-    target.usageSnippets = extractSnippets(allRefs, projectRoot, fileCache);
-  }
-}
-
 export function createApi(deps: ApiDeps): Hono {
   const app = new Hono();
   const load = () => loadState(deps.statePath);
@@ -1357,6 +1343,25 @@ export function createApi(deps: ApiDeps): Hono {
       console.log(`[context] ${totalWritten} context(s) written${allErrors.length ? `, ${allErrors.length} error(s)` : ""}`);
       await stream.writeSSE({ event: "done", data: JSON.stringify({ requested: targets.length, written: totalWritten, errors: allErrors }) });
     });
+  });
+
+  // Pre-flight cost preview for a context build. Advisory only — a failed
+  // estimate must never block building (the dialog just hides its preview line).
+  app.post("/context/estimate", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const cache = loadUsageCache(projectRoot);
+    if (!cache) return c.json({ error: "No usage index found. Run 'glotfile scan' first." }, 400);
+    const targets = selectContextTargets(load(), {
+      all: body.all,
+      keyGlob: body.keyGlob,
+      limit: body.limit,
+      since: body.since,
+      keys: body.keys,
+      force: body.force,
+    }, cache, body.lastRunAt);
+    const aiCfg = loadLocalSettings(projectRoot).ai;
+    attachUsageSnippets(targets, cache, projectRoot);
+    return c.json(estimateContext(targets, aiCfg));
   });
 
   // Pending context-batch status. Same shape as /batch/status; the two batch

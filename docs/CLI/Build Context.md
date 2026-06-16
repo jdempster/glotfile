@@ -17,9 +17,16 @@ By default it only fills keys that have **no** context yet. The flags combine to
 | `--key <glob>` | Only keys matching this glob (e.g. `"auth.*"`). |
 | `--limit <n>` | Process at most `n` keys. |
 | `--since <date>` | Only keys added or changed since this date. |
+| `--estimate` | Print the batches, token counts and estimated cost without building. |
+| `--batch` | Submit via the provider's batch API (50% cost, async; anthropic only). |
 | `--file`, `-f <path>` | Target a different state file. |
 
-It uses the same AI provider as `translate` (configured per-machine — see AI Providers). If no usage index is found it stops and tells you to run `scan` first.
+```bash
+glotfile build-context --estimate            # batches, tokens and cost — no API calls
+glotfile build-context --key "auth.*"        # only the auth namespace
+```
+
+It uses the same AI provider as `translate` (configured per-machine — see AI Providers). `--estimate` prints the same token/cost preview `translate --estimate` does — the input count is dominated by the code snippets attached to each key, so it tracks the real run. If no usage index is found it stops and tells you to run `scan` first.
 
 ## Related
 

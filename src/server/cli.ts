@@ -21,14 +21,14 @@ import { loadPendingBatch, clearPendingBatch, type PendingBatch } from "./ai/pen
 import { submitContextBatch, applyContextBatchResults } from "./ai/context-batch-run.js";
 import { loadPendingContextBatch, clearPendingContextBatch, type PendingContextBatch } from "./ai/pending-context-batch.js";
 import type { AiConfig } from "./schema.js";
-import { estimateTranslation } from "./ai/estimate.js";
+import { estimateTranslation, estimateContext } from "./ai/estimate.js";
 import { usageCostUsd } from "./ai/pricing.js";
 import { appendLog } from "./log.js";
 import { loadUsageCache, computeUsedKeys } from "./scan.js";
 import { runScan } from "./scanner.js";
 import { refreshLocationUsage, isLocationScannedState, usageCounts } from "./import/usage.js";
 import {
-  selectContextTargets, extractSnippets, applyContext,
+  selectContextTargets, attachUsageSnippets, applyContext,
   buildContextSystemPrompt, buildContextBatchPrompt, CONTEXT_BATCH_SCHEMA,
 } from "./ai/context.js";
 import { runLint, sortFindings, countSeverities } from "./lint/run.js";
@@ -733,27 +733,33 @@ async function runBuildContext(args: ParsedArgs): Promise<void> {
     console.log("No keys need context.");
     return;
   }
+  const aiCfg = loadLocalSettings(projectRoot).ai;
+  // Snippets dominate the input-token count, so attach them before estimating.
+  attachUsageSnippets(targets, cache, projectRoot);
+
+  if (args.estimate) {
+    const est = estimateContext(targets, aiCfg);
+    const fmt = (n: number) => n.toLocaleString("en-US");
+    console.log(`Estimate for ${fmt(est.keys)} key(s) in ${fmt(est.batches)} batch(es) — ${aiCfg.provider} · ${aiCfg.model}`);
+    console.log(`Totals: ~${fmt(est.inputTokens)} input / ~${fmt(est.outputTokens)} output tokens`);
+    if (est.pricing) {
+      const cost = est.estimatedCost!;
+      console.log(`Estimated cost: ~$${cost >= 0.1 ? cost.toFixed(2) : cost.toFixed(4)} (±20%, ${est.pricing.source} pricing $${est.pricing.inputPerMTok}/$${est.pricing.outputPerMTok} per MTok)`);
+    } else {
+      console.log("No pricing known for this model — set inputPricePerMTok/outputPricePerMTok in your AI settings for a dollar estimate.");
+    }
+    return;
+  }
+
   let provider: TranslationProvider;
   try {
-    provider = makeProvider(loadLocalSettings(projectRoot).ai);
+    provider = makeProvider(aiCfg);
   } catch (e) {
     console.error((e as Error).message);
     process.exitCode = 1;
     return;
   }
-  const fileCache = new Map<string, string[]>();
-  for (const target of targets) {
-    const refs = Object.values(cache.files).flatMap((f) =>
-      f.refs.filter((r) => r.key === target.key).map((r) => ({
-        key: r.key, file: Object.keys(cache.files).find((path) =>
-          cache.files[path]?.refs.includes(r)) ?? "",
-        line: r.line, col: r.col, scanner: r.scanner,
-      }))
-    );
-    target.usageSnippets = extractSnippets(refs, projectRoot, fileCache);
-  }
   const system = buildContextSystemPrompt();
-  const aiCfg = loadLocalSettings(projectRoot).ai;
   const batchSize = aiCfg.contextBatchSize ?? aiCfg.batchSize ?? 10;
   const concurrency = aiCfg.contextConcurrency ?? aiCfg.concurrency ?? 3;
 
@@ -1196,12 +1202,14 @@ const COMMAND_HELP: Record<Exclude<ParsedArgs["command"], "help" | "version">, {
   },
   "build-context": {
     summary: "AI-generate per-key context to improve translation (requires a prior scan).",
-    usage: "glotfile build-context [--all] [--key <glob>] [--limit <n>] [--since <date>] [--batch]",
+    usage: "glotfile build-context [--all] [--key <glob>] [--limit <n>] [--since <date>] [--estimate] [--batch]",
     options: [
       ["--all", "(Re)build context for every key, not just those missing it"],
       ["--key <glob>", "Only keys matching this glob"],
       ["--limit <n>", "Process at most n keys"],
       ["--since <date>", "Only keys added or changed since this date"],
+      ["--estimate", "Print batches, tokens and estimated cost without building"],
+      ["--batch", "Submit via the provider's batch API (50% cost, async; anthropic only)"],
     ],
   },
   scan: {
