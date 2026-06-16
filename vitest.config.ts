@@ -10,7 +10,7 @@ export default defineConfig({
     passWithNoTests: true,
     projects: [
       {
-        test: { name: "server", environment: "node", include: ["src/server/**/*.test.ts"] },
+        test: { name: "server", environment: "node", include: ["src/server/**/*.test.ts"], setupFiles: ["./src/server/test-setup.ts"] },
       },
       {
         plugins: [vue()],

@@ -12,12 +12,27 @@ export interface GlossarySuggestProgress { type: "progress"; done: number; total
 export interface GlossarySuggestDone { type: "done"; added: number; terms: GlossarySuggestion[] }
 export type GlossarySuggestEvent = GlossarySuggestStart | GlossarySuggestProgress | GlossarySuggestDone;
 
+export interface PricesStatus {
+  source: string | null;
+  fetchedAt: string | null;
+  modelCount: number;
+  path: string;
+  resolved: { provider: string; model: string; source: string; inputPerMTok: number; outputPerMTok: number } | null;
+}
+export interface PricesRefreshResult { ok: true; source: string; fetchedAt: string; modelCount: number; path: string }
+export interface PriceRow { id: string; inputPerMTok: number; outputPerMTok: number; cacheReadPerMTok?: number; cacheWritePerMTok?: number }
+export interface PricesList { source: string | null; fetchedAt: string | null; models: PriceRow[] }
+
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? res.statusText);
   return res.json() as Promise<T>;
 }
 
 export const fetchState = () => fetch("/api/state").then((r) => json<State>(r));
+export const getPrices = () => fetch("/api/prices").then((r) => json<PricesStatus>(r));
+export const refreshPrices = () =>
+  fetch("/api/prices/refresh", { method: "POST" }).then((r) => json<PricesRefreshResult>(r));
+export const getPricesList = () => fetch("/api/prices/list").then((r) => json<PricesList>(r));
 export const createKey = (key: string, value: string, plural?: { arg: string }) =>
   fetch("/api/keys", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key, value, ...(plural ? { plural } : {}) }) }).then(json);
 export const deleteKey = (key: string) =>
@@ -107,6 +122,10 @@ export async function* translateStream(signal?: AbortSignal, keys?: string[], lo
         if (line.startsWith("event:")) { currentEvent = line.slice(6).trim(); continue; }
         if (line.startsWith("data:")) {
           const data = JSON.parse(line.slice(5).trim());
+          // A provider failure (bad credentials, missing permission, unknown
+          // model) arrives as an error event — surface it instead of ending
+          // the run silently. Callers catch and display the message.
+          if (currentEvent === "error") throw new Error(data.error ?? "Translation failed");
           yield { ...data, type: currentEvent } as TranslateEvent;
           currentEvent = "message";
         }
@@ -216,6 +235,11 @@ export const deleteAiProfile = (name: string) =>
   fetch(`/api/ai-profiles/${encodeURIComponent(name)}`, { method: "DELETE" }).then(json);
 export const setActiveAiProfile = (name: string | null) =>
   fetch("/api/ai-profiles/active", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }) }).then(json);
+
+// Probe the active AI config: builds the provider and runs one throwaway
+// translation. Always resolves (200) — `ok` and `error` carry the result.
+export interface AiTestResult { ok: boolean; provider: string; model: string; error?: string }
+export const aiTest = () => fetch("/api/ai-test", { method: "POST" }).then((r) => json<AiTestResult>(r));
 
 export const addToDictionary = (word: string) =>
   fetch("/api/dictionary", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ word }) }).then(json);

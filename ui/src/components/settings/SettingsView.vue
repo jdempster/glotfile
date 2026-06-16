@@ -2,9 +2,10 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from "vue";
 import {
   Globe, FileText, Cpu, BookOpen, Code2, ScanSearch, ShieldCheck,
-  Plus, X, AlertTriangle, Check, Undo2, Save, Lock, Zap, Languages, RefreshCw,
+  Plus, X, AlertTriangle, Check, Undo2, Save, Lock, Zap, Languages, RefreshCw, Search,
 } from "lucide-vue-next";
-import { fetchState, putConfig, getLocalSettings, putLocalSettings, getAiProfiles, putAiProfile, deleteAiProfile, setActiveAiProfile } from "@/api.js";
+import { fetchState, putConfig, getLocalSettings, putLocalSettings, getAiProfiles, putAiProfile, deleteAiProfile, setActiveAiProfile, getPrices, refreshPrices as refreshPricesApi, getPricesList, aiTest } from "@/api.js";
+import type { PricesStatus, PriceRow } from "@/api.js";
 import type { Config, AiSettings } from "@/types.js";
 import { toast } from "@/components/ui/toast";
 import { currentEditor, setEditor, EDITORS, type EditorId } from "@/editor.js";
@@ -19,6 +20,9 @@ import { Switch } from "@/components/ui/switch";
 import {
   Select, SelectTrigger, SelectContent, SelectItem, SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 import LanguageLabel from "@/components/lang/LanguageLabel.vue";
 import OutputEditor from "./OutputEditor.vue";
 import ScanListField from "./ScanListField.vue";
@@ -41,7 +45,9 @@ const AI_PROVIDERS = [
 const MODEL_SUGGESTIONS: Record<string, string[]> = {
   anthropic: ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
   openai: ["gpt-4o-mini", "gpt-4o", "gpt-4.1"],
-  bedrock: ["amazon.nova-pro-v1:0", "anthropic.claude-3-5-sonnet-20241022-v2:0", "meta.llama3-1-70b-instruct-v1:0"],
+  // On-demand Bedrock needs a region-prefixed inference profile (us./eu./apac.)
+  // for current Claude/Nova — a bare model id throws a ValidationException.
+  bedrock: ["eu.anthropic.claude-sonnet-4-6", "eu.amazon.nova-pro-v1:0", "eu.anthropic.claude-3-5-sonnet-20241022-v2:0"],
   openrouter: ["anthropic/claude-3.5-haiku", "openai/gpt-4o-mini", "google/gemini-2.0-flash-001"],
   ollama: ["translategemma:4b", "translategemma:12b", "qwen3.5:9b"],
   "claude-code": ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
@@ -148,6 +154,7 @@ async function load() {
   snapSaved();
   await loadLocal();
   loaded.value = true;
+  loadPrices();
 }
 load();
 
@@ -254,6 +261,137 @@ watch(aiDraft, () => {
     }
   }, 500);
 }, { deep: true });
+
+// ── AI connection test ───────────────────────────────────────────────────────
+// One-click probe of the active provider/model: runs a throwaway translation on
+// the server and reports the (explained) outcome inline.
+const testing = ref(false);
+const testResult = ref<{ ok: boolean; error?: string } | null>(null);
+
+async function runAiTest() {
+  // Flush any pending debounced edit first, so the test runs against exactly
+  // what's on screen rather than a not-yet-saved draft.
+  const ai = aiToSettings();
+  if (JSON.stringify(ai) !== savedAiJson) {
+    if (aiSaveTimer) clearTimeout(aiSaveTimer);
+    try {
+      if (activeProfile.value) {
+        await putAiProfile(activeProfile.value, ai);
+        profiles.value = { ...profiles.value, [activeProfile.value]: ai };
+      } else {
+        await putLocalSettings({ ai });
+      }
+      savedAiJson = JSON.stringify(ai);
+    } catch (e) {
+      testResult.value = { ok: false, error: (e as Error).message };
+      return;
+    }
+  }
+  testing.value = true;
+  testResult.value = null;
+  try {
+    const res = await aiTest();
+    testResult.value = { ok: res.ok, error: res.error };
+  } catch (e) {
+    testResult.value = { ok: false, error: (e as Error).message };
+  } finally {
+    testing.value = false;
+  }
+}
+
+// A stale pass/fail is misleading once the config changes — clear it.
+watch(() => [aiDraft.provider, aiDraft.model, aiDraft.region, aiDraft.endpoint, activeProfile.value], () => { testResult.value = null; });
+
+// ── Model price cache (models.dev) ───────────────────────────────────────────
+// Status of ~/.glotfile/model-prices.json plus an explicit refresh. The refresh
+// is the only thing here that hits the network.
+const pricesStatus = ref<PricesStatus | null>(null);
+const refreshingPrices = ref(false);
+
+async function loadPrices() {
+  try {
+    pricesStatus.value = await getPrices();
+  } catch {
+    // Best-effort status; the manual price fields work without it.
+  }
+}
+
+async function refreshModelPrices() {
+  refreshingPrices.value = true;
+  try {
+    const res = await refreshPricesApi();
+    toast.success(`Updated ${res.modelCount} model prices from ${res.source}.`);
+    priceRowsLoaded.value = false;
+    await loadPrices();
+  } catch (e) {
+    toast.error((e as Error).message);
+  } finally {
+    refreshingPrices.value = false;
+  }
+}
+
+const pricesFetchedLabel = computed(() => {
+  const at = pricesStatus.value?.fetchedAt;
+  if (!at) return null;
+  const d = new Date(at);
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString();
+});
+
+// Browse/search the full cached price table (loaded lazily on first open).
+const pricesDialogOpen = ref(false);
+const priceRows = ref<PriceRow[]>([]);
+const priceRowsLoaded = ref(false);
+const priceQuery = ref("");
+const PRICE_LIST_CAP = 200;
+
+async function openPricesList() {
+  pricesDialogOpen.value = true;
+  if (priceRowsLoaded.value) return;
+  try {
+    priceRows.value = (await getPricesList()).models;
+    priceRowsLoaded.value = true;
+  } catch (e) {
+    toast.error((e as Error).message);
+  }
+}
+
+// Forgiving search: lowercase, strip punctuation, and match each whitespace
+// term independently — so "opus 4.8", "GPT4o mini", "haiku claude" all hit the
+// models you'd expect regardless of separators, case, or word order.
+const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+const filteredPriceRows = computed(() => {
+  const terms = priceQuery.value.trim().split(/\s+/).map(squash).filter(Boolean);
+  if (!terms.length) return priceRows.value;
+  return priceRows.value.filter((m) => {
+    const id = squash(m.id);
+    return terms.every((t) => id.includes(t));
+  });
+});
+const visiblePriceRows = computed(() => filteredPriceRows.value.slice(0, PRICE_LIST_CAP));
+const hiddenPriceCount = computed(() => Math.max(0, filteredPriceRows.value.length - PRICE_LIST_CAP));
+
+// Pick a handful of models to compare side by side in a small bar graph.
+const MAX_COMPARE = 8;
+const comparedIds = ref<string[]>([]);
+const isCompared = (id: string) => comparedIds.value.includes(id);
+
+function toggleCompare(id: string) {
+  const i = comparedIds.value.indexOf(id);
+  if (i >= 0) comparedIds.value.splice(i, 1);
+  else if (comparedIds.value.length >= MAX_COMPARE) toast.error(`Compare up to ${MAX_COMPARE} models at once.`);
+  else comparedIds.value.push(id);
+}
+
+const comparedRows = computed(() => {
+  const byId = new Map(priceRows.value.map((m) => [m.id, m]));
+  return comparedIds.value.map((id) => byId.get(id)).filter((m): m is PriceRow => !!m);
+});
+// Bars are scaled to the largest price among the compared models (output is
+// almost always the largest), with a 1 floor so an all-zero set doesn't divide
+// by zero.
+const maxComparedPrice = computed(() =>
+  Math.max(1, ...comparedRows.value.flatMap((m) => [m.inputPerMTok, m.outputPerMTok])));
+const compareBarWidth = (v: number) => `${Math.max(1.5, (v / maxComparedPrice.value) * 100)}%`;
 
 // ── Dirty tracking ───────────────────────────────────────────────────────────
 
@@ -948,6 +1086,11 @@ function onSynced(): void {
                     <button type="button" class="font-mono underline-offset-2 hover:text-foreground hover:underline" @click="aiDraft.model = m">{{ m }}</button><span v-if="i < modelSuggestions.length - 1"> · </span>
                   </template>
                 </p>
+                <p v-if="isBedrock" class="text-xs text-muted-foreground">
+                  For on-demand use, prefix the id with your region group —
+                  <code class="font-mono">eu.</code>, <code class="font-mono">us.</code> or <code class="font-mono">apac.</code>
+                  — so it resolves to an inference profile.
+                </p>
               </div>
 
               <div v-if="isBedrock" class="grid gap-1.5">
@@ -962,7 +1105,26 @@ function onSynced(): void {
                 <p v-else class="text-xs text-muted-foreground">Optional — for an in-region or self-hosted / OpenAI-compatible gateway.</p>
               </div>
 
-              <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Translation</div>
+              <!-- Connection test: probe credentials/model/connectivity before a real run -->
+              <div class="grid gap-1.5">
+                <div class="flex flex-wrap items-center gap-2">
+                  <Button type="button" variant="outline" size="sm" :disabled="testing" @click="runAiTest">
+                    <RefreshCw v-if="testing" class="size-3.5 animate-spin" />
+                    <Zap v-else class="size-3.5" />
+                    {{ testing ? "Testing…" : "Test connection" }}
+                  </Button>
+                  <span v-if="testResult?.ok" class="flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                    <Check class="size-3.5" /> Connected
+                  </span>
+                </div>
+                <div v-if="testResult && !testResult.ok" class="flex items-start gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-2 text-xs text-destructive">
+                  <AlertTriangle class="mt-0.5 size-3.5 shrink-0" />
+                  <span>{{ testResult.error }}</span>
+                </div>
+                <p class="text-xs text-muted-foreground">Runs one throwaway translation to verify credentials, model access and connectivity.</p>
+              </div>
+
+              <div class="mt-1 border-t border-border pt-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Translation</div>
 
               <div class="grid gap-1.5">
                 <Label for="ai-batch">Batch size</Label>
@@ -976,18 +1138,7 @@ function onSynced(): void {
                 <p class="text-xs text-muted-foreground">How many locales to translate at once.</p>
               </div>
 
-              <div class="grid gap-1.5">
-                <Label for="ai-price-in">Input price ($ / 1M tokens)</Label>
-                <Input id="ai-price-in" v-model.number="aiDraft.inputPricePerMTok" type="number" min="0" step="0.01" placeholder="Auto for Claude models" class="w-44" />
-              </div>
-
-              <div class="grid gap-1.5">
-                <Label for="ai-price-out">Output price ($ / 1M tokens)</Label>
-                <Input id="ai-price-out" v-model.number="aiDraft.outputPricePerMTok" type="number" min="0" step="0.01" placeholder="Auto for Claude models" class="w-44" />
-                <p class="text-xs text-muted-foreground">Used for the pre-translate cost estimate. Set both to override the built-in Claude prices or to price other models.</p>
-              </div>
-
-              <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Context build</div>
+              <div class="mt-1 border-t border-border pt-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Context build</div>
 
               <div class="grid gap-1.5">
                 <Label for="ai-context-batch">Batch size</Label>
@@ -1021,6 +1172,104 @@ function onSynced(): void {
                   </SelectContent>
                 </Select>
                 <p class="text-xs text-muted-foreground">TranslateGemma uses a role-based system prompt and plain-text output instead of JSON batching.</p>
+              </div>
+
+              <div class="mt-1 border-t border-border pt-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cost estimates</div>
+
+              <div class="grid gap-1.5">
+                <Label>Model prices</Label>
+                <div class="flex flex-wrap items-center gap-2">
+                  <Button type="button" variant="outline" size="sm" :disabled="refreshingPrices" @click="refreshModelPrices">
+                    <RefreshCw class="size-3.5" :class="refreshingPrices ? 'animate-spin' : ''" />
+                    {{ refreshingPrices ? "Updating…" : "Update prices" }}
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" :disabled="!pricesStatus?.modelCount" @click="openPricesList">
+                    <Search class="size-3.5" /> Browse
+                  </Button>
+                  <span v-if="pricesStatus?.source" class="text-xs text-muted-foreground">
+                    {{ pricesStatus.modelCount.toLocaleString() }} models from {{ pricesStatus.source }}<template v-if="pricesFetchedLabel">, {{ pricesFetchedLabel }}</template>
+                  </span>
+                  <span v-else class="text-xs text-muted-foreground">No prices fetched yet</span>
+                </div>
+                <p class="text-xs text-muted-foreground">Fetches current per-model prices from models.dev for the cost estimate, covering models beyond the built-in Claude/GPT table. The manual overrides below always win.</p>
+              </div>
+
+              <Dialog v-model:open="pricesDialogOpen">
+                <DialogContent class="flex max-h-[85vh] max-w-lg flex-col">
+                  <DialogHeader>
+                    <DialogTitle>Model prices</DialogTitle>
+                    <DialogDescription>
+                      Per-model $ / 1M tokens (input / output)<template v-if="pricesStatus?.source"> from {{ pricesStatus.source }}</template>. Click rows to compare.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div class="relative">
+                    <Search class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input v-model="priceQuery" placeholder="Search models…" class="pl-8" />
+                  </div>
+                  <p class="text-xs text-muted-foreground">
+                    <template v-if="hiddenPriceCount > 0">Showing {{ visiblePriceRows.length }} of {{ filteredPriceRows.length.toLocaleString() }} matches — refine to narrow.</template>
+                    <template v-else>{{ filteredPriceRows.length.toLocaleString() }} model{{ filteredPriceRows.length === 1 ? "" : "s" }}</template>
+                    · click a row to compare
+                  </p>
+
+                  <!-- Comparison graph for the picked models -->
+                  <div v-if="comparedRows.length" class="space-y-2 rounded-lg border bg-muted/30 p-2.5">
+                    <div class="flex items-center gap-3 text-[11px] text-muted-foreground">
+                      <span class="flex items-center gap-1"><span class="size-2 rounded-sm bg-sky-500" /> Input</span>
+                      <span class="flex items-center gap-1"><span class="size-2 rounded-sm bg-amber-500" /> Output</span>
+                      <span>$ / 1M tokens</span>
+                    </div>
+                    <div v-for="m in comparedRows" :key="m.id" class="space-y-1">
+                      <div class="flex items-center justify-between gap-2 text-[11px]">
+                        <span class="truncate font-mono">{{ m.id }}</span>
+                        <span class="flex shrink-0 items-center gap-1.5">
+                          <span class="tabular-nums text-muted-foreground">${{ m.inputPerMTok }} / ${{ m.outputPerMTok }}</span>
+                          <button type="button" class="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground" :aria-label="`Remove ${m.id}`" @click="toggleCompare(m.id)">
+                            <X class="size-3" />
+                          </button>
+                        </span>
+                      </div>
+                      <div class="h-1.5 w-full rounded-sm bg-muted">
+                        <div class="h-full rounded-sm bg-sky-500" :style="{ width: compareBarWidth(m.inputPerMTok) }" />
+                      </div>
+                      <div class="h-1.5 w-full rounded-sm bg-muted">
+                        <div class="h-full rounded-sm bg-amber-500" :style="{ width: compareBarWidth(m.outputPerMTok) }" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="-mx-1 flex-1 overflow-y-auto">
+                    <button
+                      v-for="m in visiblePriceRows"
+                      :key="m.id"
+                      type="button"
+                      class="flex w-full items-center justify-between gap-3 rounded px-1 py-1 text-left text-xs hover:bg-muted/60"
+                      :class="isCompared(m.id) ? 'bg-muted' : ''"
+                      @click="toggleCompare(m.id)"
+                    >
+                      <span class="flex min-w-0 items-center gap-1.5">
+                        <Check v-if="isCompared(m.id)" class="size-3 shrink-0 text-sky-500" />
+                        <span v-else class="size-3 shrink-0" />
+                        <span class="truncate font-mono">{{ m.id }}</span>
+                      </span>
+                      <span class="shrink-0 tabular-nums text-muted-foreground">${{ m.inputPerMTok }} / ${{ m.outputPerMTok }}</span>
+                    </button>
+                    <p v-if="filteredPriceRows.length === 0" class="px-1 py-6 text-center text-sm text-muted-foreground">
+                      {{ priceRowsLoaded ? "No models match." : "Loading…" }}
+                    </p>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              <div class="grid gap-1.5">
+                <Label for="ai-price-in">Input price ($ / 1M tokens)</Label>
+                <Input id="ai-price-in" v-model.number="aiDraft.inputPricePerMTok" type="number" min="0" step="0.01" placeholder="Auto for Claude models" class="w-44" />
+              </div>
+
+              <div class="grid gap-1.5">
+                <Label for="ai-price-out">Output price ($ / 1M tokens)</Label>
+                <Input id="ai-price-out" v-model.number="aiDraft.outputPricePerMTok" type="number" min="0" step="0.01" placeholder="Auto for Claude models" class="w-44" />
+                <p class="text-xs text-muted-foreground">Set both to override the fetched/built-in prices or to price a model neither covers.</p>
               </div>
             </div>
           </div>

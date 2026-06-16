@@ -721,6 +721,86 @@ describe("POST /translate + GET /log", () => {
     const saved = JSON.parse(readFileSync(file, "utf8"));
     expect(saved.keys.k.values.fr).toMatchObject({ value: "Salut", state: "machine" });
   });
+
+  it("returns an actionable message (not the raw SDK string) when the provider run fails to authenticate", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "glot-"));
+    const file = join(dir, "glotfile.json");
+    const s = defaultState();
+    s.config.locales = ["en", "fr"];
+    saveState(file, s);
+    mkdirSync(join(dir, ".glotfile"), { recursive: true });
+    writeFileSync(join(dir, ".glotfile", "settings.json"), JSON.stringify({ ai: { provider: "bedrock", model: "amazon.nova-pro-v1:0", endpoint: null, region: "eu-west-1", batchSize: 25 } }));
+    const app = createApi({
+      statePath: file,
+      makeProvider: () => ({
+        translate: async () => { throw new Error("Could not load credentials from any providers"); },
+        supportsVision: () => true,
+      }) as never,
+    });
+    const headers = { "content-type": "application/json" };
+    await app.request("/keys", { method: "POST", headers, body: JSON.stringify({ key: "k", value: "Hi" }) });
+    const res = await app.request("/translate", { method: "POST", headers, body: JSON.stringify({ onlyMissing: true }) });
+    expect(res.ok).toBe(false);
+    const body = await res.json();
+    expect(body.error).toMatch(/AWS_PROFILE/);
+    expect(body.error).not.toBe("Could not load credentials from any providers");
+  });
+});
+
+describe("POST /ai-test (connection probe)", () => {
+  const BEDROCK = { ai: { provider: "bedrock", model: "amazon.nova-pro-v1:0", endpoint: null, region: "eu-west-1", batchSize: 25 } };
+
+  function setupAiTest(opts: { settings?: object; makeProvider?: () => unknown } = {}) {
+    const dir = mkdtempSync(join(tmpdir(), "glot-"));
+    const file = join(dir, "glotfile.json");
+    const s = defaultState();
+    s.config.locales = ["en", "fr"];
+    saveState(file, s);
+    if (opts.settings) {
+      mkdirSync(join(dir, ".glotfile"), { recursive: true });
+      writeFileSync(join(dir, ".glotfile", "settings.json"), JSON.stringify(opts.settings));
+    }
+    return { dir, file, app: createApi({ statePath: file, makeProvider: opts.makeProvider as never }) };
+  }
+
+  it("reports ok when the provider answers a probe translation", async () => {
+    const { app } = setupAiTest({
+      makeProvider: () => ({
+        translate: async (reqs: { id: string }[]) => reqs.map((r) => ({ id: r.id, translation: "hola" })),
+        supportsVision: () => true,
+      }),
+    });
+    const res = await app.request("/ai-test", { method: "POST" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+  });
+
+  it("returns a friendly AWS_PROFILE message when bedrock can't load credentials", async () => {
+    const { app } = setupAiTest({
+      settings: BEDROCK,
+      makeProvider: () => { throw new Error("Could not load credentials from any providers"); },
+    });
+    const res = await app.request("/ai-test", { method: "POST" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(false);
+    expect(body.error).toMatch(/AWS_PROFILE/);
+  });
+
+  it("surfaces an IAM-permission error from the probe call clearly", async () => {
+    const { app } = setupAiTest({
+      settings: BEDROCK,
+      makeProvider: () => ({
+        translate: async () => { throw new Error("AccessDeniedException: User: arn:aws:iam::1:user/x is not authorized to perform: bedrock:InvokeModel"); },
+        supportsVision: () => true,
+      }),
+    });
+    const res = await app.request("/ai-test", { method: "POST" });
+    const body = await res.json();
+    expect(body.ok).toBe(false);
+    expect(body.error).toMatch(/bedrock:InvokeModel/);
+  });
 });
 
 describe("POST /translate/estimate", () => {
@@ -2110,6 +2190,102 @@ describe("GET /events (live-reload SSE)", () => {
     await stream.cancel();
     await vi.waitFor(() => expect(hub.size()).toBe(0));
     stop();
+  });
+
+  it("GET /prices reports cache status and resolves a price", async () => {
+    const { app } = setup();
+    const cachePath = join(mkdtempSync(join(tmpdir(), "glot-prices-")), "model-prices.json");
+    writeFileSync(cachePath, JSON.stringify({
+      source: "models.dev",
+      fetchedAt: "2026-06-16T00:00:00.000Z",
+      models: { "claude-haiku-4-5": { inputPerMTok: 1, outputPerMTok: 5 } },
+    }));
+    vi.stubEnv("GLOTFILE_PRICES_PATH", cachePath);
+    try {
+      const res = await app.request("/prices");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.source).toBe("models.dev");
+      expect(body.modelCount).toBe(1);
+      expect(body.path).toBe(cachePath);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("POST /prices/refresh fetches, writes the cache, and reports the count", async () => {
+    const { app } = setup();
+    const cachePath = join(mkdtempSync(join(tmpdir(), "glot-prices-")), "model-prices.json");
+    vi.stubEnv("GLOTFILE_PRICES_PATH", cachePath);
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ anthropic: { models: { "anthropic/claude-haiku-4-5": { cost: { input: 1, output: 5 } } } } }),
+    })));
+    try {
+      const res = await app.request("/prices/refresh", { method: "POST" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(body.modelCount).toBe(1);
+      expect(existsSync(cachePath)).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("POST /prices/refresh returns 502 when the source is unreachable", async () => {
+    const { app } = setup();
+    const cachePath = join(mkdtempSync(join(tmpdir(), "glot-prices-")), "model-prices.json");
+    vi.stubEnv("GLOTFILE_PRICES_PATH", cachePath);
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) })));
+    try {
+      const res = await app.request("/prices/refresh", { method: "POST" });
+      expect(res.status).toBe(502);
+      const body = await res.json();
+      expect(body.error).toMatch(/503/);
+      expect(existsSync(cachePath)).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("GET /prices/list returns the cached models sorted by id", async () => {
+    const { app } = setup();
+    const cachePath = join(mkdtempSync(join(tmpdir(), "glot-prices-")), "model-prices.json");
+    writeFileSync(cachePath, JSON.stringify({
+      source: "models.dev",
+      fetchedAt: "2026-06-16T00:00:00.000Z",
+      models: {
+        "gpt-5.4": { inputPerMTok: 2.5, outputPerMTok: 15 },
+        "claude-haiku-4-5": { inputPerMTok: 1, outputPerMTok: 5 },
+      },
+    }));
+    vi.stubEnv("GLOTFILE_PRICES_PATH", cachePath);
+    try {
+      const res = await app.request("/prices/list");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.models.map((m: { id: string }) => m.id)).toEqual(["claude-haiku-4-5", "gpt-5.4"]);
+      expect(body.models[0]).toMatchObject({ id: "claude-haiku-4-5", inputPerMTok: 1, outputPerMTok: 5 });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("GET /prices/list returns an empty list when no cache exists", async () => {
+    const { app } = setup();
+    const missing = join(mkdtempSync(join(tmpdir(), "glot-prices-")), "absent.json");
+    vi.stubEnv("GLOTFILE_PRICES_PATH", missing);
+    try {
+      const res = await app.request("/prices/list");
+      expect(res.status).toBe(200);
+      expect((await res.json()).models).toEqual([]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 
