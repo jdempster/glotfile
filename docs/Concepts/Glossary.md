@@ -38,6 +38,38 @@ Use it for two things:
 
 > **Tip:** Only relevant terms are sent — Glotfile matches glossary terms against each source string and includes just the ones that appear — the AI isn't handed your entire glossary for every key.
 
+## AI term suggestions
+
+Instead of building the glossary by hand, you can let Glotfile scan your source strings and propose candidates. Hit **Suggest terms with AI** in the Glossary view, or run:
+
+```
+glotfile suggest-glossary
+```
+
+The AI looks across your source-locale strings and surfaces brand/product names, acronyms, domain jargon, and recurring terms that look like good glossary candidates. It does not read your code files and does not generate translations for the terms.
+
+**Terms already in your glossary are skipped** — as are any terms you've previously dismissed — so you can run the command again as your catalog grows and only new candidates appear.
+
+### Reviewing suggestions
+
+Suggestions sit in a review queue; nothing changes until you act. Each entry shows a rationale note, the number of keys the term appears in, and suggested flags (do-not-translate / case-sensitive / whole-word). From there you can:
+
+- **Accept** — opens the normal add-term dialog prefilled with the suggestion so you can tweak it (add forced translations, adjust flags) before saving.
+- **Dismiss** — marks the term as reviewed so it won't reappear in future runs.
+
+### Scoping and cost estimation
+
+By default the command scans all source strings. Use these flags to narrow the scope or preview cost before running:
+
+| Flag | Effect |
+|---|---|
+| `--key <glob>` | Only scan keys matching this glob. |
+| `--limit <n>` | Scan at most *n* source strings. |
+| `--since <date>` | Only keys added or changed since this date. |
+| `--estimate` | Print batches, token counts, and an estimated cost without scanning. |
+
+Suggestions use your configured AI provider and model (the same one used for translation).
+
 ## Related
 
 - How Translation Works · Checks and Validation · Key Context and Metadata
