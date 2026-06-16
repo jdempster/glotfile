@@ -1,0 +1,8 @@
+{
+  "cart": {
+    "items": "{count, plural, one {{count} article} other {{count} articles}}"
+  },
+  "index": {
+    "heading": "Votre forfait"
+  }
+}

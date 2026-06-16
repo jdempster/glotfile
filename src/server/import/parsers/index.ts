@@ -1,5 +1,6 @@
 import type { Parser } from "../types.js";
 import { vueI18nJson } from "./vue-i18n-json.js";
+import { nextIntlJson } from "./next-intl-json.js";
 import { laravelPhp } from "./laravel-php.js";
 import { flutterArb } from "./flutter-arb.js";
 import { appleStrings } from "./apple-strings.js";
@@ -11,6 +12,7 @@ import { appleStringsdict } from "./apple-stringsdict.js";
 
 const REGISTRY: Record<string, Parser> = {
   [vueI18nJson.name]: vueI18nJson,
+  [nextIntlJson.name]: nextIntlJson,
   [laravelPhp.name]: laravelPhp,
   [flutterArb.name]: flutterArb,
   [appleStrings.name]: appleStrings,

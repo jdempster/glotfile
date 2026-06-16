@@ -18,6 +18,7 @@ describe("registry", () => {
       "gettext-po",
       "i18next-json",
       "laravel-php",
+      "next-intl-json",
       "rails-yaml",
       "vue-i18n-json",
     ]);
