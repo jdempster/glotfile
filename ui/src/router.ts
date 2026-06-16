@@ -30,12 +30,13 @@ export function setLeaveGuard(guard: LeaveGuard | null): void {
   leaveGuard = guard;
 }
 
-export function navigate(to: Route): void {
+export function navigate(to: Route, search?: string): void {
   if (leaveGuard && !leaveGuard(to)) return;
-  // No query string: the search params are editor-scoped filter state and must
-  // not leak into other routes. Cross-view filter hand-off goes through
+  // No query string by default: the editor's search params are filter state and
+  // must not leak into other routes. Cross-view filter hand-off goes through
   // drilldown.ts (pendingFilter), and deep links restore from the hash on load.
-  location.hash = to;
+  // `search` is an explicit opt-in (e.g. deep-linking to a Settings subsection).
+  location.hash = search ? `${to}?${search}` : to;
 }
 
 export function useRoute() {
