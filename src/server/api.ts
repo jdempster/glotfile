@@ -29,13 +29,16 @@ import { readFileSync, existsSync, readdirSync, statSync, rmSync } from "node:fs
 import { dirname, resolve, basename, relative, sep } from "node:path";
 import { makeProvider } from "./ai/index.js";
 import { selectRequests, applyResults, attachScreenshotsForProvider, runLocaleParallel } from "./ai/run.js";
-import { buildSystemPrompt, supportsBatchTranslate, supportsBatchComplete, type TranslationProvider } from "./ai/provider.js";
+import { buildSystemPrompt, supportsBatchTranslate, supportsBatchComplete, type TranslationProvider, type TranslationRequest } from "./ai/provider.js";
+import { explainProviderError } from "./ai/explain-error.js";
 import { submitBatchTranslation, applyBatchResults } from "./ai/batch-run.js";
 import { loadPendingBatch, clearPendingBatch } from "./ai/pending-batch.js";
 import { submitContextBatch, applyContextBatchResults } from "./ai/context-batch-run.js";
 import { loadPendingContextBatch, clearPendingContextBatch } from "./ai/pending-context-batch.js";
 import { estimateTranslation, estimateContext } from "./ai/estimate.js";
-import { usageCostUsd } from "./ai/pricing.js";
+import { usageCostUsd, resolvePricing } from "./ai/pricing.js";
+import { refreshPrices } from "./ai/price-fetch.js";
+import { loadPriceCache, defaultPriceCachePath, invalidatePriceCache } from "./ai/price-cache.js";
 import { appendLog, readLog, type LogEntry } from "./log.js";
 import { GlotfileError, validate, type Config, type State } from "./schema.js";
 import { previewImport, runImport, runSync } from "./import/run.js";
@@ -268,6 +271,79 @@ export function createApi(deps: ApiDeps): Hono {
       saveLocalSettings(projectRoot, { activeProfile: null });
     }
     return c.json({ ok: true });
+  });
+
+  // Connection probe for the active AI config: build the provider and run one
+  // throwaway translation, so a misconfiguration (missing credentials, wrong
+  // model id, missing IAM permission) surfaces here — with an actionable
+  // message — instead of mid-run. Always 200; the body carries ok/error.
+  app.post("/ai-test", async (c) => {
+    const aiCfg = loadLocalSettings(projectRoot).ai;
+    const meta = { provider: aiCfg.provider, model: aiCfg.model };
+    let provider: TranslationProvider;
+    try {
+      provider = deps.makeProvider ? deps.makeProvider() : makeProvider(aiCfg);
+    } catch (e) {
+      return c.json({ ok: false, ...meta, error: explainProviderError(aiCfg.provider, e) });
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const probe: TranslationRequest = {
+        id: "probe", key: "glotfile.connection-test", source: "Hello",
+        sourceLocale: "en", targetLocale: "es", placeholders: [],
+      };
+      // A resolved call — even one with a per-item validation error — means the
+      // provider was reachable and authorized; that's all the test checks.
+      await provider.translate([probe], undefined, controller.signal);
+      return c.json({ ok: true, ...meta });
+    } catch (e) {
+      const error = controller.signal.aborted
+        ? "Connection test timed out after 30s — the provider didn't respond."
+        : explainProviderError(aiCfg.provider, e);
+      return c.json({ ok: false, ...meta, error });
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+
+  // Model price cache (models.dev): status + the price resolved for the active
+  // AI config. Reads the cache off disk; never touches the network.
+  app.get("/prices", (c) => {
+    const cache = loadPriceCache();
+    const ai = loadLocalSettings(projectRoot).ai;
+    const pricing = resolvePricing(ai, cache);
+    return c.json({
+      source: cache?.source ?? null,
+      fetchedAt: cache?.fetchedAt ?? null,
+      modelCount: cache ? Object.keys(cache.models).length : 0,
+      path: defaultPriceCachePath(),
+      resolved: pricing ? { provider: ai.provider, model: ai.model, ...pricing } : null,
+    });
+  });
+
+  // The full cached price table, sorted by model id, for the browse/search UI.
+  app.get("/prices/list", (c) => {
+    const cache = loadPriceCache();
+    const models = cache
+      ? Object.entries(cache.models)
+          .map(([id, p]) => ({ id, ...p }))
+          .sort((a, b) => a.id.localeCompare(b.id))
+      : [];
+    return c.json({ source: cache?.source ?? null, fetchedAt: cache?.fetchedAt ?? null, models });
+  });
+
+  // The one network path: fetch the latest prices from models.dev and rewrite
+  // the cache. Invalidate the in-process memo so this running server resolves
+  // against the new prices without a restart.
+  app.post("/prices/refresh", async (c) => {
+    try {
+      const res = await refreshPrices();
+      invalidatePriceCache();
+      return c.json({ ok: true, ...res });
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 502);
+    }
   });
 
   app.get("/file", (c) =>
@@ -990,7 +1066,7 @@ export function createApi(deps: ApiDeps): Hono {
       try {
         provider = deps.makeProvider ? deps.makeProvider() : makeProvider(aiCfg);
       } catch (e) {
-        await stream.writeSSE({ event: "error", data: JSON.stringify({ error: (e as Error).message }) });
+        await stream.writeSSE({ event: "error", data: JSON.stringify({ error: explainProviderError(aiCfg.provider, e) }) });
         return;
       }
 
@@ -1015,6 +1091,7 @@ export function createApi(deps: ApiDeps): Hono {
         data: JSON.stringify({ total: reqs.length, locales: [...localeTotals].map(([locale, total]) => ({ locale, total })) }),
       });
 
+      try {
       await runLocaleParallel(reqs, provider, {
         // Announce a language the moment a worker picks it up — this is the
         // signal that "something is happening" during the long first LLM call.
@@ -1072,6 +1149,14 @@ export function createApi(deps: ApiDeps): Hono {
           });
         },
       }, aiCfg.concurrency, signal, aiCfg.batchSize);
+      } catch (e) {
+        // A provider failure mid-run (on Bedrock, credentials only resolve at
+        // send time) would otherwise end the stream with no signal to the UI.
+        if (!signal?.aborted) {
+          await stream.writeSSE({ event: "error", data: JSON.stringify({ error: explainProviderError(aiCfg.provider, e) }) });
+        }
+        return;
+      }
 
       if (!signal?.aborted) {
         console.log(`[translate] done — wrote ${totalWritten}, ${allErrors.length} error(s)`);
@@ -1102,24 +1187,32 @@ export function createApi(deps: ApiDeps): Hono {
       try {
         provider = deps.makeProvider ? deps.makeProvider() : makeProvider(aiCfg);
       } catch (e) {
-        return c.json({ error: (e as Error).message }, 400);
+        return c.json({ error: explainProviderError(aiCfg.provider, e) }, 400);
       }
       // Screenshot paths are relative to the ACTIVE glotfile's dir, not the project root.
       const { skipped } = attachScreenshotsForProvider(toTranslate, s, dirname(resolve(deps.statePath)), provider.supportsVision());
       if (skipped) console.warn(`Model "${aiCfg.model}" has no vision support; ${skipped} screenshot(s) ignored.`);
-      const results = await runLocaleParallel(toTranslate, provider, {
-        onMalformedReply: (raw, batchSize, locale) => {
-          console.error(`[translate] malformed model reply (${locale}, batch of ${batchSize})${batchSize > 1 ? " — splitting batch and retrying" : ""}`);
-          appendLog(projectRoot, {
-            at: new Date().toISOString(),
-            kind: "translate",
-            summary: `Malformed model reply (${locale}, batch of ${batchSize})`,
-            model: aiCfg.model,
-            locale,
-            raw,
-          });
-        },
-      }, aiCfg.concurrency, undefined, aiCfg.batchSize);
+      let results: Awaited<ReturnType<typeof runLocaleParallel>>;
+      try {
+        results = await runLocaleParallel(toTranslate, provider, {
+          onMalformedReply: (raw, batchSize, locale) => {
+            console.error(`[translate] malformed model reply (${locale}, batch of ${batchSize})${batchSize > 1 ? " — splitting batch and retrying" : ""}`);
+            appendLog(projectRoot, {
+              at: new Date().toISOString(),
+              kind: "translate",
+              summary: `Malformed model reply (${locale}, batch of ${batchSize})`,
+              model: aiCfg.model,
+              locale,
+              raw,
+            });
+          },
+        }, aiCfg.concurrency, undefined, aiCfg.batchSize);
+      } catch (e) {
+        // A provider failure (bad credentials, missing IAM permission, unknown
+        // model id) aborts the whole run — surface an actionable message rather
+        // than an opaque 500 from onError.
+        return c.json({ error: explainProviderError(aiCfg.provider, e) }, 502);
+      }
       // Re-load before applying so user edits made during the AI call are not overwritten.
       const latest = load();
       ({ written, errors } = applyResults(latest, toTranslate, results, undefined, force));

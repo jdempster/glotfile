@@ -73,6 +73,19 @@ describe("translateStream", () => {
     }
   });
 
+  it("throws with the server's message when the stream emits an error event", async () => {
+    const sse = `event: error\ndata: ${JSON.stringify({ error: "No AWS credentials found. Set AWS_PROFILE…" })}\n\n`;
+    const spy = vi.fn(async () => sseResponse(sse));
+    vi.stubGlobal("fetch", spy);
+    try {
+      await expect((async () => {
+        for await (const _ of translateStream()) { /* drain */ }
+      })()).rejects.toThrow(/AWS_PROFILE/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("omits keys/locales from the body when unscoped (translate everything)", async () => {
     const sse = `event: done\ndata: ${JSON.stringify({ written: 0, errors: [] })}\n\n`;
     const spy = vi.fn(async () => sseResponse(sse));
