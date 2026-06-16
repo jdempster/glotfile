@@ -35,7 +35,9 @@ import { submitBatchTranslation, applyBatchResults } from "./ai/batch-run.js";
 import { loadPendingBatch, clearPendingBatch } from "./ai/pending-batch.js";
 import { submitContextBatch, applyContextBatchResults } from "./ai/context-batch-run.js";
 import { loadPendingContextBatch, clearPendingContextBatch } from "./ai/pending-context-batch.js";
-import { estimateTranslation, estimateContext } from "./ai/estimate.js";
+import { submitGlossarySuggestBatch, applyGlossarySuggestBatchResults } from "./ai/glossary-batch-run.js";
+import { loadPendingGlossaryBatch, clearPendingGlossaryBatch } from "./ai/pending-glossary-batch.js";
+import { estimateTranslation, estimateContext, estimateGlossarySuggest } from "./ai/estimate.js";
 import { usageCostUsd, resolvePricing } from "./ai/pricing.js";
 import { refreshPrices } from "./ai/price-fetch.js";
 import { loadPriceCache, defaultPriceCachePath, invalidatePriceCache } from "./ai/price-cache.js";
@@ -848,6 +850,104 @@ export function createApi(deps: ApiDeps): Hono {
       });
       await stream.writeSSE({ event: "done", data: JSON.stringify({ added: added.length, terms: added }) });
     });
+  });
+
+  app.post("/glossary/suggest/estimate", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const s = load();
+    const sources = selectGlossarySources(s, { keyGlob: body.keyGlob, limit: body.limit, since: body.since });
+    const aiCfg = loadLocalSettings(projectRoot).ai;
+    return c.json(estimateGlossarySuggest(sources, knownTermList(s), aiCfg));
+  });
+
+  // Pending glossary-suggestion-batch status. Independent from translation batch
+  // and context batch — one of each kind can be in flight simultaneously.
+  app.get("/glossary/suggest/batch/status", async (c) => {
+    const aiCfg = loadLocalSettings(projectRoot).ai;
+    let supported = false;
+    let provider;
+    try {
+      provider = deps.makeProvider ? deps.makeProvider() : makeProvider(aiCfg);
+      supported = supportsBatchComplete(provider);
+    } catch {
+      // No usable provider (e.g. missing API key) — report unsupported rather than erroring.
+    }
+    const pending = loadPendingGlossaryBatch(projectRoot);
+    if (!pending) return c.json({ supported, pending: null });
+    const base = { batchId: pending.batchId, createdAt: pending.createdAt, model: pending.model, total: pending.total };
+    if (!provider || !supportsBatchComplete(provider)) {
+      return c.json({ supported, pending: { ...base, status: "unknown", counts: null } });
+    }
+    try {
+      const status = await provider.translationBatchStatus(pending.batchId);
+      return c.json({ supported, pending: { ...base, status: status.status, counts: status.counts } });
+    } catch (e) {
+      return c.json({ supported, pending: { ...base, status: "unknown", counts: null, error: (e as Error).message } });
+    }
+  });
+
+  app.post("/glossary/suggest/batch", (c) => withTranslateLock(async () => {
+    const body = await c.req.json().catch(() => ({}));
+    const s = load();
+    const sources = selectGlossarySources(s, { keyGlob: body.keyGlob, limit: body.limit, since: body.since });
+    if (!sources.length) return c.json({ error: "No source strings to scan." }, 400);
+    const aiCfg = loadLocalSettings(projectRoot).ai;
+    let provider;
+    try {
+      provider = deps.makeProvider ? deps.makeProvider() : makeProvider(aiCfg);
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 400);
+    }
+    if (!supportsBatchComplete(provider)) {
+      return c.json({ error: `Provider "${aiCfg.provider}" does not support batch mode.` }, 400);
+    }
+    const batchSize = aiCfg.contextBatchSize ?? aiCfg.batchSize ?? 10;
+    let pending;
+    try {
+      pending = await submitGlossarySuggestBatch(provider, sources, knownTermList(s), batchSize, aiCfg.model, projectRoot);
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 409);
+    }
+    appendLog(projectRoot, {
+      at: new Date().toISOString(),
+      kind: "glossary",
+      summary: `Submitted glossary suggestion batch ${pending.batchId} (${pending.total} sources)`,
+      model: aiCfg.model,
+    });
+    return c.json({ batchId: pending.batchId, total: pending.total });
+  }));
+
+  app.post("/glossary/suggest/batch/apply", (c) => withTranslateLock(async () => {
+    const pending = loadPendingGlossaryBatch(projectRoot);
+    if (!pending) return c.json({ error: "No pending glossary suggestion batch." }, 404);
+    const aiCfg = loadLocalSettings(projectRoot).ai;
+    let provider;
+    try {
+      provider = deps.makeProvider ? deps.makeProvider() : makeProvider(aiCfg);
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 400);
+    }
+    if (!supportsBatchComplete(provider)) {
+      return c.json({ error: `Provider "${aiCfg.provider}" does not support batch mode.` }, 400);
+    }
+    // applyGlossarySuggestBatchResults writes the activity-log entry and clears the handle.
+    const outcome = await applyGlossarySuggestBatchResults(load, persist, provider, pending, projectRoot, aiCfg);
+    return c.json(outcome);
+  }));
+
+  app.post("/glossary/suggest/batch/cancel", async (c) => {
+    const pending = loadPendingGlossaryBatch(projectRoot);
+    if (!pending) return c.json({ error: "No pending glossary suggestion batch." }, 404);
+    const aiCfg = loadLocalSettings(projectRoot).ai;
+    try {
+      const provider = deps.makeProvider ? deps.makeProvider() : makeProvider(aiCfg);
+      if (supportsBatchComplete(provider)) await provider.cancelTranslationBatch(pending.batchId);
+    } catch {
+      // Cancel best-effort: clearing the local handle must work even when the
+      // provider is unreachable (the remote batch simply expires server-side).
+    }
+    clearPendingGlossaryBatch(projectRoot);
+    return c.json({ canceled: pending.batchId });
   });
 
   app.post("/keys/:key/screenshot", async (c) => {
