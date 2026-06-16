@@ -65,7 +65,7 @@ By default the command scans all source strings. Use these flags to narrow the s
 |---|---|
 | `--key <glob>` | Only scan keys matching this glob. |
 | `--limit <n>` | Scan at most *n* source strings. |
-| `--since <date>` | Only keys added or changed since this date. |
+| `--since <date>` | Only keys added since this date. |
 | `--estimate` | Print batches, token counts, and an estimated cost without scanning. |
 
 Suggestions use your configured AI provider and model (the same one used for translation).

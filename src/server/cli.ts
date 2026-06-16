@@ -1289,7 +1289,7 @@ const COMMAND_HELP: Record<Exclude<ParsedArgs["command"], "help" | "version">, {
     options: [
       ["--key <glob>", "Only scan keys matching this glob"],
       ["--limit <n>", "Scan at most n source strings"],
-      ["--since <date>", "Only keys added/changed since this date"],
+      ["--since <date>", "Only keys added since this date"],
       ["--estimate", "Print batches, tokens and estimated cost without scanning"],
     ],
   },
