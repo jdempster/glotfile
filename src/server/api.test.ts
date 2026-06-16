@@ -2111,4 +2111,100 @@ describe("GET /events (live-reload SSE)", () => {
     await vi.waitFor(() => expect(hub.size()).toBe(0));
     stop();
   });
+
+  it("GET /prices reports cache status and resolves a price", async () => {
+    const { app } = setup();
+    const cachePath = join(mkdtempSync(join(tmpdir(), "glot-prices-")), "model-prices.json");
+    writeFileSync(cachePath, JSON.stringify({
+      source: "models.dev",
+      fetchedAt: "2026-06-16T00:00:00.000Z",
+      models: { "claude-haiku-4-5": { inputPerMTok: 1, outputPerMTok: 5 } },
+    }));
+    vi.stubEnv("GLOTFILE_PRICES_PATH", cachePath);
+    try {
+      const res = await app.request("/prices");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.source).toBe("models.dev");
+      expect(body.modelCount).toBe(1);
+      expect(body.path).toBe(cachePath);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("POST /prices/refresh fetches, writes the cache, and reports the count", async () => {
+    const { app } = setup();
+    const cachePath = join(mkdtempSync(join(tmpdir(), "glot-prices-")), "model-prices.json");
+    vi.stubEnv("GLOTFILE_PRICES_PATH", cachePath);
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ anthropic: { models: { "anthropic/claude-haiku-4-5": { cost: { input: 1, output: 5 } } } } }),
+    })));
+    try {
+      const res = await app.request("/prices/refresh", { method: "POST" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(body.modelCount).toBe(1);
+      expect(existsSync(cachePath)).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("POST /prices/refresh returns 502 when the source is unreachable", async () => {
+    const { app } = setup();
+    const cachePath = join(mkdtempSync(join(tmpdir(), "glot-prices-")), "model-prices.json");
+    vi.stubEnv("GLOTFILE_PRICES_PATH", cachePath);
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) })));
+    try {
+      const res = await app.request("/prices/refresh", { method: "POST" });
+      expect(res.status).toBe(502);
+      const body = await res.json();
+      expect(body.error).toMatch(/503/);
+      expect(existsSync(cachePath)).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("GET /prices/list returns the cached models sorted by id", async () => {
+    const { app } = setup();
+    const cachePath = join(mkdtempSync(join(tmpdir(), "glot-prices-")), "model-prices.json");
+    writeFileSync(cachePath, JSON.stringify({
+      source: "models.dev",
+      fetchedAt: "2026-06-16T00:00:00.000Z",
+      models: {
+        "gpt-5.4": { inputPerMTok: 2.5, outputPerMTok: 15 },
+        "claude-haiku-4-5": { inputPerMTok: 1, outputPerMTok: 5 },
+      },
+    }));
+    vi.stubEnv("GLOTFILE_PRICES_PATH", cachePath);
+    try {
+      const res = await app.request("/prices/list");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.models.map((m: { id: string }) => m.id)).toEqual(["claude-haiku-4-5", "gpt-5.4"]);
+      expect(body.models[0]).toMatchObject({ id: "claude-haiku-4-5", inputPerMTok: 1, outputPerMTok: 5 });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("GET /prices/list returns an empty list when no cache exists", async () => {
+    const { app } = setup();
+    const missing = join(mkdtempSync(join(tmpdir(), "glot-prices-")), "absent.json");
+    vi.stubEnv("GLOTFILE_PRICES_PATH", missing);
+    try {
+      const res = await app.request("/prices/list");
+      expect(res.status).toBe(200);
+      expect((await res.json()).models).toEqual([]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });

@@ -32,7 +32,9 @@ import { loadPendingBatch, clearPendingBatch } from "./ai/pending-batch.js";
 import { submitContextBatch, applyContextBatchResults } from "./ai/context-batch-run.js";
 import { loadPendingContextBatch, clearPendingContextBatch } from "./ai/pending-context-batch.js";
 import { estimateTranslation, estimateContext } from "./ai/estimate.js";
-import { usageCostUsd } from "./ai/pricing.js";
+import { usageCostUsd, resolvePricing } from "./ai/pricing.js";
+import { refreshPrices } from "./ai/price-fetch.js";
+import { loadPriceCache, defaultPriceCachePath, invalidatePriceCache } from "./ai/price-cache.js";
 import { appendLog, readLog, type LogEntry } from "./log.js";
 import { GlotfileError, validate, type Config, type State } from "./schema.js";
 import { previewImport, runImport, runSync } from "./import/run.js";
@@ -265,6 +267,45 @@ export function createApi(deps: ApiDeps): Hono {
       saveLocalSettings(projectRoot, { activeProfile: null });
     }
     return c.json({ ok: true });
+  });
+
+  // Model price cache (models.dev): status + the price resolved for the active
+  // AI config. Reads the cache off disk; never touches the network.
+  app.get("/prices", (c) => {
+    const cache = loadPriceCache();
+    const ai = loadLocalSettings(projectRoot).ai;
+    const pricing = resolvePricing(ai, cache);
+    return c.json({
+      source: cache?.source ?? null,
+      fetchedAt: cache?.fetchedAt ?? null,
+      modelCount: cache ? Object.keys(cache.models).length : 0,
+      path: defaultPriceCachePath(),
+      resolved: pricing ? { provider: ai.provider, model: ai.model, ...pricing } : null,
+    });
+  });
+
+  // The full cached price table, sorted by model id, for the browse/search UI.
+  app.get("/prices/list", (c) => {
+    const cache = loadPriceCache();
+    const models = cache
+      ? Object.entries(cache.models)
+          .map(([id, p]) => ({ id, ...p }))
+          .sort((a, b) => a.id.localeCompare(b.id))
+      : [];
+    return c.json({ source: cache?.source ?? null, fetchedAt: cache?.fetchedAt ?? null, models });
+  });
+
+  // The one network path: fetch the latest prices from models.dev and rewrite
+  // the cache. Invalidate the in-process memo so this running server resolves
+  // against the new prices without a restart.
+  app.post("/prices/refresh", async (c) => {
+    try {
+      const res = await refreshPrices();
+      invalidatePriceCache();
+      return c.json({ ok: true, ...res });
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 502);
+    }
   });
 
   app.get("/file", (c) =>

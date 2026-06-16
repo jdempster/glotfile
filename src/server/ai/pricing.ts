@@ -1,9 +1,14 @@
 import type { AiConfig } from "../schema.js";
+import { getPriceCache, type PriceCache } from "./price-cache.js";
 
 export interface ResolvedPricing {
-  source: "builtin" | "profile";
+  source: "builtin" | "profile" | "cache";
   inputPerMTok: number;
   outputPerMTok: number;
+  // Per-MTok cache rates, present only from a cache source that reports them.
+  // Absent => estimateUsageCostUsd falls back to the multiplier heuristics.
+  cacheReadPerMTok?: number;
+  cacheWritePerMTok?: number;
 }
 
 // Real token usage reported by a provider, summed across one run's API calls.
@@ -40,10 +45,15 @@ export function usageCostUsd(usage: TokenUsage | undefined, ai: AiConfig, multip
 // Dollar cost of real usage. `multiplier` scales the whole figure — pass
 // BATCH_PRICE_MULTIPLIER for usage billed through the batch API.
 export function estimateUsageCostUsd(usage: TokenUsage, pricing: ResolvedPricing, multiplier = 1): number {
+  // Prefer the source's real per-model cache rates; fall back to the Anthropic
+  // multiplier heuristics when they're absent (builtin/profile, or a source that
+  // didn't report cache costs).
+  const writeRate = pricing.cacheWritePerMTok ?? pricing.inputPerMTok * CACHE_WRITE_MULTIPLIER;
+  const readRate = pricing.cacheReadPerMTok ?? pricing.inputPerMTok * CACHE_READ_MULTIPLIER;
   const inputCost =
-    (usage.inputTokens +
-      usage.cacheCreationInputTokens * CACHE_WRITE_MULTIPLIER +
-      usage.cacheReadInputTokens * CACHE_READ_MULTIPLIER) * pricing.inputPerMTok;
+    usage.inputTokens * pricing.inputPerMTok +
+    usage.cacheCreationInputTokens * writeRate +
+    usage.cacheReadInputTokens * readRate;
   return ((inputCost + usage.outputTokens * pricing.outputPerMTok) / 1e6) * multiplier;
 }
 
@@ -76,7 +86,7 @@ const FREE_PROVIDERS = new Set<AiConfig["provider"]>(["ollama", "claude-code"]);
 
 // Bedrock IDs ("eu.anthropic.claude-…") and OpenRouter IDs ("anthropic/claude-…")
 // wrap the bare model ID; strip the vendor wrapping before prefix-matching.
-function bareModelId(model: string): string {
+export function bareModelId(model: string): string {
   let id = model.trim().toLowerCase();
   const slash = id.lastIndexOf("/");
   if (slash !== -1) id = id.slice(slash + 1);
@@ -85,14 +95,34 @@ function bareModelId(model: string): string {
   return id;
 }
 
+// Longest cached bare id that is a prefix of the requested id wins — same
+// prefix semantics the builtin table uses, so dated model suffixes still match.
+function lookupCachePrice(cache: PriceCache, id: string): ResolvedPricing | null {
+  const exact = cache.models[id];
+  if (exact) return { source: "cache", ...exact };
+  let best: { id: string; price: ResolvedPricing } | undefined;
+  for (const [cid, price] of Object.entries(cache.models)) {
+    if (id.startsWith(cid) && (!best || cid.length > best.id.length)) {
+      best = { id: cid, price: { source: "cache", ...price } };
+    }
+  }
+  return best ? best.price : null;
+}
+
 // Hybrid resolution: an explicit per-profile price (both fields set) wins, then
-// the built-in table, then $0 providers; null means "no dollar figure possible".
-export function resolvePricing(ai: AiConfig): ResolvedPricing | null {
+// $0 providers, then the fetched price cache, then the bundled table; null means
+// "no dollar figure possible". The cache outranks the bundled table so a
+// `glotfile prices --refresh` keeps estimates current without a release.
+export function resolvePricing(ai: AiConfig, cache: PriceCache | null = getPriceCache()): ResolvedPricing | null {
   if (ai.inputPricePerMTok !== undefined && ai.outputPricePerMTok !== undefined) {
     return { source: "profile", inputPerMTok: ai.inputPricePerMTok, outputPerMTok: ai.outputPricePerMTok };
   }
   if (FREE_PROVIDERS.has(ai.provider)) return { source: "builtin", inputPerMTok: 0, outputPerMTok: 0 };
   const id = bareModelId(ai.model);
+  if (cache) {
+    const cached = lookupCachePrice(cache, id);
+    if (cached) return cached;
+  }
   let best: [string, number, number] | undefined;
   for (const row of PRICE_TABLE) {
     if (id.startsWith(row[0]) && (!best || row[0].length > best[0].length)) best = row;
