@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import GlossaryEntryDialog from "./GlossaryEntryDialog.vue";
 import GlossarySuggestDialog from "./GlossarySuggestDialog.vue";
+import BatchBanner from "@/components/editor/BatchBanner.vue";
 
 const entries = ref<GlossaryEntry[]>([]);
 const sourceLocale = ref("");
@@ -35,6 +36,8 @@ const search = ref("");
 const filteredEntries = computed(() => filterGlossary(entries.value, search.value));
 
 const targetLocales = computed(() => locales.value.filter((l) => l !== sourceLocale.value));
+
+const suggestBanner = ref<InstanceType<typeof BatchBanner> | null>(null);
 
 const suggestions = ref<GlossarySuggestion[]>([]);
 const suggestOpen = ref(false);
@@ -146,6 +149,8 @@ async function confirmDelete() {
         </button>
       </div>
 
+      <BatchBanner ref="suggestBanner" kind="glossary-suggest" @changed="reloadSuggestions" />
+
       <div v-if="suggestions.length" class="flex flex-col gap-2">
         <p class="text-sm font-medium">AI term suggestions</p>
         <ul class="flex flex-col gap-2">
@@ -239,7 +244,7 @@ async function confirmDelete() {
       @saved="onDialogSaved"
     />
 
-    <GlossarySuggestDialog v-model:open="suggestOpen" @found="reloadSuggestions" />
+    <GlossarySuggestDialog v-model:open="suggestOpen" @found="reloadSuggestions" @batch-submitted="suggestBanner?.refresh()" />
 
     <Dialog :open="deleting !== null" @update:open="(v) => { if (!v) deleting = null; }">
       <DialogContent class="max-w-md">

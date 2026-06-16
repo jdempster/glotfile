@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import BatchBanner from "./BatchBanner.vue";
-import { batchStatus, batchApply } from "@/api.js";
+import { batchStatus, batchApply, glossarySuggestBatchStatus, glossarySuggestBatchApply } from "@/api.js";
 
 vi.mock("@/api.js", () => ({
   batchStatus: vi.fn(),
   batchApply: vi.fn(),
   batchCancel: vi.fn(),
+  glossarySuggestBatchStatus: vi.fn(),
+  glossarySuggestBatchApply: vi.fn(),
+  glossarySuggestBatchCancel: vi.fn(),
 }));
 
 vi.mock("@/components/ui/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -91,5 +94,59 @@ describe("BatchBanner", () => {
 
     // After refresh returns pending: null, the banner should be gone.
     expect(w.find("div").exists()).toBe(false);
+  });
+});
+
+describe("BatchBanner glossary-suggest kind", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("shows Apply results button when glossary-suggest batch has ended", async () => {
+    vi.mocked(glossarySuggestBatchStatus).mockResolvedValue({
+      supported: true,
+      pending: {
+        batchId: "b",
+        createdAt: "",
+        model: "m",
+        total: 3,
+        status: "ended",
+        counts: { processing: 0, succeeded: 3, errored: 0, canceled: 0, expired: 0 },
+      },
+    });
+
+    const w = mount(BatchBanner, { props: { kind: "glossary-suggest" } });
+    await flushPromises();
+
+    // Banner should be visible and show "Apply results"
+    const applyBtn = w.findAll("button").find((b) => b.text().includes("Apply results"));
+    expect(applyBtn).toBeTruthy();
+    expect(applyBtn!.attributes("disabled")).toBeUndefined();
+  });
+
+  it("calls glossarySuggestBatchApply and emits changed when Apply is clicked", async () => {
+    const pendingEnded = {
+      batchId: "b",
+      createdAt: "",
+      model: "m",
+      total: 3,
+      status: "ended" as const,
+      counts: { processing: 0, succeeded: 3, errored: 0, canceled: 0, expired: 0 },
+    };
+
+    vi.mocked(glossarySuggestBatchStatus)
+      .mockResolvedValueOnce({ supported: true, pending: pendingEnded })
+      .mockResolvedValue({ supported: true, pending: null });
+
+    vi.mocked(glossarySuggestBatchApply).mockResolvedValue({ added: 2, errors: [], retried: 0 });
+
+    const w = mount(BatchBanner, { props: { kind: "glossary-suggest" } });
+    await flushPromises();
+
+    const applyBtn = w.findAll("button").find((b) => b.text().includes("Apply results"));
+    expect(applyBtn).toBeTruthy();
+    await applyBtn!.trigger("click");
+    await flushPromises();
+
+    expect(glossarySuggestBatchApply).toHaveBeenCalledOnce();
+    expect(w.emitted("changed")).toBeTruthy();
   });
 });
