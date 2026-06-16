@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref, computed, watch } from "vue";
 import { Sparkles, TriangleAlert } from "lucide-vue-next";
-import { suggestGlossaryStream } from "@/api.js";
+import { suggestGlossaryStream, glossarySuggestEstimate, glossarySuggestBatchStatus, glossarySuggestBatchSubmit } from "@/api.js";
+import type { GlossarySuggestEstimate } from "@/types.js";
 import { toast } from "@/components/ui/toast";
 import {
   Dialog,
@@ -15,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 
 const open = defineModel<boolean>("open", { required: true });
-const emit = defineEmits<{ (e: "found"): void }>();
+const emit = defineEmits<{ (e: "found"): void; (e: "batch-submitted"): void }>();
 
 const running = ref(false);
 const controller = ref<AbortController | null>(null);
@@ -23,11 +24,54 @@ const error = ref("");
 const progressDone = ref(0);
 const progressTotal = ref(0);
 
+const estimate = ref<GlossarySuggestEstimate | null>(null);
+const batchAvailable = ref(false);
+const submittingBatch = ref(false);
+
+const fmtTokens = (n: number) => (n >= 10_000 ? `${Math.round(n / 1000)}k` : n.toLocaleString());
+const fmtCost = (n: number) => (n >= 0.1 ? `$${n.toFixed(2)}` : `$${n.toFixed(4)}`);
+
+const batchLabel = computed(() => {
+  const cost = estimate.value?.estimatedCost;
+  return cost != null ? `Batch ≈ ${fmtCost(cost / 2)} (50% off)` : "Batch (50% off)";
+});
+
+async function loadEstimateAndBatch() {
+  estimate.value = null;
+  batchAvailable.value = false;
+  try {
+    estimate.value = await glossarySuggestEstimate({});
+  } catch {
+    // Advisory only — failure just hides the estimate line.
+  }
+  try {
+    const s = await glossarySuggestBatchStatus();
+    batchAvailable.value = s.supported && !s.pending;
+  } catch {
+    // Advisory only — failure just hides the batch button.
+  }
+}
+
+async function runBatch() {
+  submittingBatch.value = true;
+  try {
+    const res = await glossarySuggestBatchSubmit({});
+    toast.success(`Glossary batch of ${res.total} source(s) submitted — applies when processing finishes`);
+    emit("batch-submitted");
+    open.value = false;
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    submittingBatch.value = false;
+  }
+}
+
 watch(open, (v) => {
   if (v) {
     error.value = "";
     progressDone.value = 0;
     progressTotal.value = 0;
+    void loadEstimateAndBatch();
   } else {
     controller.value?.abort();
   }
@@ -86,6 +130,18 @@ async function run() {
         </DialogDescription>
       </DialogHeader>
 
+      <!-- Pre-flight estimate (±20% heuristic). -->
+      <div
+        v-if="estimate && estimate.sources > 0 && !running && progressDone === 0"
+        class="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
+      >
+        <p>
+          ≈ {{ estimate.sources.toLocaleString() }} source{{ estimate.sources === 1 ? "" : "s" }} · {{ estimate.batches.toLocaleString() }} batch{{ estimate.batches === 1 ? "" : "es" }} ·
+          ~{{ fmtTokens(estimate.inputTokens) }} in / ~{{ fmtTokens(estimate.outputTokens) }} out tokens<template v-if="estimate.estimatedCost !== null">
+            · <span class="font-medium text-foreground">≈ {{ fmtCost(estimate.estimatedCost) }}</span> (±20%)</template>
+        </p>
+      </div>
+
       <div v-if="running || progressDone > 0" class="flex flex-col gap-1.5">
         <div class="flex justify-between text-xs text-muted-foreground">
           <span>{{ progressDone.toLocaleString() }} / {{ progressTotal.toLocaleString() }} scanned</span>
@@ -106,7 +162,15 @@ async function run() {
       <DialogFooter>
         <Button v-if="running" variant="outline" @click="cancel">Cancel</Button>
         <Button v-else variant="outline" @click="open = false">Close</Button>
-        <Button :disabled="running" @click="run">
+        <Button
+          v-if="batchAvailable"
+          variant="outline"
+          :disabled="running || submittingBatch"
+          @click="runBatch"
+        >
+          {{ submittingBatch ? "Submitting…" : batchLabel }}
+        </Button>
+        <Button :disabled="running || submittingBatch" @click="run">
           <Sparkles class="size-4" />
           {{ running ? "Scanning…" : "Find terms" }}
         </Button>
