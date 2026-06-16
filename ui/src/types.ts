@@ -149,6 +149,18 @@ export interface ContextBatchApplyResult {
   errors: { key: string; error: string }[];
   retried: number;
 }
+export interface GlossarySuggestEstimate {
+  sources: number;
+  batches: number;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCost: number | null;
+}
+export interface GlossarySuggestBatchApplyResult {
+  added: number;
+  errors: { error: string }[];
+  retried: number;
+}
 // Emitted once before any work: the full plan, so the UI can render every
 // target language as "queued" up front.
 export interface TranslateStart { type: "start"; total: number; locales: { locale: string; total: number }[] }
