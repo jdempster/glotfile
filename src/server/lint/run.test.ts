@@ -12,6 +12,7 @@ function state(lint?: LintConfig): State {
       lint,
     },
     glossary: [],
+    glossarySuggestions: [],
     keys: {
       "a.key": { values: { en: { value: "OK", state: "source" }, fr: { value: "OK", state: "reviewed" } } },
       "b.key": { values: { en: { value: "Hi {n}", state: "source" }, fr: { value: "Salut", state: "reviewed" } } },

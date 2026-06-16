@@ -120,6 +120,7 @@ export function assemble(
       spelling: { customWords: [] },
     },
     glossary: [],
+    glossarySuggestions: [],
     keys,
     warnings,
   };

@@ -16,6 +16,7 @@ function state(value: string): State {
       format: { indent: 2, sortKeys: true, finalNewline: true },
     },
     glossary: [],
+    glossarySuggestions: [],
     keys: { "a": { values: { en: { value: "x", state: "source" }, fr: { value, state: "reviewed" } } } },
   };
 }
