@@ -2416,3 +2416,165 @@ describe("POST /glossary/suggest + GET /glossary/suggestions", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("glossary-suggest batch endpoints", () => {
+  // Each test gets its own temp dir so glossary-suggest-batch.json state doesn't bleed.
+  function setupGlossaryBatch() {
+    const dir = mkdtempSync(join(tmpdir(), "glot-gloss-batch-"));
+    const file = join(dir, "glotfile.json");
+    const s = defaultState();
+    s.config.locales = ["en", "fr"];
+    createKey(s, "brand.name", "Acme Inc");
+    saveState(file, s);
+
+    // BatchCompletionProvider fake: captures submitted jobs so completionBatchResults
+    // can reconstruct per-chunk JSON results from them.
+    let capturedJobs: Array<{ customId: string; request: unknown }> = [];
+    const makeProvider = () => ({
+      translate: async (reqs: { id: string }[]) => reqs.map((r) => ({ id: r.id, translation: "Acme Inc" })),
+      supportsVision: () => false,
+      complete: async () => ({ terms: [] }),
+      submitTranslationBatch: async () => "glossbatch_x",
+      translationBatchStatus: async (_batchId: string) => ({
+        status: "ended" as const,
+        counts: { processing: 0, succeeded: 1, errored: 0, canceled: 0, expired: 0 },
+      }),
+      translationBatchResults: async () => new Map(),
+      cancelTranslationBatch: async (_batchId: string) => { /* no-op */ },
+      // Completion batch surface (glossary + context batches)
+      submitCompletionBatch: async (jobs: Array<{ customId: string; request: unknown }>) => {
+        capturedJobs = jobs;
+        return "glossbatch_x";
+      },
+      completionBatchResults: async (_batchId: string) => {
+        const map = new Map<string, { type: "json"; value: { terms: Array<{ term: string }> } }>();
+        for (const job of capturedJobs) {
+          map.set(job.customId, { type: "json", value: { terms: [{ term: "Acme" }] } });
+        }
+        return map;
+      },
+    });
+
+    return { dir, file, app: createApi({ statePath: file, makeProvider }) };
+  }
+
+  it("POST /glossary/suggest/batch submits and returns batchId + total; GET /glossary/suggest/batch/status shows pending", async () => {
+    const { app } = setupGlossaryBatch();
+
+    const res = await app.request("/glossary/suggest/batch", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { batchId: string; total: number };
+    expect(body.batchId).toBe("glossbatch_x");
+    expect(body.total).toBeGreaterThan(0);
+
+    const statusRes = await app.request("/glossary/suggest/batch/status");
+    expect(statusRes.status).toBe(200);
+    const status = await statusRes.json() as { supported: boolean; pending: { batchId: string; total: number; status: string; counts: unknown } | null };
+    expect(status.supported).toBe(true);
+    expect(status.pending).not.toBeNull();
+    expect(status.pending!.batchId).toBe("glossbatch_x");
+    expect(status.pending!.status).toBe("ended");
+    expect(status.pending!.counts).toMatchObject({ succeeded: 1 });
+  });
+
+  it("POST /glossary/suggest/batch/apply applies results, returns added > 0; then GET /glossary/suggestions lists the term; pending cleared", async () => {
+    const { app } = setupGlossaryBatch();
+
+    // Submit first.
+    await app.request("/glossary/suggest/batch", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    const applyRes = await app.request("/glossary/suggest/batch/apply", { method: "POST" });
+    expect(applyRes.status).toBe(200);
+    const applyBody = await applyRes.json() as { added: number; errors: unknown[]; retried: number };
+    expect(applyBody.added).toBeGreaterThan(0);
+
+    // GET /glossary/suggestions should now list "Acme"
+    const suggestionsRes = await app.request("/glossary/suggestions");
+    expect(suggestionsRes.status).toBe(200);
+    const suggestions = await suggestionsRes.json() as Array<{ term: string }>;
+    expect(suggestions.some((s) => s.term === "Acme")).toBe(true);
+
+    // Pending must be cleared after apply.
+    const statusRes = await app.request("/glossary/suggest/batch/status");
+    const status = await statusRes.json() as { pending: unknown };
+    expect(status.pending).toBeNull();
+  });
+
+  it("POST /glossary/suggest/batch/cancel returns canceled batchId; pending cleared", async () => {
+    const { app } = setupGlossaryBatch();
+
+    // Submit first.
+    await app.request("/glossary/suggest/batch", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    const cancelRes = await app.request("/glossary/suggest/batch/cancel", { method: "POST" });
+    expect(cancelRes.status).toBe(200);
+    const cancelBody = await cancelRes.json() as { canceled: string };
+    expect(cancelBody.canceled).toBe("glossbatch_x");
+
+    // Pending must be cleared.
+    const statusRes = await app.request("/glossary/suggest/batch/status");
+    const status = await statusRes.json() as { pending: unknown };
+    expect(status.pending).toBeNull();
+  });
+
+  it("POST /glossary/suggest/batch/apply with nothing pending returns 404", async () => {
+    const { app } = setupGlossaryBatch();
+    const res = await app.request("/glossary/suggest/batch/apply", { method: "POST" });
+    expect(res.status).toBe(404);
+  });
+
+  it("POST /glossary/suggest/batch while one is pending returns 409", async () => {
+    const { app } = setupGlossaryBatch();
+    // First submit
+    await app.request("/glossary/suggest/batch", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    // Second submit should conflict.
+    const res = await app.request("/glossary/suggest/batch", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it("POST /glossary/suggest/estimate returns estimate shape", async () => {
+    const { app } = setupGlossaryBatch();
+    const res = await app.request("/glossary/suggest/estimate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { sources: number; batches: number; inputTokens: number; outputTokens: number; estimatedCost: number | null };
+    expect(typeof body.sources).toBe("number");
+    expect(typeof body.batches).toBe("number");
+    expect(typeof body.inputTokens).toBe("number");
+    expect(typeof body.outputTokens).toBe("number");
+    // estimatedCost may be null without pricing configured
+    expect(body.estimatedCost === null || typeof body.estimatedCost === "number").toBe(true);
+  });
+
+  it("GET /glossary/suggest/batch/status with no pending returns supported + pending:null", async () => {
+    const { app } = setupGlossaryBatch();
+    const res = await app.request("/glossary/suggest/batch/status");
+    expect(res.status).toBe(200);
+    const body = await res.json() as { supported: boolean; pending: unknown };
+    expect(typeof body.supported).toBe("boolean");
+    expect(body.pending).toBeNull();
+  });
+});
