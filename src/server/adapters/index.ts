@@ -7,6 +7,7 @@ import { gettextPo } from "./gettext-po.js";
 import { appleStringsdict } from "./apple-stringsdict.js";
 import { appleStrings } from "./apple-strings.js";
 import { vueI18nJson } from "./vue-i18n-json.js";
+import { nextIntlJson } from "./next-intl-json.js";
 import { angularXliff } from "./angular-xliff.js";
 import { railsYaml } from "./rails-yaml.js";
 
@@ -88,6 +89,7 @@ function getRegistry(): Record<string, Adapter> {
     [appleStringsdict.name]: appleStringsdict,
     [appleStrings.name]: appleStrings,
     [vueI18nJson.name]: vueI18nJson,
+    [nextIntlJson.name]: nextIntlJson,
     [angularXliff.name]: angularXliff,
     [railsYaml.name]: railsYaml,
   });

@@ -82,7 +82,7 @@ const PREFIX_PATTERNS: Record<string, RegExp[]> = {
 // extractLiterals, or how refs/prefixes are produced changes — runScan discards
 // any cache written by a different version, so unchanged files get re-scanned
 // with the new logic instead of silently keeping stale (mtime+size-matched) results.
-export const CACHE_VERSION = 7;
+export const CACHE_VERSION = 8;
 
 const EXT_SCANNER: Record<string, string> = {
   ".php": "laravel",
@@ -175,6 +175,102 @@ function customPatterns(opts?: ScanOptions): RegExp[] {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// next-intl — namespace-aware extraction
+// ---------------------------------------------------------------------------
+
+// next-intl keys are namespace-relative: `useTranslations('index')` then
+// `t('heading')` references `index.heading`. The stateless js-i18n regexes would
+// capture only `heading`, so a file importing next-intl gets this binding-aware
+// pass instead.
+const NEXT_INTL_IMPORT = /(?:from\s*|require\(\s*)['"]next-intl(?:\/[\w-]+)?['"]/;
+
+export function isNextIntlFile(content: string): boolean {
+  return NEXT_INTL_IMPORT.test(content);
+}
+
+interface NiBinding { name: string; ns: string; index: number }
+
+// `const t = useTranslations('ns')`, `useTranslations()`, or `await getTranslations('ns')`.
+const NI_BIND = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+)?(?:useTranslations|getTranslations)\s*\(\s*(?:['"]([^'"]*)['"])?\s*\)/g;
+// `const t = await getTranslations({ … namespace: 'ns' … })`.
+const NI_BIND_OBJ = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+)?getTranslations\s*\(\s*\{[^}]*?\bnamespace\s*:\s*['"]([^'"]+)['"][^}]*?\}\s*\)/g;
+// The `.rich`/`.markup`/`.raw`/`.has` call variants on a bound translator.
+const NI_METHOD = "(?:\\.(?:rich|markup|raw|has))?";
+
+function nextIntlBindings(content: string): NiBinding[] {
+  const out: NiBinding[] = [];
+  for (const m of content.matchAll(NI_BIND)) out.push({ name: m[1]!, ns: m[2] ?? "", index: m.index! });
+  for (const m of content.matchAll(NI_BIND_OBJ)) out.push({ name: m[1]!, ns: m[2]!, index: m.index! });
+  return out;
+}
+
+// The namespace in effect for `name` at `index`: the nearest binding of that
+// variable occurring before the call, so a file with several components each
+// rebinding `t` to a different namespace resolves each call correctly.
+function nsForBindingAt(bindings: NiBinding[], name: string, index: number): string | null {
+  let best: NiBinding | null = null;
+  for (const b of bindings) {
+    if (b.name === name && b.index < index && (!best || b.index > best.index)) best = b;
+  }
+  return best ? best.ns : null;
+}
+
+function joinKey(ns: string, rel: string): string {
+  return ns ? `${ns}.${rel}` : rel;
+}
+
+function uniqueBindingNames(bindings: NiBinding[]): string[] {
+  return [...new Set(bindings.map((b) => b.name))];
+}
+
+// Static `t('key')` / `t.rich('key')` … calls, resolved to full namespaced keys.
+// Dynamic template/concatenation keys are left to nextIntlPrefixMatches.
+function nextIntlRefMatches(content: string): Array<{ key: string; index: number }> {
+  const bindings = nextIntlBindings(content);
+  const out: Array<{ key: string; index: number }> = [];
+  for (const name of uniqueBindingNames(bindings)) {
+    const re = new RegExp(
+      `\\b${escapeRe(name)}${NI_METHOD}\\s*\\(\\s*(?:'([^'\\n]+)'|"([^"\\n]+)"|\`([^\`$\\n]+)\`)`,
+      "g",
+    );
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(content)) !== null) {
+      const ns = nsForBindingAt(bindings, name, m.index);
+      if (ns === null) continue;
+      out.push({ key: joinKey(ns, m[1] ?? m[2] ?? m[3]!), index: m.index });
+    }
+  }
+  return out;
+}
+
+// Dynamic next-intl keys → prefixes: a concatenated/interpolated head becomes
+// `<ns>.<head>`, and a fully dynamic argument covers the whole `<ns>.` namespace.
+function nextIntlPrefixMatches(content: string): Array<{ prefix: string; index: number }> {
+  const bindings = nextIntlBindings(content);
+  const out: Array<{ prefix: string; index: number }> = [];
+  for (const name of uniqueBindingNames(bindings)) {
+    const ev = escapeRe(name);
+    const headConcat = new RegExp(`\\b${ev}${NI_METHOD}\\s*\\(\\s*(?:'([^'\\n]*)'|"([^"\\n]*)")\\s*\\+`, "g");
+    const headTemplate = new RegExp(`\\b${ev}${NI_METHOD}\\s*\\(\\s*\`([^\`$\\n]*)\\$\\{`, "g");
+    const dynamicArg = new RegExp(`\\b${ev}${NI_METHOD}\\s*\\(\\s*[A-Za-z_$][\\w$.]*\\s*[),]`, "g");
+    let m: RegExpExecArray | null;
+    for (const re of [headConcat, headTemplate]) {
+      while ((m = re.exec(content)) !== null) {
+        const ns = nsForBindingAt(bindings, name, m.index);
+        if (ns === null) continue;
+        out.push({ prefix: joinKey(ns, m[1] ?? m[2] ?? ""), index: m.index });
+      }
+    }
+    while ((m = dynamicArg.exec(content)) !== null) {
+      const ns = nsForBindingAt(bindings, name, m.index);
+      if (!ns) continue;
+      out.push({ prefix: `${ns}.`, index: m.index });
+    }
+  }
+  return out;
+}
+
 // Offsets at which each line begins; lineStarts[i] is the start of line i+1.
 function lineStartOffsets(content: string): number[] {
   const starts = [0];
@@ -203,9 +299,10 @@ export function extractRefs(
   scanner: string,
   opts?: ScanOptions,
 ): Array<{ key: string; line: number; col: number; scanner: string }> {
-  const base = scanner === "flutter" ? flutterPatterns(content, opts) : (PATTERNS[scanner] ?? []);
-  const patterns = [...base, ...customPatterns(opts)];
-  if (patterns.length === 0) return [];
+  // A js-i18n-eligible file that imports next-intl needs binding-aware extraction;
+  // an explicit "next-intl" scanner forces it (used by unit tests).
+  const useNextIntl = scanner === "next-intl" || (scanner === "js-i18n" && isNextIntlFile(content));
+  const effScanner = useNextIntl ? "next-intl" : scanner;
 
   // Match against the whole file rather than line-by-line: the `\s*` between the
   // call and its key already spans newlines, so a multi-line call like
@@ -213,52 +310,64 @@ export function extractRefs(
   const starts = lineStartOffsets(content);
   const result: Array<{ key: string; line: number; col: number; scanner: string }> = [];
   const seen = new Set<string>();
-
-  for (const pattern of patterns) {
-    const re = new RegExp(pattern.source, "g");
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(content)) !== null) {
-      if (m.index === re.lastIndex) re.lastIndex++;
-      const key = m[1]!;
-      const { line, col } = offsetToLineCol(starts, m.index);
-      const dedup = `${line}:${col}:${key}`;
-      if (!seen.has(dedup)) {
-        seen.add(dedup);
-        result.push({ key, line, col, scanner });
-      }
+  const push = (key: string, index: number) => {
+    const { line, col } = offsetToLineCol(starts, index);
+    const dedup = `${line}:${col}:${key}`;
+    if (!seen.has(dedup)) {
+      seen.add(dedup);
+      result.push({ key, line, col, scanner: effScanner });
     }
+  };
+
+  if (useNextIntl) {
+    for (const r of nextIntlRefMatches(content)) push(r.key, r.index);
+  } else {
+    const base = scanner === "flutter" ? flutterPatterns(content, opts) : (PATTERNS[scanner] ?? []);
+    for (const pattern of base) eachMatch(content, pattern, push);
   }
+  // Custom patterns apply on top of either path.
+  for (const pattern of customPatterns(opts)) eachMatch(content, pattern, push);
 
   result.sort((a, b) => a.line - b.line || a.col - b.col);
   return result;
+}
+
+// Run a (global) pattern over the whole file, calling `fn(captureGroup1, index)`
+// for each match. The lastIndex guard avoids an infinite loop on a zero-width match.
+function eachMatch(content: string, pattern: RegExp, fn: (key: string, index: number) => void): void {
+  const re = new RegExp(pattern.source, "g");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    if (m.index === re.lastIndex) re.lastIndex++;
+    fn(m[1]!, m.index);
+  }
 }
 
 export function extractPrefixes(
   content: string,
   scanner: string,
 ): Array<{ prefix: string; line: number; col: number; scanner: string }> {
-  const patterns = PREFIX_PATTERNS[scanner];
-  if (!patterns) return [];
+  const useNextIntl = scanner === "next-intl" || (scanner === "js-i18n" && isNextIntlFile(content));
+  const effScanner = useNextIntl ? "next-intl" : scanner;
 
   const starts = lineStartOffsets(content);
   const result: Array<{ prefix: string; line: number; col: number; scanner: string }> = [];
   const seen = new Set<string>();
-
-  for (const pattern of patterns) {
-    const re = new RegExp(pattern.source, "g");
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(content)) !== null) {
-      if (m.index === re.lastIndex) re.lastIndex++;
-      const prefix = m[1]!;
-      // Skip empty prefixes — a fully dynamic key (e.g. $t('' + x)) tells us nothing.
-      if (!prefix) continue;
-      const { line, col } = offsetToLineCol(starts, m.index);
-      const dedup = `${line}:${col}:${prefix}`;
-      if (!seen.has(dedup)) {
-        seen.add(dedup);
-        result.push({ prefix, line, col, scanner });
-      }
+  const push = (prefix: string, index: number) => {
+    // Skip empty prefixes — a fully dynamic key (e.g. $t('' + x)) tells us nothing.
+    if (!prefix) return;
+    const { line, col } = offsetToLineCol(starts, index);
+    const dedup = `${line}:${col}:${prefix}`;
+    if (!seen.has(dedup)) {
+      seen.add(dedup);
+      result.push({ prefix, line, col, scanner: effScanner });
     }
+  };
+
+  if (useNextIntl) {
+    for (const p of nextIntlPrefixMatches(content)) push(p.prefix, p.index);
+  } else {
+    for (const pattern of PREFIX_PATTERNS[scanner] ?? []) eachMatch(content, pattern, push);
   }
 
   result.sort((a, b) => a.line - b.line || a.col - b.col);

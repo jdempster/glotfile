@@ -27,7 +27,7 @@ import SyncWizard from "@/components/sync/SyncWizard.vue";
 const SECTION_IDS = ["languages", "outputs", "ai", "scan", "quality", "dictionary", "editor"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
 
-const ADAPTERS = ["flutter-arb", "laravel-php", "vue-i18n-json", "angular-xliff", "rails-yaml", "apple-strings"];
+const ADAPTERS = ["flutter-arb", "laravel-php", "vue-i18n-json", "next-intl-json", "angular-xliff", "rails-yaml", "apple-strings"];
 
 const AI_PROVIDERS = [
   { value: "anthropic",  label: "Anthropic" },

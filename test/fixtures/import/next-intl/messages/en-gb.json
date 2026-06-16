@@ -1,0 +1,11 @@
+{
+  "cart": {
+    "items": "{count, plural, one {{count} item} other {{count} items}}"
+  },
+  "form": {
+    "terms": "Accept <terms>Terms</terms> and <privacy>Privacy</privacy>"
+  },
+  "index": {
+    "heading": "Your package"
+  }
+}

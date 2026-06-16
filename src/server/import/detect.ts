@@ -59,6 +59,55 @@ function detectVue(root: string, forced = false): Detection | null {
   return null;
 }
 
+// next-intl shares the nested-JSON-per-locale shape with vue-i18n, so detection
+// is gated on a project signal — a next-intl dependency or its i18n/request entry
+// — to keep plain Vue projects out. Runs before detectVue for the same reason.
+const NEXT_INTL_CONFIG_CANDIDATES = ["src/i18n/request.ts", "i18n/request.ts", "src/i18n/request.js", "i18n/request.js"];
+const NEXT_INTL_ROUTING_CANDIDATES = ["src/i18n/routing.ts", "i18n/routing.ts", "src/i18n/routing.js", "i18n/routing.js"];
+const NEXT_INTL_DIR_CANDIDATES = ["messages", "src/messages", "locales", "src/locales", "src/i18n/messages"];
+
+function hasNextIntlSignal(root: string): boolean {
+  if (NEXT_INTL_CONFIG_CANDIDATES.some((rel) => existsSync(join(root, rel)))) return true;
+  try {
+    const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+    if (pkg.dependencies?.["next-intl"] || pkg.devDependencies?.["next-intl"]) return true;
+  } catch { /* no/unreadable package.json */ }
+  return false;
+}
+
+// next-intl's routing config names the authoritative source locale (defaultLocale),
+// which a filename heuristic can't recover when several en-* variants coexist.
+function nextIntlDefaultLocale(root: string): string | undefined {
+  for (const rel of NEXT_INTL_ROUTING_CANDIDATES) {
+    try {
+      const m = readFileSync(join(root, rel), "utf8").match(/defaultLocale\s*:\s*['"]([^'"]+)['"]/);
+      if (m) return m[1];
+    } catch { /* try the next candidate */ }
+  }
+  return undefined;
+}
+
+function detectNextIntl(root: string, forced = false): Detection | null {
+  if (!forced && !hasNextIntlSignal(root)) return null;
+  for (const rel of NEXT_INTL_DIR_CANDIDATES) {
+    const localeRoot = join(root, rel);
+    if (!safeIsDir(localeRoot)) continue;
+    const locales = readdirSync(localeRoot)
+      .filter((f) => f.endsWith(".json"))
+      .map((f) => f.slice(0, -5))
+      .filter((l) => LOCALE_RE.test(l));
+    if (locales.length === 0) continue;
+    const def = nextIntlDefaultLocale(root);
+    const sourceLocale = def && locales.includes(def)
+      ? def
+      : pickSource(locales, (loc) => {
+          try { return statSync(join(localeRoot, `${loc}.json`)).size; } catch { return 0; }
+        });
+    return { format: "next-intl-json", localeRoot, locales, sourceLocale };
+  }
+  return null;
+}
+
 function detectArb(root: string): Detection | null {
   for (const rel of ["lib/l10n", "l10n", "lib/src/l10n"]) {
     const localeRoot = join(root, rel);
@@ -230,6 +279,7 @@ function detectAppleStringsdict(root: string): Detection | null {
 
 const DETECTORS = [
   detectLaravel,
+  detectNextIntl,
   detectVue,
   detectArb,
   detectApple,
@@ -241,6 +291,7 @@ const DETECTORS = [
 ];
 const BY_FORMAT: Record<string, (root: string) => Detection | null> = {
   "laravel-php": detectLaravel,
+  "next-intl-json": (root) => detectNextIntl(root, true),
   "vue-i18n-json": (root) => detectVue(root, true),
   "flutter-arb": detectArb,
   "apple-strings": detectApple,

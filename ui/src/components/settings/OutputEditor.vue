@@ -27,6 +27,7 @@ const aliasDraft = ref<Record<string, string>>({});
 const CAPS: Record<string, string[]> = {
   "laravel-php": ["emptyAs", "indent", "finalNewline"],
   "vue-i18n-json": ["emptyAs", "style", "indent", "finalNewline"],
+  "next-intl-json": ["emptyAs", "style", "indent", "finalNewline"],
   "flutter-arb": ["emptyAs", "indent", "finalNewline", "includeLocale"],
   "angular-xliff": ["emptyAs"],
   "rails-yaml": ["emptyAs", "indent", "finalNewline"],
@@ -73,6 +74,7 @@ function setLocaleCase(v: string) {
 const ADAPTER_LABELS: Record<string, string> = {
   "laravel-php": "Laravel PHP",
   "vue-i18n-json": "Vue i18n JSON",
+  "next-intl-json": "Next.js (next-intl)",
   "flutter-arb": "Flutter ARB",
   "angular-xliff": "Angular XLIFF",
   "rails-yaml": "Rails YAML",
@@ -92,6 +94,7 @@ const sortedAdapters = computed(() =>
 const ADAPTER_ICONS: Record<string, Component> = {
   "laravel-php": FileCode,   // PHP code file
   "vue-i18n-json": FileJson, // JSON file
+  "next-intl-json": FileJson, // JSON file
   "flutter-arb": Smartphone, // mobile app
   "angular-xliff": FileCode, // XML translation file
   "rails-yaml": FileCode,    // YAML locale file
@@ -113,7 +116,7 @@ function changeAdapter(adapter: string) {
   patch({
     adapter,
     emptyAs: adapterEmptyDefault(adapter),
-    style: adapter === "vue-i18n-json" ? "nested" : props.output.style,
+    style: adapter === "vue-i18n-json" || adapter === "next-intl-json" ? "nested" : props.output.style,
     includeLocale: true,
   });
 }

@@ -65,6 +65,7 @@ async function init() {
 const FORMATS: Record<string, { label: string; glyph: string; file: string }> = {
   "laravel-php": { label: "Laravel PHP", glyph: "</>", file: "lang/{locale}/*.php" },
   "vue-i18n-json": { label: "Vue i18n JSON", glyph: "{ }", file: "locales/{locale}.json" },
+  "next-intl-json": { label: "Next.js (next-intl)", glyph: "{ }", file: "messages/{locale}.json" },
   "flutter-arb": { label: "Flutter ARB", glyph: "arb", file: "lib/l10n/app_{locale}.arb" },
   "apple-strings": { label: "Apple .strings", glyph: "", file: "{locale}.lproj/Localizable.strings" },
 };

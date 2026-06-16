@@ -16,6 +16,9 @@ const OUTPUT_BY_FORMAT: Record<
 > = {
   "laravel-php": { adapter: "laravel-php", path: "lang/{locale}/{namespace}.php" },
   "vue-i18n-json": { adapter: "vue-i18n-json", path: "src/locale/{locale}.json" },
+  // rootRelative: write back to wherever the messages dir was found (messages/,
+  // src/messages/, …) rather than assuming the conventional root-level location.
+  "next-intl-json": { adapter: "next-intl-json", path: "{locale}.json", rootRelative: true },
   "flutter-arb": { adapter: "flutter-arb", path: "lib/l10n/app_{locale}.arb" },
   "apple-strings": { adapter: "apple-strings", path: "{locale}.lproj/Localizable.strings", rootRelative: true },
   // skipSourceLocale: ng extract-i18n owns messages.xlf (the source file); glotfile
