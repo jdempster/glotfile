@@ -25,7 +25,10 @@ Use it for two things:
 | `term` | The source-language term to match. |
 | `doNotTranslate` | Keep the term verbatim in every translation. |
 | `caseSensitive` | Match the term case-sensitively. |
+| `wholeWord` | On by default — apply the term only when it appears as a standalone word in the source, not inside a larger word (e.g. `Pro` won't match `Process`). Set to `false` to also match inside larger source words. |
 | `translations` | Forced output per locale (`{ locale: "translation" }`). |
+
+> **Note:** Whether a translation *kept* a do-not-translate term (or used a forced translation) is always checked leniently — an inflected or compounded form still counts, so `Webhooks` honors `Webhook`, German `Accounteinstellungen` honors `Account`, and Japanese `APIキー` honors `API`. Legitimate translations are never flagged for embedding the term in a larger word.
 | `notes` | Freeform guidance (also passed to the AI). |
 
 ## How it's used

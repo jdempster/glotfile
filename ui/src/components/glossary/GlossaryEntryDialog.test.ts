@@ -71,4 +71,15 @@ describe("GlossaryEntryDialog", () => {
     });
     expect(w.emitted("saved")).toBeTruthy();
   });
+
+  it("preserves the wholeWord opt-out (false) when editing", async () => {
+    const wwEntry: GlossaryEntry = { term: "Pro", wholeWord: false };
+    mountDialog({ open: true, entry: wwEntry, targetLocales: [] });
+    await nextTick();
+
+    await buttonByText("Save").trigger("click");
+    await flushPromises();
+
+    expect(putGlossaryEntry).toHaveBeenCalledWith({ term: "Pro", wholeWord: false });
+  });
 });
