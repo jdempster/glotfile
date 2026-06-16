@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, shallowRef, onMounted, computed } from "vue";
-import { ChevronsUpDown, ChevronRight, Check } from "lucide-vue-next";
+import { ChevronsUpDown, ChevronRight, Check, ScanSearch, Loader2 } from "lucide-vue-next";
 import { fetchState, getFile, listFiles, setFile, type FileInfo, type ActiveFile } from "./api.js";
 import type { State } from "./types.js";
 import EditorView from "./components/editor/EditorView.vue";
@@ -25,6 +25,7 @@ import {
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { useRoute, navigate } from "@/router";
 import { startLiveReload, onExternalChange } from "@/liveReload";
+import { scanLabel, scanDetail, scanPending, refreshScanSummary } from "@/scanStatus.js";
 
 const route = useRoute();
 // One global keydown listener for the g-chord view switching + ? overlay.
@@ -53,6 +54,8 @@ async function reload() {
 onExternalChange(reload);
 onMounted(async () => {
   await reload();
+  // Surface the most recent scan (incl. the boot scan) in the header chip.
+  void refreshScanSummary();
   // Open the live-reload channel once the app is up.
   startLiveReload();
   try {
@@ -144,22 +147,43 @@ const localeSummary = computed(() => {
           </div>
           <h1 class="text-sm font-semibold">{{ sectionTitle }}</h1>
         </div>
-        <Tooltip v-if="localeSummary">
-          <TooltipTrigger as-child>
-            <button
-              type="button"
-              class="shrink-0 font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
-              @click="navigate('settings')"
-            >
-              {{ localeSummary.source }} → {{ localeSummary.targets.length }}
-              {{ localeSummary.targets.length === 1 ? "locale" : "locales" }}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" class="max-w-[28rem] leading-relaxed">
-            <div class="font-mono">{{ localeSummary.targets.join(", ") || "—" }}</div>
-            <div class="mt-1 text-background/60">Click to manage in Settings</div>
-          </TooltipContent>
-        </Tooltip>
+        <div class="flex shrink-0 items-center gap-2">
+          <Tooltip v-if="localeSummary">
+            <TooltipTrigger as-child>
+              <button
+                type="button"
+                class="shrink-0 font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
+                @click="navigate('settings')"
+              >
+                {{ localeSummary.source }} → {{ localeSummary.targets.length }}
+                {{ localeSummary.targets.length === 1 ? "locale" : "locales" }}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" class="max-w-[28rem] leading-relaxed">
+              <div class="font-mono">{{ localeSummary.targets.join(", ") || "—" }}</div>
+              <div class="mt-1 text-background/60">Click to manage in Settings</div>
+            </TooltipContent>
+          </Tooltip>
+          <span v-if="localeSummary" aria-hidden="true" class="text-xs text-muted-foreground/50">·</span>
+          <Tooltip>
+            <TooltipTrigger as-child>
+              <button
+                type="button"
+                class="flex shrink-0 items-center gap-1 font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
+                @click="navigate('settings', 'section=scan')"
+              >
+                <Loader2 v-if="scanPending" class="size-3 animate-spin" />
+                <ScanSearch v-else class="size-3" />
+                {{ scanLabel }}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" class="max-w-[24rem] leading-relaxed">
+              <div>Finds where each key is used in your code — powers the <span class="font-medium">Unused</span> filter and per-key usage.</div>
+              <div class="mt-1 text-background/60">Runs automatically when the server starts. Click to open Scan settings.</div>
+              <div class="mt-1 font-mono">{{ scanDetail }}</div>
+            </TooltipContent>
+          </Tooltip>
+        </div>
       </header>
 
       <main class="flex min-h-0 flex-1 flex-col overflow-hidden">
