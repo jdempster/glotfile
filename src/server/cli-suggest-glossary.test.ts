@@ -9,3 +9,7 @@ test("parseArgs recognizes suggest-glossary with scoping flags", () => {
   expect(a.since).toBe("2026-01-01");
   expect(a.estimate).toBe(true);
 });
+
+test("parseArgs recognizes suggest-glossary --batch", () => {
+  expect(parseArgs(["suggest-glossary", "--batch"]).batch).toBe(true);
+});
