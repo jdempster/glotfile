@@ -2112,3 +2112,131 @@ describe("GET /events (live-reload SSE)", () => {
     stop();
   });
 });
+
+describe("POST /glossary/suggest + GET /glossary/suggestions", () => {
+  function setupSuggest() {
+    const dir = mkdtempSync(join(tmpdir(), "glot-suggest-"));
+    const file = join(dir, "glotfile.json");
+    const s = defaultState();
+    s.config.locales = ["en", "fr"];
+    createKey(s, "brand.name", "Acme Inc");
+    saveState(file, s);
+    return { dir, file };
+  }
+
+  async function collectSSE(res: Response) {
+    const text = await res.text();
+    const events: { event: string; data: unknown }[] = [];
+    let currentEvent = "message";
+    for (const line of text.split("\n")) {
+      if (line.startsWith("event:")) { currentEvent = line.slice(6).trim(); continue; }
+      if (line.startsWith("data:")) {
+        events.push({ event: currentEvent, data: JSON.parse(line.slice(5).trim()) });
+        currentEvent = "message";
+      }
+    }
+    return events;
+  }
+
+  it("runs suggest, stores pending terms, GET /glossary/suggestions returns them with occurrences", async () => {
+    const { file } = setupSuggest();
+    const makeProvider = () => ({
+      translate: async () => [],
+      supportsVision: () => false,
+      complete: async () => ({ terms: [{ term: "Acme", note: "brand name", doNotTranslate: true }] }),
+    });
+    const app = createApi({ statePath: file, makeProvider });
+
+    const res = await app.request("/glossary/suggest", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(200);
+    const events = await collectSSE(res);
+    const done = events.find((e) => e.event === "done");
+    expect((done?.data as { added: number }).added).toBe(1);
+
+    const getRes = await app.request("/glossary/suggestions");
+    expect(getRes.status).toBe(200);
+    const suggestions = await getRes.json() as Array<{ term: string; occurrences: number; status: string }>;
+    expect(suggestions).toHaveLength(1);
+    expect(suggestions[0].term).toBe("Acme");
+    expect(typeof suggestions[0].occurrences).toBe("number");
+    expect(suggestions[0].status).toBe("pending");
+  });
+
+  it("POST /glossary/suggestions/dismiss removes term from pending list", async () => {
+    const { file } = setupSuggest();
+    const makeProvider = () => ({
+      translate: async () => [],
+      supportsVision: () => false,
+      complete: async () => ({ terms: [{ term: "Acme", note: "brand name", doNotTranslate: true }] }),
+    });
+    const app = createApi({ statePath: file, makeProvider });
+
+    // Run suggest to populate the queue — consume body to ensure handler completes
+    const suggestRes = await app.request("/glossary/suggest", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    await suggestRes.text();
+
+    // Dismiss the suggestion
+    const dismissRes = await app.request("/glossary/suggestions/dismiss", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ term: "Acme" }),
+    });
+    expect(dismissRes.status).toBe(200);
+    expect((await dismissRes.json() as { ok: boolean }).ok).toBe(true);
+
+    // Pending list should now be empty
+    const getRes = await app.request("/glossary/suggestions");
+    const suggestions = await getRes.json() as Array<{ term: string }>;
+    expect(suggestions).toHaveLength(0);
+  });
+
+  it("DELETE /glossary/suggestions/:term removes term from the queue entirely", async () => {
+    const { file } = setupSuggest();
+    const makeProvider = () => ({
+      translate: async () => [],
+      supportsVision: () => false,
+      complete: async () => ({ terms: [{ term: "Acme", note: "brand name", doNotTranslate: true }] }),
+    });
+    const app = createApi({ statePath: file, makeProvider });
+
+    // Run suggest to populate the queue — consume body to ensure handler completes
+    const suggestRes = await app.request("/glossary/suggest", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    await suggestRes.text();
+
+    // Verify it's there first
+    const before = await app.request("/glossary/suggestions");
+    expect((await before.json() as Array<unknown>)).toHaveLength(1);
+
+    // Delete the suggestion
+    const delRes = await app.request("/glossary/suggestions/Acme", { method: "DELETE" });
+    expect(delRes.status).toBe(200);
+    expect((await delRes.json() as { ok: boolean }).ok).toBe(true);
+
+    // Pending list should now be empty
+    const after = await app.request("/glossary/suggestions");
+    expect((await after.json() as Array<unknown>)).toHaveLength(0);
+  });
+
+  it("POST /glossary/suggestions/dismiss returns 400 when term is not a string", async () => {
+    const { file } = setupSuggest();
+    const app = createApi({ statePath: file });
+    const res = await app.request("/glossary/suggestions/dismiss", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ term: 42 }),
+    });
+    expect(res.status).toBe(400);
+  });
+});

@@ -7,7 +7,10 @@ import {
   upsertGlossaryEntry, deleteGlossaryEntry,
   addNote, editNote, deleteNote, addCustomWord, removeCustomWord,
   addSuppression, removeSuppression,
+  mergeGlossarySuggestions, dismissGlossarySuggestion, removeGlossarySuggestion,
 } from "./state.js";
+import { selectGlossarySources, knownTermList, buildGlossarySuggestSystemPrompt, buildGlossarySuggestBatchPrompt, GLOSSARY_SUGGEST_SCHEMA, dedupeTerms, type SuggestedTerm } from "./ai/glossary-suggest.js";
+import { sourceKeysForTerm } from "./glossary.js";
 import { acceptFindings } from "./lint/accept.js";
 import { findMissing, loadUsageCache, computeUsedKeys, literalMatcher } from "./scan.js";
 import { runScan } from "./scanner.js";
@@ -678,6 +681,97 @@ export function createApi(deps: ApiDeps): Hono {
     persist(s);
     logChange({ kind: "glossary", summary: `Deleted glossary term "${term}"`, before });
     return c.json({ ok: true });
+  });
+
+  app.get("/glossary/suggestions", (c) => {
+    const s = load();
+    const pending = s.glossarySuggestions.filter((x) => x.status === "pending");
+    return c.json(pending.map((x) => ({
+      ...x,
+      occurrences: sourceKeysForTerm(s, x.term, { caseSensitive: x.caseSensitive, wholeWord: x.wholeWord }).length,
+    })));
+  });
+
+  app.post("/glossary/suggestions/dismiss", async (c) => {
+    const { term } = await c.req.json();
+    if (typeof term !== "string") return c.json({ error: "term must be a string" }, 400);
+    const s = load();
+    dismissGlossarySuggestion(s, term);
+    persist(s);
+    logChange({ kind: "glossary", summary: `Dismissed suggested term "${term}"` });
+    return c.json({ ok: true });
+  });
+
+  app.delete("/glossary/suggestions/:term", (c) => {
+    const s = load();
+    const term = decodeURIComponent(c.req.param("term"));
+    removeGlossarySuggestion(s, term);
+    persist(s);
+    return c.json({ ok: true });
+  });
+
+  app.post("/glossary/suggest", async (c) => {
+    const signal = c.req.raw.signal;
+    const body = await c.req.json().catch(() => ({}));
+    return streamSSE(c, async (stream) => {
+      const s0 = load();
+      const sources = selectGlossarySources(s0, { keyGlob: body.keyGlob, limit: body.limit, since: body.since });
+      if (!sources.length) {
+        await stream.writeSSE({ event: "done", data: JSON.stringify({ added: 0, terms: [] }) });
+        return;
+      }
+      const aiCfg = loadLocalSettings(projectRoot).ai;
+      let provider: TranslationProvider;
+      try {
+        provider = deps.makeProvider ? deps.makeProvider() : makeProvider(aiCfg);
+      } catch (e) {
+        await stream.writeSSE({ event: "error", data: JSON.stringify({ error: (e as Error).message }) });
+        return;
+      }
+      const known = knownTermList(s0);
+      await stream.writeSSE({ event: "start", data: JSON.stringify({ total: sources.length }) });
+
+      const system = buildGlossarySuggestSystemPrompt();
+      const batchSize = aiCfg.contextBatchSize ?? aiCfg.batchSize ?? 10;
+      const concurrency = aiCfg.contextConcurrency ?? aiCfg.concurrency ?? 3;
+      const chunks: typeof sources[] = [];
+      for (let i = 0; i < sources.length; i += batchSize) chunks.push(sources.slice(i, i + batchSize));
+
+      const all: SuggestedTerm[] = [];
+      let done = 0;
+      let next = 0;
+      async function worker() {
+        while (next < chunks.length) {
+          if (signal?.aborted) break;
+          const chunkRows = chunks[next++]!;
+          try {
+            const raw = await provider.complete({ system, content: [{ type: "text", text: buildGlossarySuggestBatchPrompt(chunkRows, known) }], schema: GLOSSARY_SUGGEST_SCHEMA });
+            all.push(...((raw as { terms?: SuggestedTerm[] }).terms ?? []));
+          } catch (e) {
+            void stream.writeSSE({ event: "warn", data: JSON.stringify({ error: (e as Error).message }) });
+          }
+          done += chunkRows.length;
+          void stream.writeSSE({ event: "progress", data: JSON.stringify({ done, total: sources.length }) });
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(concurrency, chunks.length) }, worker));
+      if (signal?.aborted) return;
+
+      const fresh = load();
+      const added = mergeGlossarySuggestions(fresh, dedupeTerms(all));
+      const usage = provider.takeUsage?.();
+      persist(fresh);
+      appendLog(projectRoot, {
+        at: new Date().toISOString(),
+        kind: "glossary",
+        summary: `Suggested ${added.length} glossary term(s)`,
+        model: aiCfg.model,
+        system,
+        usage,
+        estimatedCostUsd: usageCostUsd(usage, aiCfg),
+      });
+      await stream.writeSSE({ event: "done", data: JSON.stringify({ added: added.length, terms: added }) });
+    });
   });
 
   app.post("/keys/:key/screenshot", async (c) => {
