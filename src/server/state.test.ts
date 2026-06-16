@@ -12,7 +12,8 @@ import {
   applyMachineTranslationForms, setPluralArg,
   findEmptySourceKeys, pruneEmptySourceKeys,
 } from "./state.js";
-import { defaultState, GlotfileError } from "./schema.js";
+import { defaultState, GlotfileError, validate } from "./schema.js";
+import { disassemble, assemble } from "./storage.js";
 
 const CLOCK = () => "2026-06-04T10:00:00.000Z";
 
@@ -880,5 +881,23 @@ describe("setters canonicalize the locale argument", () => {
     removeLocale(s, "FR");
     expect(s.config.locales).toEqual(["en"]);
     expect(s.keys["k"]!.values["fr"]).toBeUndefined();
+  });
+});
+
+describe("glossarySuggestions", () => {
+  it("defaultState has empty glossarySuggestions", () => {
+    expect(defaultState().glossarySuggestions).toEqual([]);
+  });
+
+  it("validate defaults missing glossarySuggestions to []", () => {
+    const s = validate({ version: 1, config: { sourceLocale: "en", locales: ["en"], outputs: [], format: { indent: 2, sortKeys: true, finalNewline: true } }, glossary: [], keys: {} });
+    expect(s.glossarySuggestions).toEqual([]);
+  });
+
+  it("glossarySuggestions round-trips through split disassemble/assemble", () => {
+    const s = defaultState();
+    s.glossarySuggestions.push({ term: "Acme", status: "pending", doNotTranslate: true });
+    const back = validate(assemble(disassemble(s)));
+    expect(back.glossarySuggestions).toEqual(s.glossarySuggestions);
   });
 });

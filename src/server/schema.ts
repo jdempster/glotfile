@@ -173,11 +173,22 @@ export interface GlossaryEntry {
   translations?: Record<string, string>;
   notes?: string;
 }
+export interface GlossarySuggestion {
+  term: string;
+  // Rationale written by the model; becomes GlossaryEntry.notes on accept.
+  note?: string;
+  doNotTranslate?: boolean;
+  caseSensitive?: boolean;
+  wholeWord?: boolean;
+  // "pending" awaits review; "dismissed" is a tombstone so re-runs never resurface it.
+  status: "pending" | "dismissed";
+}
 export interface State {
   $schema?: string;
   version: number;
   config: Config;
   glossary: GlossaryEntry[];
+  glossarySuggestions: GlossarySuggestion[];
   keys: Record<string, KeyEntry>;
 }
 
@@ -368,7 +379,8 @@ export function validate(raw: unknown): State {
     }
   }
   if (raw.glossary !== undefined && !Array.isArray(raw.glossary)) fail("glossary must be an array");
-  const state = { glossary: [], ...raw } as unknown as State;
+  if (raw.glossarySuggestions !== undefined && !Array.isArray(raw.glossarySuggestions)) fail("glossarySuggestions must be an array");
+  const state = { glossary: [], glossarySuggestions: [], ...raw } as unknown as State;
   return state;
 }
 
@@ -388,6 +400,7 @@ export function defaultState(): State {
       autoExport: true,
     },
     glossary: [],
+    glossarySuggestions: [],
     keys: {},
   };
 }
