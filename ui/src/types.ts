@@ -32,6 +32,16 @@ export interface GlossaryEntry {
   notes?: string;
 }
 
+export interface GlossarySuggestion {
+  term: string;
+  note?: string;
+  doNotTranslate?: boolean;
+  caseSensitive?: boolean;
+  wholeWord?: boolean;
+  status: "pending" | "dismissed";
+  occurrences?: number;
+}
+
 export interface OutputConfig {
   adapter: string;
   path: string;
