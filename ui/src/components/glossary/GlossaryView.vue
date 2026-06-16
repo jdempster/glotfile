@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import { Plus, Pencil, Trash2, Search, X } from "lucide-vue-next";
-import { getGlossary, fetchState, deleteGlossaryEntry } from "@/api.js";
+import { Plus, Pencil, Trash2, Search, X, Sparkles } from "lucide-vue-next";
+import { getGlossary, fetchState, deleteGlossaryEntry, getGlossarySuggestions, dismissGlossarySuggestion as apiDismiss, removeGlossarySuggestion } from "@/api.js";
 import { onExternalChange } from "@/liveReload";
 import { toast } from "@/components/ui/toast";
-import type { GlossaryEntry } from "@/types.js";
+import type { GlossaryEntry, GlossarySuggestion } from "@/types.js";
 import { filterGlossary } from "@/glossaryFilter.js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import GlossaryEntryDialog from "./GlossaryEntryDialog.vue";
+import GlossarySuggestDialog from "./GlossarySuggestDialog.vue";
 
 const entries = ref<GlossaryEntry[]>([]);
 const sourceLocale = ref("");
@@ -35,6 +36,13 @@ const filteredEntries = computed(() => filterGlossary(entries.value, search.valu
 
 const targetLocales = computed(() => locales.value.filter((l) => l !== sourceLocale.value));
 
+const suggestions = ref<GlossarySuggestion[]>([]);
+const suggestOpen = ref(false);
+const prefill = ref<GlossaryEntry | null>(null);
+const acceptingTerm = ref<string | null>(null);
+
+async function reloadSuggestions() { suggestions.value = await getGlossarySuggestions(); }
+
 async function reload() {
   const [glossary, state] = await Promise.all([getGlossary(), fetchState()]);
   entries.value = glossary;
@@ -43,18 +51,35 @@ async function reload() {
   loaded.value = true;
 }
 reload();
+reloadSuggestions();
 // Refresh when the catalog changes on disk out of band (the glossary lives in the
 // state file too).
-onExternalChange(reload);
+onExternalChange(() => { void reload(); void reloadSuggestions(); });
 
 function add() {
   editing.value = null;
+  prefill.value = null;
   dialogOpen.value = true;
 }
 
 function edit(entry: GlossaryEntry) {
   editing.value = entry;
+  prefill.value = null;
   dialogOpen.value = true;
+}
+
+function acceptSuggestion(s: GlossarySuggestion) {
+  acceptingTerm.value = s.term;
+  editing.value = null;
+  prefill.value = { term: s.term, doNotTranslate: s.doNotTranslate, caseSensitive: s.caseSensitive, wholeWord: s.wholeWord, notes: s.note };
+  dialogOpen.value = true;
+}
+
+async function dismissSuggestion(s: GlossarySuggestion) { await apiDismiss(s.term); await reloadSuggestions(); }
+
+async function onDialogSaved() {
+  if (acceptingTerm.value) { await removeGlossarySuggestion(acceptingTerm.value); acceptingTerm.value = null; }
+  await Promise.all([reload(), reloadSuggestions()]);
 }
 
 // Forced translations as `loc: value` chips for the row.
@@ -91,9 +116,14 @@ async function confirmDelete() {
           <h2 class="text-base font-semibold">Glossary</h2>
           <p class="text-sm text-muted-foreground">Do-not-translate terms and forced translations.</p>
         </div>
-        <Button @click="add">
-          <Plus class="size-4" /> Add term
-        </Button>
+        <div class="flex items-center gap-2">
+          <Button variant="outline" @click="suggestOpen = true">
+            <Sparkles class="size-4" /> Suggest terms with AI
+          </Button>
+          <Button @click="add">
+            <Plus class="size-4" /> Add term
+          </Button>
+        </div>
       </div>
 
       <div class="relative">
@@ -112,6 +142,34 @@ async function confirmDelete() {
         >
           <X class="size-4" />
         </button>
+      </div>
+
+      <div v-if="suggestions.length" class="flex flex-col gap-2">
+        <p class="text-sm font-medium">AI term suggestions</p>
+        <ul class="flex flex-col gap-2">
+          <li
+            v-for="s in suggestions"
+            :key="s.term"
+            class="flex items-start gap-3 rounded-lg border bg-card p-3 text-card-foreground shadow-sm"
+          >
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-mono text-sm font-medium">{{ s.term }}</span>
+                <Badge v-if="s.doNotTranslate" variant="secondary">Do-not-translate</Badge>
+                <Badge v-if="s.caseSensitive" variant="outline">Case-sensitive</Badge>
+                <Badge v-if="s.wholeWord === false" variant="outline">Substring</Badge>
+              </div>
+              <p v-if="s.note" class="mt-1 text-sm text-muted-foreground">{{ s.note }}</p>
+              <p v-if="typeof s.occurrences === 'number'" class="mt-1 text-xs text-muted-foreground">
+                used in {{ s.occurrences }}
+              </p>
+            </div>
+            <div class="flex shrink-0 items-center gap-1">
+              <Button size="sm" @click="acceptSuggestion(s)">Accept</Button>
+              <Button variant="ghost" size="sm" @click="dismissSuggestion(s)">Dismiss</Button>
+            </div>
+          </li>
+        </ul>
       </div>
 
       <div
@@ -174,9 +232,12 @@ async function confirmDelete() {
     <GlossaryEntryDialog
       v-model:open="dialogOpen"
       :entry="editing"
+      :prefill="prefill"
       :target-locales="targetLocales"
-      @saved="reload"
+      @saved="onDialogSaved"
     />
+
+    <GlossarySuggestDialog v-model:open="suggestOpen" @found="reloadSuggestions" />
 
     <Dialog :open="deleting !== null" @update:open="(v) => { if (!v) deleting = null; }">
       <DialogContent class="max-w-md">
