@@ -6,7 +6,7 @@ import type { State, Issue } from "@/types.js";
 import { filterKeys, type KeyFilter } from "@/filter.js";
 import { filterFromUrl, filterToUrl, type SortMode, type ViewMode } from "@/filterUrl.js";
 import { getHashSearch, setHashSearch } from "@/router.js";
-import { fetchState, fetchChecks, triggerScan, scanSummary, usedKeys } from "@/api.js";
+import { fetchState, fetchChecks, usedKeys } from "@/api.js";
 import { onExternalChange } from "@/liveReload";
 import { pendingFilter, pendingKey } from "@/drilldown.js";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ import { ALL_CHECKS, CHECK_LABELS, STATE_LABELS, PLURALITY_LABELS, DEFAULT_ENABL
 import type { CheckId } from "@/types.js";
 import type { StateFacet, PluralityFacet } from "@/filter.js";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { scanInfo, runScan, scanPending } from "@/scanStatus.js";
 import KeyRow from "./KeyRow.vue";
 import DetailPanel from "./DetailPanel.vue";
 import AddKeyDialog from "./AddKeyDialog.vue";
@@ -203,8 +204,9 @@ const addOpen = ref(false);
 const exportOpen = ref(false);
 const translateOpen = ref(false);
 const contextOpen = ref(false);
-const scanPending = ref(false);
-const scanStatus = ref<string | null>(null);
+// A scan can be triggered from the header chip or Settings; refresh the used-keys
+// index when it completes so the Unused filter and per-key usage stay correct.
+watch(scanInfo, () => void reloadUsed());
 
 const parent = ref<HTMLElement | null>(null);
 
@@ -399,18 +401,8 @@ onUnmounted(() => {
   if (textDebounce) clearTimeout(textDebounce);
 });
 
-// Surface the most recent scan (incl. the boot scan) so it's clear one ran.
-onMounted(async () => {
-  try {
-    const sum = await scanSummary();
-    if (sum.indexed && !scanStatus.value && !scanPending.value) {
-      scanStatus.value = `${sum.files.toLocaleString()} files · ${sum.refs.toLocaleString()} refs`;
-    }
-  } catch {
-    /* no index yet — leave the button as "Scan" */
-  }
-  void reloadUsed();
-});
+// Load the used-keys index on mount so the Unused filter gate is correct.
+onMounted(() => void reloadUsed());
 
 async function onRenamed(from: string, to: string) {
   if (selectedKey.value === from) selectedKey.value = to;
@@ -426,21 +418,6 @@ async function onCreated(key: string) {
   filter.value.text = `"${key}"`;
 }
 
-async function runScanNow() {
-  scanPending.value = true;
-  scanStatus.value = null;
-  try {
-    const result = await triggerScan();
-    // Keep the result visible after the scan finishes (don't auto-clear) so it's
-    // obvious the scan ran and what it found.
-    scanStatus.value = `${result.files.toLocaleString()} files · ${result.refs.toLocaleString()} refs`;
-    await reloadUsed();
-  } catch {
-    scanStatus.value = "Scan failed";
-  } finally {
-    scanPending.value = false;
-  }
-}
 </script>
 
 <template>
@@ -537,12 +514,10 @@ async function runScanNow() {
           <Button size="sm" variant="outline" @click="exportOpen = true">
             <FileDown class="size-4" /> Export
           </Button>
-          <Button size="sm" variant="outline" :disabled="scanPending" @click="runScanNow">
+          <Button size="sm" variant="outline" :disabled="scanPending" @click="runScan">
             <Loader2 v-if="scanPending" class="size-4 animate-spin" />
             <ScanSearch v-else class="size-4" />
-            <span v-if="scanPending">Scanning…</span>
-            <span v-else-if="scanStatus">{{ scanStatus }}</span>
-            <span v-else>Scan</span>
+            {{ scanPending ? "Scanning…" : "Run scan" }}
           </Button>
           <Button size="sm" @click="addOpen = true">
             <Plus class="size-4" /> Add key

@@ -2,7 +2,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from "vue";
 import {
   Globe, FileText, Cpu, BookOpen, Code2, ScanSearch, ShieldCheck,
-  Plus, X, AlertTriangle, Check, Undo2, Save, Lock, Zap, Languages, RefreshCw, Search,
+  Plus, X, AlertTriangle, Check, Undo2, Save, Lock, Zap, Languages, RefreshCw, Search, Loader2,
 } from "lucide-vue-next";
 import { fetchState, putConfig, getLocalSettings, putLocalSettings, getAiProfiles, putAiProfile, deleteAiProfile, setActiveAiProfile, getPrices, refreshPrices as refreshPricesApi, getPricesList, aiTest } from "@/api.js";
 import type { PricesStatus, PriceRow } from "@/api.js";
@@ -13,6 +13,7 @@ import { configToForm, formToConfig, type ConfigForm } from "./config-form.js";
 import { LINT_RULES, RULE_DEFAULTS } from "@/lint-rules.js";
 import { settingsDirtyCount } from "./save-state.js";
 import { setLeaveGuard, navigate, getHashSearch, type Route } from "@/router";
+import { runScan, scanPending, scanDetail } from "@/scanStatus.js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1276,6 +1277,18 @@ function onSynced(): void {
 
           <!-- ── Scan body ── -->
           <div v-else-if="activeSection === 'scan'" class="flex flex-col gap-6">
+            <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3.5">
+              <div class="min-w-0">
+                <div class="text-sm font-medium">Code usage index</div>
+                <div class="mt-0.5 font-mono text-xs text-muted-foreground">{{ scanDetail }}</div>
+              </div>
+              <Button size="sm" variant="outline" :disabled="scanPending" @click="runScan">
+                <Loader2 v-if="scanPending" class="size-4 animate-spin" />
+                <ScanSearch v-else class="size-4" />
+                {{ scanPending ? "Scanning…" : "Run scan" }}
+              </Button>
+            </div>
+
             <ScanListField
               label="Flutter accessors"
               :items="draft.scanAccessors"
