@@ -32,6 +32,7 @@ import {
   buildContextSystemPrompt, buildContextBatchPrompt, CONTEXT_BATCH_SCHEMA,
 } from "./ai/context.js";
 import { runLint, sortFindings, countSeverities } from "./lint/run.js";
+import { RULE_IDS, unknownRuleIds, suggestRuleId } from "./lint/registry.js";
 import { checkOutputs } from "./lint/outputs.js";
 import { formatText, formatJson, formatSarif, type SarifContext } from "./lint/report.js";
 import type { LintReport } from "./lint/types.js";
@@ -577,6 +578,20 @@ function printReport(report: LintReport, format: ParsedArgs["format"], statePath
 }
 
 async function runLintCmd(args: ParsedArgs): Promise<void> {
+  // Reject an unknown --rule loudly: filtering to a non-existent id would match
+  // no rules and report a misleading "no problems".
+  if (args.ruleIds) {
+    const unknown = unknownRuleIds(args.ruleIds);
+    if (unknown.length > 0) {
+      for (const id of unknown) {
+        const hint = suggestRuleId(id);
+        console.error(`Unknown --rule '${id}'.${hint ? ` Did you mean '${hint}'?` : ""}`);
+      }
+      console.error(`Valid rules: ${RULE_IDS.join(", ")}.`);
+      process.exitCode = 1;
+      return;
+    }
+  }
   const state = loadState(args.statePath);
   if (args.accept) {
     const { acceptFindings } = await import("./lint/accept.js");
