@@ -3,7 +3,7 @@ import { readFileSync, existsSync, mkdirSync, cpSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   loadState, saveState, findEmptySourceKeys, canonLocale, createKey,
-  setSourceValue, setTargetValue, setKeyState, clearValue,
+  setSourceValue, setTargetValue, setKeyState, clearValue, mergeGlossarySuggestions,
 } from "./state.js";
 import { computeStats, type Stats } from "./stats.js";
 import { runGet, applyOps, parseOps } from "./agent-cli.js";
@@ -21,7 +21,8 @@ import { loadPendingBatch, clearPendingBatch, type PendingBatch } from "./ai/pen
 import { submitContextBatch, applyContextBatchResults } from "./ai/context-batch-run.js";
 import { loadPendingContextBatch, clearPendingContextBatch, type PendingContextBatch } from "./ai/pending-context-batch.js";
 import type { AiConfig } from "./schema.js";
-import { estimateTranslation, estimateContext } from "./ai/estimate.js";
+import { estimateTranslation, estimateContext, estimateGlossarySuggest } from "./ai/estimate.js";
+import { selectGlossarySources, knownTermList, buildGlossarySuggestSystemPrompt, buildGlossarySuggestBatchPrompt, GLOSSARY_SUGGEST_SCHEMA, dedupeTerms, type SuggestedTerm } from "./ai/glossary-suggest.js";
 import { usageCostUsd } from "./ai/pricing.js";
 import { appendLog } from "./log.js";
 import { loadUsageCache, computeUsedKeys } from "./scan.js";
@@ -37,7 +38,7 @@ import { formatText, formatJson, formatSarif, type SarifContext } from "./lint/r
 import type { LintReport } from "./lint/types.js";
 
 export interface ParsedArgs {
-  command: "serve" | "export" | "translate" | "lint" | "check" | "import" | "sync" | "build-context" | "scan" | "prune" | "split" | "skill" | "batch" | "get" | "stats" | "set" | "set-state" | "clear" | "apply" | "help" | "version";
+  command: "serve" | "export" | "translate" | "lint" | "check" | "import" | "sync" | "build-context" | "suggest-glossary" | "scan" | "prune" | "split" | "skill" | "batch" | "get" | "stats" | "set" | "set-state" | "clear" | "apply" | "help" | "version";
   help?: boolean;
   unknownCommand?: string;
   dev?: boolean;
@@ -89,7 +90,7 @@ export interface ParsedArgs {
   print?: boolean;
 }
 
-const COMMANDS = ["serve", "export", "translate", "lint", "check", "import", "sync", "build-context", "scan", "prune", "split", "skill", "batch", "get", "stats", "set", "set-state", "clear", "apply"] as const;
+const COMMANDS = ["serve", "export", "translate", "lint", "check", "import", "sync", "build-context", "suggest-glossary", "scan", "prune", "split", "skill", "batch", "get", "stats", "set", "set-state", "clear", "apply"] as const;
 const isCommand = (s: string | undefined): s is ParsedArgs["command"] =>
   s != null && (COMMANDS as readonly string[]).includes(s);
 
@@ -821,6 +822,76 @@ async function runBuildContext(args: ParsedArgs): Promise<void> {
   for (const e of errors) console.warn(`skip ${e.key}: ${e.error}`);
 }
 
+async function runSuggestGlossary(args: ParsedArgs): Promise<void> {
+  const state = loadState(args.statePath);
+  const projectRoot = dirname(resolve(args.statePath));
+  const sources = selectGlossarySources(state, { keyGlob: args.keyGlob, limit: args.limit, since: args.since });
+  if (!sources.length) {
+    console.log("No source strings to scan.");
+    return;
+  }
+  const aiCfg = loadLocalSettings(projectRoot).ai;
+  const known = knownTermList(state);
+
+  if (args.estimate) {
+    const est = estimateGlossarySuggest(sources, known, aiCfg);
+    const fmt = (n: number) => n.toLocaleString("en-US");
+    console.log(`Estimate for ${fmt(est.sources)} source string(s) in ${fmt(est.batches)} batch(es) — ${aiCfg.provider} · ${aiCfg.model}`);
+    console.log(`Totals: ~${fmt(est.inputTokens)} input / ~${fmt(est.outputTokens)} output tokens`);
+    if (est.pricing) {
+      const cost = est.estimatedCost!;
+      console.log(`Estimated cost: ~$${cost >= 0.1 ? cost.toFixed(2) : cost.toFixed(4)} (±20%, ${est.pricing.source} pricing $${est.pricing.inputPerMTok}/$${est.pricing.outputPerMTok} per MTok)`);
+    } else {
+      console.log("No pricing known for this model — set inputPricePerMTok/outputPricePerMTok in your AI settings for a dollar estimate.");
+    }
+    return;
+  }
+
+  let provider: TranslationProvider;
+  try {
+    provider = makeProvider(aiCfg);
+  } catch (e) {
+    console.error((e as Error).message);
+    process.exitCode = 1;
+    return;
+  }
+  const system = buildGlossarySuggestSystemPrompt();
+  const batchSize = aiCfg.contextBatchSize ?? aiCfg.batchSize ?? 10;
+  const concurrency = aiCfg.contextConcurrency ?? aiCfg.concurrency ?? 3;
+  const chunks: typeof sources[] = [];
+  for (let i = 0; i < sources.length; i += batchSize) chunks.push(sources.slice(i, i + batchSize));
+
+  const all: SuggestedTerm[] = [];
+  let done = 0;
+  let next = 0;
+  async function worker() {
+    while (next < chunks.length) {
+      const chunkRows = chunks[next++]!;
+      try {
+        const raw = await provider.complete({ system, content: [{ type: "text", text: buildGlossarySuggestBatchPrompt(chunkRows, known) }], schema: GLOSSARY_SUGGEST_SCHEMA });
+        const batch = raw as { terms?: SuggestedTerm[] };
+        all.push(...(batch.terms ?? []));
+      } catch (e) {
+        console.warn(`batch failed: ${(e as Error).message}`);
+      }
+      done += chunkRows.length;
+      console.log(`[${done}/${sources.length}] scanned`);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, chunks.length) }, worker));
+
+  const added = mergeGlossarySuggestions(state, dedupeTerms(all));
+  saveState(args.statePath, state);
+  appendLog(projectRoot, {
+    at: new Date().toISOString(),
+    kind: "glossary",
+    summary: `Suggested ${added.length} glossary term(s)`,
+    model: aiCfg.model,
+  });
+  console.log(`Found ${added.length} new candidate term(s). Review them in the glossary UI.`);
+  for (const s of added) console.log(`  • ${s.term}${s.note ? ` — ${s.note}` : ""}`);
+}
+
 async function runScanCmd(args: ParsedArgs): Promise<void> {
   const state = loadState(args.statePath);
   const projectRoot = dirname(resolve(args.statePath));
@@ -1212,6 +1283,16 @@ const COMMAND_HELP: Record<Exclude<ParsedArgs["command"], "help" | "version">, {
       ["--batch", "Submit via the provider's batch API (50% cost, async; anthropic only)"],
     ],
   },
+  "suggest-glossary": {
+    summary: "AI-scan source strings for candidate glossary terms (adds a review queue; existing terms are skipped).",
+    usage: "glotfile suggest-glossary [--key <glob>] [--limit <n>] [--since <date>] [--estimate]",
+    options: [
+      ["--key <glob>", "Only scan keys matching this glob"],
+      ["--limit <n>", "Scan at most n source strings"],
+      ["--since <date>", "Only keys added/changed since this date"],
+      ["--estimate", "Print batches, tokens and estimated cost without scanning"],
+    ],
+  },
   scan: {
     summary: "Index code references to keys (writes .glotfile/usage.json).",
     usage: "glotfile scan",
@@ -1363,6 +1444,7 @@ export async function main(argv: string[]): Promise<void> {
   if (args.command === "import") return runImportCmd(args);
   if (args.command === "sync") return runSyncCmd(args);
   if (args.command === "build-context") return runBuildContext(args);
+  if (args.command === "suggest-glossary") return runSuggestGlossary(args);
   if (args.command === "scan") return runScanCmd(args);
   if (args.command === "prune") return runPrune(args);
   if (args.command === "split") return runSplit(args);
