@@ -139,6 +139,7 @@ async function confirmDelete() {
               <span class="font-mono text-sm font-medium">{{ entry.term }}</span>
               <Badge v-if="entry.doNotTranslate" variant="secondary">Do-not-translate</Badge>
               <Badge v-if="entry.caseSensitive" variant="outline">Case-sensitive</Badge>
+              <Badge v-if="entry.wholeWord === false" variant="outline">Substring</Badge>
             </div>
             <p v-if="entry.notes" class="mt-1 text-sm text-muted-foreground">{{ entry.notes }}</p>
             <div v-if="translationChips(entry).length" class="mt-2 flex flex-wrap gap-1.5">

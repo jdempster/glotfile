@@ -163,6 +163,13 @@ export interface GlossaryEntry {
   term: string;
   doNotTranslate?: boolean;
   caseSensitive?: boolean;
+  // Require the term to appear as a standalone word in the source for the entry
+  // to apply, not as a substring of a larger word (e.g. "Pro" won't match
+  // "Process"). Unicode-aware: any adjacent letter or digit, including
+  // non-ASCII, counts as part of the word. Defaults to true; set false to match
+  // inside larger source words. (The check that a translation kept the term is
+  // always lenient substring, so inflections/compounds are never flagged.)
+  wholeWord?: boolean;
   translations?: Record<string, string>;
   notes?: string;
 }

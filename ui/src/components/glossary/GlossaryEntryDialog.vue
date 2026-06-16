@@ -31,6 +31,8 @@ const form = reactive({
   term: "",
   doNotTranslate: false,
   caseSensitive: false,
+  // Whole-word matching is the default; a term is a word, not a substring.
+  wholeWord: true,
   notes: "",
   translations: {} as Record<string, string>,
 });
@@ -50,6 +52,7 @@ watch(
     form.term = e?.term ?? "";
     form.doNotTranslate = e?.doNotTranslate ?? false;
     form.caseSensitive = e?.caseSensitive ?? false;
+    form.wholeWord = e?.wholeWord ?? true;
     form.notes = e?.notes ?? "";
     form.translations = {};
     for (const loc of props.targetLocales) {
@@ -76,6 +79,8 @@ async function submit() {
   const entry: GlossaryEntry = { term };
   if (form.doNotTranslate) entry.doNotTranslate = true;
   if (form.caseSensitive) entry.caseSensitive = true;
+  // Whole-word is the default, so only the opt-out needs persisting.
+  if (!form.wholeWord) entry.wholeWord = false;
   if (form.notes.trim()) entry.notes = form.notes.trim();
   if (Object.keys(translations).length > 0) entry.translations = translations;
 
@@ -134,6 +139,17 @@ async function submit() {
             <p class="text-xs text-muted-foreground">Only match the exact casing.</p>
           </div>
           <Switch id="glossary-cs" v-model="form.caseSensitive" />
+        </div>
+
+        <div class="flex items-center justify-between">
+          <div>
+            <Label for="glossary-ww">Whole word</Label>
+            <p class="text-xs text-muted-foreground">
+              Apply this term only as a standalone word (e.g. "Pro" won't match "Process"). Turn off
+              to also match inside larger words.
+            </p>
+          </div>
+          <Switch id="glossary-ww" v-model="form.wholeWord" />
         </div>
 
         <div class="grid gap-1.5">
