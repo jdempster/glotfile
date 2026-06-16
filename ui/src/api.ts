@@ -1,4 +1,4 @@
-import type { State, Config, LocalSettings, GlossaryEntry, ExportPreview, ExportResult, TranslateResult, TranslateEstimate, ContextEstimate, TranslateStart, TranslateLocaleStart, TranslateProgress, TranslateLocaleDone, TranslateDone, LogEntry, Note, CheckId, ChecksResponse, LintReport, Stats, BatchStatusResponse, BatchApplyResult, ContextBatchApplyResult } from "./types.js";
+import type { State, Config, LocalSettings, GlossaryEntry, GlossarySuggestion, ExportPreview, ExportResult, TranslateResult, TranslateEstimate, ContextEstimate, TranslateStart, TranslateLocaleStart, TranslateProgress, TranslateLocaleDone, TranslateDone, LogEntry, Note, CheckId, ChecksResponse, LintReport, Stats, BatchStatusResponse, BatchApplyResult, ContextBatchApplyResult } from "./types.js";
 
 type TranslateEvent = TranslateStart | TranslateLocaleStart | TranslateProgress | TranslateLocaleDone | TranslateDone;
 
@@ -6,6 +6,11 @@ export interface ContextBuildDone { type: "done"; requested: number; written: nu
 export interface ContextBuildStart { type: "start"; total: number }
 export interface ContextBuildProgress { type: "progress"; done: number; total: number; written: number }
 export type ContextBuildEvent = ContextBuildStart | ContextBuildProgress | ContextBuildDone;
+
+export interface GlossarySuggestStart { type: "start"; total: number }
+export interface GlossarySuggestProgress { type: "progress"; done: number; total: number }
+export interface GlossarySuggestDone { type: "done"; added: number; terms: GlossarySuggestion[] }
+export type GlossarySuggestEvent = GlossarySuggestStart | GlossarySuggestProgress | GlossarySuggestDone;
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? res.statusText);
@@ -223,6 +228,58 @@ export const putGlossaryEntry = (entry: GlossaryEntry) =>
   fetch("/api/glossary", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(entry) }).then(json);
 export const deleteGlossaryEntry = (term: string) =>
   fetch(`/api/glossary/${encodeURIComponent(term)}`, { method: "DELETE" }).then(json);
+
+export const getGlossarySuggestions = () => fetch("/api/glossary/suggestions").then((r) => json<GlossarySuggestion[]>(r));
+export const dismissGlossarySuggestion = (term: string) =>
+  fetch("/api/glossary/suggestions/dismiss", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ term }) }).then(json);
+export const removeGlossarySuggestion = (term: string) =>
+  fetch(`/api/glossary/suggestions/${encodeURIComponent(term)}`, { method: "DELETE" }).then(json);
+
+export async function* suggestGlossaryStream(body: { keyGlob?: string; limit?: number; since?: string }, signal?: AbortSignal): AsyncGenerator<GlossarySuggestEvent> {
+  let res: Response;
+  try {
+    res = await fetch("/api/glossary/suggest", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (e) {
+    if ((e as Error).name === "AbortError") return;
+    throw e;
+  }
+  if (!res.ok || !res.body) throw new Error(res.statusText);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let currentEvent = "message";
+  try {
+    while (true) {
+      let chunk: ReadableStreamReadResult<Uint8Array>;
+      try {
+        chunk = await reader.read();
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
+        throw e;
+      }
+      if (chunk.done) break;
+      buf += decoder.decode(chunk.value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop() ?? "";
+      for (const line of lines) {
+        if (line.startsWith("event:")) { currentEvent = line.slice(6).trim(); continue; }
+        if (line.startsWith("data:")) {
+          const data = JSON.parse(line.slice(5).trim());
+          if (currentEvent === "error") throw new Error(data.error ?? "Unknown error");
+          yield { ...data, type: currentEvent } as GlossarySuggestEvent;
+          currentEvent = "message";
+        }
+      }
+    }
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+}
 
 export const uploadScreenshot = (key: string, file: File) => {
   const body = new FormData();
