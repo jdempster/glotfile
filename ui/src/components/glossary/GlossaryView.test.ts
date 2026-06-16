@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 import GlossaryView from "./GlossaryView.vue";
+import GlossaryEntryDialog from "./GlossaryEntryDialog.vue";
 import type { GlossarySuggestion } from "@/types.js";
 
 vi.mock("@/api.js", () => ({
@@ -47,7 +48,7 @@ describe("GlossaryView suggestions", () => {
 
     expect(w.text()).toContain("Acme");
     expect(w.text()).toContain("brand");
-    expect(w.text()).toContain("used in 2");
+    expect(w.text()).toContain("used in 2 keys");
   });
 
   it("calls dismissGlossarySuggestion with the term when Dismiss is clicked", async () => {
@@ -86,13 +87,11 @@ describe("GlossaryView suggestions", () => {
     await acceptBtn!.trigger("click");
     await nextTick();
 
-    // After clicking Accept, dialogOpen should be true and prefill should be set.
-    // The GlossaryEntryDialog stub receives open="true" when the dialog is opened.
-    const dialogStub = w.find("glossary-entry-dialog-stub");
-    expect(dialogStub.exists()).toBe(true);
-    expect(dialogStub.attributes("open")).toBe("true");
-    // The prefill prop is serialized; the rendered HTML should reference "Acme" somewhere
-    // or we can check via the component's underlying state. Check the stub has a prefill attribute.
-    expect(dialogStub.attributes()).toHaveProperty("prefill");
+    // After clicking Accept, dialogOpen should be true and prefill should contain the suggestion term.
+    // Use findComponent to access the props directly (shallow stubs serialize objects as [object Object]).
+    const dialog = w.findComponent(GlossaryEntryDialog);
+    expect(dialog.exists()).toBe(true);
+    expect(dialog.props("open")).toBe(true);
+    expect(dialog.props("prefill")).toMatchObject({ term: "Acme" });
   });
 });

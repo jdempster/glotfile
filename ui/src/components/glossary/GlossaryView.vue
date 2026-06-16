@@ -59,12 +59,14 @@ onExternalChange(() => { void reload(); void reloadSuggestions(); });
 function add() {
   editing.value = null;
   prefill.value = null;
+  acceptingTerm.value = null;
   dialogOpen.value = true;
 }
 
 function edit(entry: GlossaryEntry) {
   editing.value = entry;
   prefill.value = null;
+  acceptingTerm.value = null;
   dialogOpen.value = true;
 }
 
@@ -161,12 +163,12 @@ async function confirmDelete() {
               </div>
               <p v-if="s.note" class="mt-1 text-sm text-muted-foreground">{{ s.note }}</p>
               <p v-if="typeof s.occurrences === 'number'" class="mt-1 text-xs text-muted-foreground">
-                used in {{ s.occurrences }}
+                used in {{ s.occurrences }} key{{ s.occurrences === 1 ? '' : 's' }}
               </p>
             </div>
             <div class="flex shrink-0 items-center gap-1">
-              <Button size="sm" @click="acceptSuggestion(s)">Accept</Button>
-              <Button variant="ghost" size="sm" @click="dismissSuggestion(s)">Dismiss</Button>
+              <Button size="sm" :aria-label="`Accept ${s.term}`" @click="acceptSuggestion(s)">Accept</Button>
+              <Button variant="ghost" size="sm" :aria-label="`Dismiss ${s.term}`" @click="dismissSuggestion(s)">Dismiss</Button>
             </div>
           </li>
         </ul>
