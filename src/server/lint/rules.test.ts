@@ -23,6 +23,7 @@ function state(keys: State["keys"]): State {
       format: { indent: 2, sortKeys: true, finalNewline: true },
     },
     glossary: [],
+    glossarySuggestions: [],
     keys,
   };
 }

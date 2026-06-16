@@ -16,6 +16,7 @@ function state(): State {
       format: { indent: 2, sortKeys: true, finalNewline: true },
     },
     glossary: [],
+    glossarySuggestions: [],
     keys: {
       "a.key": { values: { en: { value: "Logo", state: "source" }, fr: { value: "Logo", state: "reviewed" } } },
       "p.key": {
