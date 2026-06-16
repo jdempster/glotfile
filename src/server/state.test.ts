@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, test, expect } from "vitest";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +11,7 @@ import {
   setPluralForms, setSourcePluralForms, convertToPlural, convertToScalar,
   applyMachineTranslationForms, setPluralArg,
   findEmptySourceKeys, pruneEmptySourceKeys,
+  mergeGlossarySuggestions, dismissGlossarySuggestion, removeGlossarySuggestion,
 } from "./state.js";
 import { defaultState, GlotfileError, validate } from "./schema.js";
 import { disassemble, assemble } from "./storage.js";
@@ -900,4 +901,42 @@ describe("glossarySuggestions", () => {
     const back = validate(assemble(disassemble(s)));
     expect(back.glossarySuggestions).toEqual(s.glossarySuggestions);
   });
+});
+
+function stateWith(glossary: any[], suggestions: any[] = []) {
+  const s = defaultState();
+  s.glossary = glossary;
+  s.glossarySuggestions = suggestions;
+  return s;
+}
+
+test("merge adds new pending terms", () => {
+  const s = stateWith([]);
+  const added = mergeGlossarySuggestions(s, [{ term: "Acme", note: "brand", doNotTranslate: true }]);
+  expect(added).toHaveLength(1);
+  expect(s.glossarySuggestions[0]).toEqual({ term: "Acme", status: "pending", note: "brand", doNotTranslate: true });
+});
+
+test("merge skips terms already in glossary (case-insensitive)", () => {
+  const s = stateWith([{ term: "Acme" }]);
+  expect(mergeGlossarySuggestions(s, [{ term: "acme" }])).toHaveLength(0);
+});
+
+test("merge skips terms already pending or dismissed", () => {
+  const s = stateWith([], [{ term: "Foo", status: "pending" }, { term: "Bar", status: "dismissed" }]);
+  expect(mergeGlossarySuggestions(s, [{ term: "foo" }, { term: "bar" }, { term: "Baz" }])).toHaveLength(1);
+  expect(s.glossarySuggestions.map((x) => x.term)).toEqual(["Foo", "Bar", "Baz"]);
+});
+
+test("dismiss tombstones a suggestion so re-runs skip it", () => {
+  const s = stateWith([], [{ term: "Foo", status: "pending" }]);
+  dismissGlossarySuggestion(s, "Foo");
+  expect(s.glossarySuggestions[0]!.status).toBe("dismissed");
+  expect(mergeGlossarySuggestions(s, [{ term: "foo" }])).toHaveLength(0);
+});
+
+test("remove hard-deletes a suggestion (used after accept)", () => {
+  const s = stateWith([], [{ term: "Foo", status: "pending" }]);
+  removeGlossarySuggestion(s, "Foo");
+  expect(s.glossarySuggestions).toHaveLength(0);
 });
