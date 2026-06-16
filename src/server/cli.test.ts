@@ -230,6 +230,43 @@ describe("main unknown command", () => {
   });
 });
 
+describe("lint --rule validation", () => {
+  afterEach(() => { process.exitCode = 0; vi.restoreAllMocks(); });
+
+  function tmpState() {
+    const dir = mkdtempSync(join(tmpdir(), "glot-rule-"));
+    const file = join(dir, "glotfile.json");
+    const s = defaultState();
+    s.config.sourceLocale = "en";
+    s.config.locales = ["en", "fr"];
+    saveState(file, s);
+    return file;
+  }
+
+  it("errors and exits non-zero on an unknown rule id instead of reporting clean", async () => {
+    const file = tmpState();
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await main(["lint", "--rule", "glossary", "--file", file]);
+    expect(process.exitCode).toBe(1);
+    const errText = err.mock.calls.flat().join("\n");
+    expect(errText).toContain("glossary");
+    // Suggests the real id rather than silently passing.
+    expect(errText).toContain("glossary-violation");
+    // Must not print a clean report.
+    expect(log.mock.calls.flat().join("\n")).not.toContain("no problems");
+  });
+
+  it("accepts a valid rule id", async () => {
+    const file = tmpState();
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    await main(["lint", "--rule", "placeholder-mismatch", "--file", file]);
+    expect(process.exitCode).toBe(0);
+    expect(err.mock.calls.flat().join("\n")).not.toContain("Unknown --rule");
+  });
+});
+
 describe("runPrune", () => {
   afterEach(() => { process.exitCode = 0; vi.restoreAllMocks(); });
 
