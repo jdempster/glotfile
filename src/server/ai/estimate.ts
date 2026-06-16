@@ -1,6 +1,7 @@
 import type { AiConfig, State } from "../schema.js";
 import { selectRequests, type SelectOptions } from "./run.js";
 import { buildSystemPrompt, buildBatchPrompt, type TranslationRequest } from "./provider.js";
+import { buildContextSystemPrompt, buildContextBatchPrompt, type ContextRequest } from "./context.js";
 import { chunk } from "./batch.js";
 import { resolvePricing, type ResolvedPricing } from "./pricing.js";
 
@@ -78,6 +79,46 @@ export function estimateTranslation(state: State, ai: AiConfig, opts: SelectOpti
     requests: reqs.length,
     batches: perLocale.reduce((n, l) => n + l.batches, 0),
     perLocale,
+    inputTokens,
+    outputTokens,
+    pricing,
+    estimatedCost: pricing ? (inputTokens * pricing.inputPerMTok + outputTokens * pricing.outputPerMTok) / 1e6 : null,
+  };
+}
+
+export interface ContextEstimate {
+  keys: number;
+  batches: number;
+  inputTokens: number;
+  outputTokens: number;
+  pricing: ResolvedPricing | null;
+  estimatedCost: number | null;
+}
+
+// A context note is a 1–2 sentence translator hint capped at 500 chars; ~140
+// chars (≈35 tokens) is typical. The JSON reply envelope ({"id":…,"context":…})
+// adds the same fixed per-item overhead the translation estimate uses.
+const CONTEXT_REPLY_OVERHEAD = 16;
+const TYPICAL_CONTEXT_TOKENS = 35;
+
+// Mirrors a real build-context run: chunk targets by the context batch size,
+// render the same system + batch prompts each LLM call sends, and count tokens.
+// Input is dominated by the attached code snippets, so callers MUST run
+// attachUsageSnippets before estimating or the figure will be far too low.
+export function estimateContext(targets: ContextRequest[], ai: AiConfig): ContextEstimate {
+  const batchSize = Math.max(1, ai.contextBatchSize ?? ai.batchSize ?? 10);
+  const batches = chunk(targets, batchSize);
+  const system = buildContextSystemPrompt();
+  let inputTokens = 0;
+  let outputTokens = 0;
+  for (const batch of batches) {
+    inputTokens += estimateTokens(system) + estimateTokens(buildContextBatchPrompt(batch));
+    outputTokens += batch.length * (CONTEXT_REPLY_OVERHEAD + TYPICAL_CONTEXT_TOKENS);
+  }
+  const pricing = resolvePricing(ai);
+  return {
+    keys: targets.length,
+    batches: batches.length,
     inputTokens,
     outputTokens,
     pricing,

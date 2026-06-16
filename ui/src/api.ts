@@ -1,4 +1,4 @@
-import type { State, Config, LocalSettings, GlossaryEntry, ExportPreview, ExportResult, TranslateResult, TranslateEstimate, TranslateStart, TranslateLocaleStart, TranslateProgress, TranslateLocaleDone, TranslateDone, LogEntry, Note, CheckId, ChecksResponse, LintReport, Stats, BatchStatusResponse, BatchApplyResult, ContextBatchApplyResult } from "./types.js";
+import type { State, Config, LocalSettings, GlossaryEntry, ExportPreview, ExportResult, TranslateResult, TranslateEstimate, ContextEstimate, TranslateStart, TranslateLocaleStart, TranslateProgress, TranslateLocaleDone, TranslateDone, LogEntry, Note, CheckId, ChecksResponse, LintReport, Stats, BatchStatusResponse, BatchApplyResult, ContextBatchApplyResult } from "./types.js";
 
 type TranslateEvent = TranslateStart | TranslateLocaleStart | TranslateProgress | TranslateLocaleDone | TranslateDone;
 
@@ -51,6 +51,8 @@ export const batchApply = () =>
   fetch("/api/batch/apply", { method: "POST" }).then((r) => json<BatchApplyResult>(r));
 export const batchCancel = () =>
   fetch("/api/batch/cancel", { method: "POST" }).then((r) => json<{ canceled: string }>(r));
+export const contextEstimate = (body: { keys?: string[]; force?: boolean }) =>
+  fetch("/api/context/estimate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => json<ContextEstimate>(r));
 export const contextBatchStatus = () =>
   fetch("/api/context/batch/status").then((r) => json<BatchStatusResponse>(r));
 export const contextBatchSubmit = (body: { keys?: string[]; force?: boolean }) =>

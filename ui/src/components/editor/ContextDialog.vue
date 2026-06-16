@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import { Sparkles, TriangleAlert } from "lucide-vue-next";
-import { buildContextStream, contextBatchStatus, contextBatchSubmit } from "@/api.js";
-import type { State } from "@/types.js";
+import { buildContextStream, contextBatchStatus, contextBatchSubmit, contextEstimate } from "@/api.js";
+import type { State, ContextEstimate } from "@/types.js";
 import { toast } from "@/components/ui/toast";
 import {
   Dialog,
@@ -32,6 +32,29 @@ const withoutContextCount = computed(() => {
   if (!s) return 0;
   return props.keys.filter((k) => s.keys[k] && !s.keys[k]!.context).length;
 });
+
+// Pre-flight cost preview, fetched whenever the dialog opens. Advisory only —
+// a failed estimate must never block building.
+const estimate = ref<ContextEstimate | null>(null);
+
+const fmtTokens = (n: number) => (n >= 10_000 ? `${Math.round(n / 1000)}k` : n.toLocaleString());
+const fmtCost = (n: number) => (n >= 0.1 ? `$${n.toFixed(2)}` : `$${n.toFixed(4)}`);
+
+// The batch API bills at half the synchronous price — show the actual figure
+// when an estimate is available rather than making the user do the maths.
+const batchLabel = computed(() => {
+  const cost = estimate.value?.estimatedCost;
+  return cost != null ? `Batch ≈ ${fmtCost(cost / 2)} (50% off)` : "Batch (50% off)";
+});
+
+async function loadEstimate() {
+  estimate.value = null;
+  try {
+    estimate.value = await contextEstimate({ keys: props.keys });
+  } catch {
+    // Leave estimate null; the dialog simply shows no preview line.
+  }
+}
 
 // Batch availability, fetched on open. Hidden whenever unsupported, a batch is
 // already pending (the editor banner owns that state), or the check fails.
@@ -68,6 +91,7 @@ watch(open, (v) => {
     errors.value = [];
     progressDone.value = 0;
     progressTotal.value = 0;
+    void loadEstimate();
     void loadBatchAvailability();
   } else {
     controller.value?.abort();
@@ -134,6 +158,21 @@ async function run() {
         </DialogDescription>
       </DialogHeader>
 
+      <!-- Pre-flight estimate (±20% heuristic; input is dominated by call-site snippets). -->
+      <div
+        v-if="estimate && estimate.keys > 0 && withoutContextCount > 0 && !running && progressDone === 0"
+        class="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
+      >
+        <p>
+          ≈ {{ estimate.keys.toLocaleString() }} key{{ estimate.keys === 1 ? "" : "s" }} · {{ estimate.batches.toLocaleString() }} batch{{ estimate.batches === 1 ? "" : "es" }} ·
+          ~{{ fmtTokens(estimate.inputTokens) }} in / ~{{ fmtTokens(estimate.outputTokens) }} out tokens<template v-if="estimate.estimatedCost !== null">
+            · <span class="font-medium text-foreground">≈ {{ fmtCost(estimate.estimatedCost) }}</span> (±20%)</template>
+        </p>
+        <p v-if="!estimate.pricing" class="mt-0.5">
+          No pricing known for this model — set a price in Settings → AI for a dollar estimate.
+        </p>
+      </div>
+
       <div v-if="running || progressDone > 0" class="flex flex-col gap-1.5">
         <div class="flex justify-between text-xs text-muted-foreground">
           <span>{{ progressDone.toLocaleString() }} / {{ progressTotal.toLocaleString() }} built</span>
@@ -177,7 +216,7 @@ async function run() {
           :disabled="running || submittingBatch"
           @click="runBatch"
         >
-          {{ submittingBatch ? "Submitting…" : "Batch (50% off)" }}
+          {{ submittingBatch ? "Submitting…" : batchLabel }}
         </Button>
         <Button v-if="withoutContextCount > 0" :disabled="running || submittingBatch" @click="run">
           <Sparkles class="size-4" />

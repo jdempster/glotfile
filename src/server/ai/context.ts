@@ -77,6 +77,21 @@ export function extractSnippets(
   return snippets;
 }
 
+// Populate each target's usageSnippets from the code-reference cache. Both the
+// prompt builders and the cost estimate read snippets from here, so the build
+// and its --estimate stay in lock-step.
+export function attachUsageSnippets(targets: ContextRequest[], cache: UsageCacheFile, projectRoot: string): void {
+  const fileCache = new Map<string, string[]>();
+  for (const target of targets) {
+    const allRefs = Object.entries(cache.files).flatMap(([file, entry]) =>
+      entry.refs.filter((r) => r.key === target.key).map((r) => ({
+        key: r.key, file, line: r.line, col: r.col, scanner: r.scanner,
+      }))
+    );
+    target.usageSnippets = extractSnippets(allRefs, projectRoot, fileCache);
+  }
+}
+
 export function buildUsageIndex(cache: UsageCacheFile): Map<string, Reference[]> {
   const index = new Map<string, Reference[]>();
   for (const [file, entry] of Object.entries(cache.files)) {

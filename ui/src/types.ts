@@ -27,6 +27,7 @@ export interface GlossaryEntry {
   term: string;
   doNotTranslate?: boolean;
   caseSensitive?: boolean;
+  wholeWord?: boolean;
   translations?: Record<string, string>;
   notes?: string;
 }
@@ -64,6 +65,15 @@ export interface TranslateEstimate {
   requests: number;
   batches: number;
   perLocale: LocaleEstimate[];
+  inputTokens: number;
+  outputTokens: number;
+  pricing: { source: "builtin" | "profile"; inputPerMTok: number; outputPerMTok: number } | null;
+  estimatedCost: number | null;
+}
+
+export interface ContextEstimate {
+  keys: number;
+  batches: number;
   inputTokens: number;
   outputTokens: number;
   pricing: { source: "builtin" | "profile"; inputPerMTok: number; outputPerMTok: number } | null;
