@@ -4,7 +4,7 @@ import { serializeJson } from "./format.js";
 import { writeFileAtomic } from "./atomic-write.js";
 import {
   validate, defaultState, GlotfileError, isPluralForm, CURRENT_VERSION, STATES,
-  type State, type LocaleState, type KeyEntry, type GlossaryEntry, type Note, type PluralCategory, type PluralForm,
+  type State, type LocaleState, type KeyEntry, type GlossaryEntry, type Note, type PluralCategory, type PluralForm, type GlossarySuggestion,
 } from "./schema.js";
 import { formsToIcu } from "./plurals.js";
 import { splitDirFor, detectFormat, loadSplit, saveSplit } from "./storage.js";
@@ -367,6 +367,50 @@ export function upsertGlossaryEntry(state: State, entry: GlossaryEntry): void {
 
 export function deleteGlossaryEntry(state: State, term: string): void {
   state.glossary = state.glossary.filter((e) => e.term !== term);
+}
+
+function normGlossaryTerm(term: string): string {
+  return term.trim().toLowerCase();
+}
+
+// Add detected terms as pending suggestions, skipping any whose normalized term
+// already exists in the glossary or in the suggestion queue (pending OR
+// dismissed — a dismissed term is a tombstone that must never resurface).
+// Returns the entries actually added.
+export function mergeGlossarySuggestions(
+  state: State,
+  found: Array<{ term: string; note?: string; doNotTranslate?: boolean; caseSensitive?: boolean; wholeWord?: boolean }>,
+): GlossarySuggestion[] {
+  const known = new Set<string>();
+  for (const g of state.glossary) known.add(normGlossaryTerm(g.term));
+  for (const s of state.glossarySuggestions) known.add(normGlossaryTerm(s.term));
+  const added: GlossarySuggestion[] = [];
+  for (const f of found) {
+    const term = f.term.trim();
+    if (!term) continue;
+    const key = normGlossaryTerm(term);
+    if (known.has(key)) continue;
+    known.add(key);
+    const sug: GlossarySuggestion = { term, status: "pending" };
+    if (f.note?.trim()) sug.note = f.note.trim();
+    if (f.doNotTranslate) sug.doNotTranslate = true;
+    if (f.caseSensitive) sug.caseSensitive = true;
+    if (f.wholeWord === false) sug.wholeWord = false;
+    state.glossarySuggestions.push(sug);
+    added.push(sug);
+  }
+  return added;
+}
+
+export function dismissGlossarySuggestion(state: State, term: string): void {
+  const key = normGlossaryTerm(term);
+  const s = state.glossarySuggestions.find((x) => normGlossaryTerm(x.term) === key);
+  if (s) s.status = "dismissed";
+}
+
+export function removeGlossarySuggestion(state: State, term: string): void {
+  const key = normGlossaryTerm(term);
+  state.glossarySuggestions = state.glossarySuggestions.filter((x) => normGlossaryTerm(x.term) !== key);
 }
 
 export function addCustomWord(state: State, word: string): void {
