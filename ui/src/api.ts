@@ -1,4 +1,4 @@
-import type { State, Config, LocalSettings, GlossaryEntry, GlossarySuggestion, ExportPreview, ExportResult, TranslateResult, TranslateEstimate, ContextEstimate, TranslateStart, TranslateLocaleStart, TranslateProgress, TranslateLocaleDone, TranslateDone, LogEntry, Note, CheckId, ChecksResponse, LintReport, Stats, BatchStatusResponse, BatchApplyResult, ContextBatchApplyResult } from "./types.js";
+import type { State, Config, LocalSettings, GlossaryEntry, GlossarySuggestion, ExportPreview, ExportResult, TranslateResult, TranslateEstimate, ContextEstimate, TranslateStart, TranslateLocaleStart, TranslateProgress, TranslateLocaleDone, TranslateDone, LogEntry, Note, CheckId, ChecksResponse, LintReport, Stats, BatchStatusResponse, BatchApplyResult, ContextBatchApplyResult, GlossarySuggestEstimate, GlossarySuggestBatchApplyResult } from "./types.js";
 
 type TranslateEvent = TranslateStart | TranslateLocaleStart | TranslateProgress | TranslateLocaleDone | TranslateDone;
 
@@ -81,6 +81,16 @@ export const contextBatchApply = () =>
   fetch("/api/context/batch/apply", { method: "POST" }).then((r) => json<ContextBatchApplyResult>(r));
 export const contextBatchCancel = () =>
   fetch("/api/context/batch/cancel", { method: "POST" }).then((r) => json<{ canceled: string }>(r));
+export const glossarySuggestEstimate = (body: { keyGlob?: string; limit?: number; since?: string } = {}) =>
+  fetch("/api/glossary/suggest/estimate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => json<GlossarySuggestEstimate>(r));
+export const glossarySuggestBatchStatus = () =>
+  fetch("/api/glossary/suggest/batch/status").then((r) => json<BatchStatusResponse>(r));
+export const glossarySuggestBatchSubmit = (body: { keyGlob?: string; limit?: number; since?: string } = {}) =>
+  fetch("/api/glossary/suggest/batch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => json<{ batchId: string; total: number }>(r));
+export const glossarySuggestBatchApply = () =>
+  fetch("/api/glossary/suggest/batch/apply", { method: "POST" }).then((r) => json<GlossarySuggestBatchApplyResult>(r));
+export const glossarySuggestBatchCancel = () =>
+  fetch("/api/glossary/suggest/batch/cancel", { method: "POST" }).then((r) => json<{ canceled: string }>(r));
 
 export async function* translateStream(signal?: AbortSignal, keys?: string[], locales?: string[]): AsyncGenerator<TranslateEvent> {
   let res: Response;
