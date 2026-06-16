@@ -21,6 +21,8 @@ import LanguageLabel from "@/components/lang/LanguageLabel.vue";
 const props = defineProps<{
   // The entry being edited, or null when adding a new term.
   entry: GlossaryEntry | null;
+  // Prefill the form for a NEW entry, e.g. accepting an AI suggestion; unlike `entry`, stays in ADD mode.
+  prefill?: GlossaryEntry | null;
   // Target locales (config.locales minus sourceLocale) to offer forced translations for.
   targetLocales: string[];
 }>();
@@ -47,8 +49,8 @@ watch(
   open,
   (isOpen) => {
     if (!isOpen) return;
-    const e = props.entry;
-    isEditing.value = e !== null;
+    const e = props.entry ?? props.prefill ?? null;
+    isEditing.value = props.entry !== null;
     form.term = e?.term ?? "";
     form.doNotTranslate = e?.doNotTranslate ?? false;
     form.caseSensitive = e?.caseSensitive ?? false;
