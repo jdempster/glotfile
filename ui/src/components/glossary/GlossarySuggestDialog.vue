@@ -54,9 +54,13 @@ async function run() {
       } else if (event.type === "done") {
         finished = true;
         progressDone.value = progressTotal.value;
-        toast.success(`Found ${event.added} candidate term${event.added === 1 ? "" : "s"}`);
         emit("found");
-        if (event.added >= 0) open.value = false;
+        if (event.added > 0) {
+          toast.success(`Found ${event.added} candidate term${event.added === 1 ? "" : "s"}`);
+          open.value = false;
+        } else {
+          toast.info("No new candidate terms found");
+        }
       }
     }
   } catch (e) {
