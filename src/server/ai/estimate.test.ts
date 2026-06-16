@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { estimateTokens, estimateTranslation, estimateContext } from "./estimate.js";
+import { describe, it, expect, test } from "vitest";
+import { estimateTokens, estimateTranslation, estimateContext, estimateGlossarySuggest } from "./estimate.js";
 import { buildSystemPrompt, buildBatchPrompt } from "./provider.js";
 import { buildContextSystemPrompt, buildContextBatchPrompt, type ContextRequest } from "./context.js";
 import { selectRequests } from "./run.js";
@@ -115,4 +115,14 @@ describe("estimateContext", () => {
     expect(est.estimatedCost).toBeNull();
     expect(est.inputTokens).toBeGreaterThan(0);
   });
+});
+
+test("estimateGlossarySuggest returns batches, tokens, and (with pricing) a cost", () => {
+  const sources = Array.from({ length: 25 }, (_, i) => ({ key: `k${i}`, source: "Sign in to Acme dashboard" }));
+  const ai = { provider: "anthropic", model: "claude-x", batchSize: 10, inputPricePerMTok: 3, outputPricePerMTok: 15 } as any;
+  const est = estimateGlossarySuggest(sources, [], ai);
+  expect(est.sources).toBe(25);
+  expect(est.batches).toBe(3);
+  expect(est.inputTokens).toBeGreaterThan(0);
+  expect(est.estimatedCost).toBeGreaterThan(0);
 });
