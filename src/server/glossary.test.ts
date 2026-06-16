@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { glossaryViolations, relevantGlossary } from "./glossary.js";
+import { describe, it, expect, test } from "vitest";
+import { glossaryViolations, relevantGlossary, sourceKeysForTerm } from "./glossary.js";
+import { defaultState } from "./schema.js";
 
 describe("relevantGlossary", () => {
   it("finds a term in the source and maps the forced translation for the locale", () => {
@@ -98,4 +99,16 @@ describe("glossaryViolations", () => {
       { term: "Pro", expected: "Pro", kind: "do-not-translate" },
     ]);
   });
+});
+
+test("sourceKeysForTerm finds keys whose source contains the term (whole-word default)", () => {
+  const s = defaultState();
+  s.config.sourceLocale = "en"; s.config.locales = ["en"];
+  s.keys = {
+    "a": { values: { en: { value: "Welcome to Acme", state: "source" } } },
+    "b": { values: { en: { value: "Acmeification", state: "source" } } },
+    "c": { values: { en: { value: "no term here", state: "source" } } },
+  } as any;
+  expect(sourceKeysForTerm(s, "Acme").sort()).toEqual(["a"]); // "Acmeification" excluded by whole-word
+  expect(sourceKeysForTerm(s, "Acme", { wholeWord: false }).sort()).toEqual(["a", "b"]);
 });

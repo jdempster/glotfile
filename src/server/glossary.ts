@@ -1,4 +1,4 @@
-import type { GlossaryEntry } from "./schema.js";
+import type { GlossaryEntry, State } from "./schema.js";
 import type { GlossaryHint } from "./ai/provider.js";
 
 function escapeRegExp(s: string): string {
@@ -48,6 +48,23 @@ export interface GlossaryViolation {
   // do-not-translate entry, or the forced target-locale translation.
   expected: string;
   kind: "do-not-translate" | "forced";
+}
+
+// Keys whose source value contains `term`, using the same whole-word/case rules
+// as glossary matching. Powers the occurrence count shown next to a suggestion.
+export function sourceKeysForTerm(
+  state: State,
+  term: string,
+  opts: { caseSensitive?: boolean; wholeWord?: boolean } = {},
+): string[] {
+  const pseudo = { term, caseSensitive: opts.caseSensitive, wholeWord: opts.wholeWord } as GlossaryEntry;
+  const out: string[] = [];
+  for (const [key, entry] of Object.entries(state.keys)) {
+    const lv = entry.values[state.config.sourceLocale];
+    const text = lv?.value ?? lv?.forms?.other ?? "";
+    if (text && termInSource(text, pseudo)) out.push(key);
+  }
+  return out;
 }
 
 // The single source of truth for glossary enforcement: both the editor's live
