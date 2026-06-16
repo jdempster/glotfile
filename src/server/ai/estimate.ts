@@ -2,6 +2,7 @@ import type { AiConfig, State } from "../schema.js";
 import { selectRequests, type SelectOptions } from "./run.js";
 import { buildSystemPrompt, buildBatchPrompt, type TranslationRequest } from "./provider.js";
 import { buildContextSystemPrompt, buildContextBatchPrompt, type ContextRequest } from "./context.js";
+import { buildGlossarySuggestSystemPrompt, buildGlossarySuggestBatchPrompt, type GlossarySource } from "./glossary-suggest.js";
 import { chunk } from "./batch.js";
 import { resolvePricing, type ResolvedPricing } from "./pricing.js";
 
@@ -118,6 +119,42 @@ export function estimateContext(targets: ContextRequest[], ai: AiConfig): Contex
   const pricing = resolvePricing(ai);
   return {
     keys: targets.length,
+    batches: batches.length,
+    inputTokens,
+    outputTokens,
+    pricing,
+    estimatedCost: pricing ? (inputTokens * pricing.inputPerMTok + outputTokens * pricing.outputPerMTok) / 1e6 : null,
+  };
+}
+
+export interface GlossarySuggestEstimate {
+  sources: number;
+  batches: number;
+  inputTokens: number;
+  outputTokens: number;
+  pricing: ResolvedPricing | null;
+  estimatedCost: number | null;
+}
+
+// Discovery is input-bound: cost is dominated by the source strings we send.
+// Output is small and unpredictable (a handful of terms), so we approximate it
+// as ~15% of strings yielding a ~24-token term reply. The whole figure is ±20%.
+const TERM_REPLY_TOKENS = 24;
+const TERM_YIELD = 0.15;
+
+export function estimateGlossarySuggest(sources: GlossarySource[], knownTerms: string[], ai: AiConfig): GlossarySuggestEstimate {
+  const batchSize = Math.max(1, ai.contextBatchSize ?? ai.batchSize ?? 10);
+  const batches = chunk(sources, batchSize);
+  const system = buildGlossarySuggestSystemPrompt();
+  let inputTokens = 0;
+  let outputTokens = 0;
+  for (const batch of batches) {
+    inputTokens += estimateTokens(system) + estimateTokens(buildGlossarySuggestBatchPrompt(batch, knownTerms));
+    outputTokens += Math.ceil(batch.length * TERM_YIELD) * TERM_REPLY_TOKENS;
+  }
+  const pricing = resolvePricing(ai);
+  return {
+    sources: sources.length,
     batches: batches.length,
     inputTokens,
     outputTokens,
