@@ -70,6 +70,30 @@ By default the command scans all source strings. Use these flags to narrow the s
 
 Suggestions use your configured AI provider and model (the same one used for translation).
 
+### Batch mode (50% off)
+
+If your provider supports it, you can submit the scan as an async **batch job** instead of running it live. Batch jobs are processed by the provider's Batch API at roughly half the cost of a live scan, and typically finish within an hour.
+
+**Anthropic is the only provider with batch support today.** On any other provider, batch mode is unavailable — `glotfile suggest-glossary --batch` exits with an error (re-run without `--batch` for a live scan), and the UI simply hides the batch button.
+
+**CLI:**
+
+```
+glotfile suggest-glossary --batch
+```
+
+This submits the job and returns immediately. When you want to check whether it's done and apply the results, run:
+
+```
+glotfile batch
+```
+
+That command lists pending batch jobs; when a glossary-suggestion job is finished it applies the suggestions to the review queue automatically.
+
+**UI:** when your active provider supports batch, the suggest dialog shows a batch button alongside the normal Suggest button — labelled **"Batch ≈ $X (50% off)"** once a cost estimate has loaded, or just **"Batch (50% off)"** otherwise. While a batch job is in flight, a pending-batch banner appears at the top of the Glossary view; once the job finishes an **"Apply results"** button appears on the banner.
+
+Batch mode does not change what's scanned (still the full catalog of source strings, subject to any `--key`, `--limit`, or `--since` filters) and does not skip the review step — suggestions land in the same queue and still require you to Accept or Dismiss each one.
+
 ## Related
 
 - How Translation Works · Checks and Validation · Key Context and Metadata
