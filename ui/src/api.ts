@@ -7,12 +7,27 @@ export interface ContextBuildStart { type: "start"; total: number }
 export interface ContextBuildProgress { type: "progress"; done: number; total: number; written: number }
 export type ContextBuildEvent = ContextBuildStart | ContextBuildProgress | ContextBuildDone;
 
+export interface PricesStatus {
+  source: string | null;
+  fetchedAt: string | null;
+  modelCount: number;
+  path: string;
+  resolved: { provider: string; model: string; source: string; inputPerMTok: number; outputPerMTok: number } | null;
+}
+export interface PricesRefreshResult { ok: true; source: string; fetchedAt: string; modelCount: number; path: string }
+export interface PriceRow { id: string; inputPerMTok: number; outputPerMTok: number; cacheReadPerMTok?: number; cacheWritePerMTok?: number }
+export interface PricesList { source: string | null; fetchedAt: string | null; models: PriceRow[] }
+
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? res.statusText);
   return res.json() as Promise<T>;
 }
 
 export const fetchState = () => fetch("/api/state").then((r) => json<State>(r));
+export const getPrices = () => fetch("/api/prices").then((r) => json<PricesStatus>(r));
+export const refreshPrices = () =>
+  fetch("/api/prices/refresh", { method: "POST" }).then((r) => json<PricesRefreshResult>(r));
+export const getPricesList = () => fetch("/api/prices/list").then((r) => json<PricesList>(r));
 export const createKey = (key: string, value: string, plural?: { arg: string }) =>
   fetch("/api/keys", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key, value, ...(plural ? { plural } : {}) }) }).then(json);
 export const deleteKey = (key: string) =>

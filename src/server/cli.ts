@@ -22,7 +22,9 @@ import { submitContextBatch, applyContextBatchResults } from "./ai/context-batch
 import { loadPendingContextBatch, clearPendingContextBatch, type PendingContextBatch } from "./ai/pending-context-batch.js";
 import type { AiConfig } from "./schema.js";
 import { estimateTranslation, estimateContext } from "./ai/estimate.js";
-import { usageCostUsd } from "./ai/pricing.js";
+import { usageCostUsd, resolvePricing } from "./ai/pricing.js";
+import { refreshPrices } from "./ai/price-fetch.js";
+import { loadPriceCache, defaultPriceCachePath, invalidatePriceCache } from "./ai/price-cache.js";
 import { appendLog } from "./log.js";
 import { loadUsageCache, computeUsedKeys } from "./scan.js";
 import { runScan } from "./scanner.js";
@@ -38,7 +40,7 @@ import { formatText, formatJson, formatSarif, type SarifContext } from "./lint/r
 import type { LintReport } from "./lint/types.js";
 
 export interface ParsedArgs {
-  command: "serve" | "export" | "translate" | "lint" | "check" | "import" | "sync" | "build-context" | "scan" | "prune" | "split" | "skill" | "batch" | "get" | "stats" | "set" | "set-state" | "clear" | "apply" | "help" | "version";
+  command: "serve" | "export" | "translate" | "lint" | "check" | "import" | "sync" | "build-context" | "scan" | "prune" | "split" | "skill" | "batch" | "prices" | "get" | "stats" | "set" | "set-state" | "clear" | "apply" | "help" | "version";
   help?: boolean;
   unknownCommand?: string;
   dev?: boolean;
@@ -88,9 +90,11 @@ export interface ParsedArgs {
   batchAction?: "status" | "apply" | "cancel";
   // skill-specific
   print?: boolean;
+  // prices-specific
+  refresh?: boolean;
 }
 
-const COMMANDS = ["serve", "export", "translate", "lint", "check", "import", "sync", "build-context", "scan", "prune", "split", "skill", "batch", "get", "stats", "set", "set-state", "clear", "apply"] as const;
+const COMMANDS = ["serve", "export", "translate", "lint", "check", "import", "sync", "build-context", "scan", "prune", "split", "skill", "batch", "prices", "get", "stats", "set", "set-state", "clear", "apply"] as const;
 const isCommand = (s: string | undefined): s is ParsedArgs["command"] =>
   s != null && (COMMANDS as readonly string[]).includes(s);
 
@@ -155,6 +159,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (flag === "--batch") args.batch = true;
     else if (flag === "--wait") args.wait = true;
     else if (flag === "--print") args.print = true;
+    else if (flag === "--refresh") args.refresh = true;
     else if (flag === "--state" && next) { args.states = next.split(","); i++; }
     else if (flag === "--fields" && next) { args.fields = next.split(","); i++; }
     else if (flag === "--keys-only") args.keysOnly = true;
@@ -1135,6 +1140,41 @@ function runApply(args: ParsedArgs): void {
   if (r.errors.length) process.exitCode = 1;
 }
 
+// prices — show or refresh the machine-global model price cache (models.dev).
+// Network happens only on --refresh; otherwise it reports the current cache and
+// the price resolved for the configured model.
+async function runPrices(args: ParsedArgs): Promise<void> {
+  const projectRoot = dirname(resolve(args.statePath));
+  if (args.refresh) {
+    try {
+      const res = await refreshPrices();
+      invalidatePriceCache();
+      console.log(`Updated ${res.modelCount} model price(s) from ${res.source}.`);
+      console.log(`Fetched ${new Date(res.fetchedAt).toLocaleString()} → ${res.path}`);
+    } catch (e) {
+      console.error(`Could not refresh prices: ${(e as Error).message}`);
+      console.error("Existing cached prices (if any) are unchanged.");
+      process.exitCode = 1;
+    }
+    return;
+  }
+  const cache = loadPriceCache();
+  if (cache) {
+    const when = cache.fetchedAt ? new Date(cache.fetchedAt).toLocaleString() : "unknown time";
+    console.log(`Price cache: ${Object.keys(cache.models).length} model(s) from ${cache.source}, fetched ${when}.`);
+    console.log(`Location: ${defaultPriceCachePath()}`);
+  } else {
+    console.log("No price cache yet. Run `glotfile prices --refresh` to fetch the latest from models.dev.");
+  }
+  const aiCfg = loadLocalSettings(projectRoot).ai;
+  const pricing = resolvePricing(aiCfg, cache);
+  if (pricing) {
+    console.log(`\n${aiCfg.provider} · ${aiCfg.model}: $${pricing.inputPerMTok}/$${pricing.outputPerMTok} per MTok (${pricing.source}).`);
+  } else {
+    console.log(`\nNo price known for ${aiCfg.provider} · ${aiCfg.model}. Set inputPricePerMTok/outputPricePerMTok in AI settings, or refresh.`);
+  }
+}
+
 type Opt = [flags: string, desc: string];
 
 // The flag surface of each command, kept beside parseArgs so help stays in sync.
@@ -1263,6 +1303,13 @@ const COMMAND_HELP: Record<Exclude<ParsedArgs["command"], "help" | "version">, {
       ["cancel", "Cancel the pending batch and discard the handle"],
     ],
   },
+  prices: {
+    summary: "Show or refresh the model price cache used for cost estimates (models.dev).",
+    usage: "glotfile prices [--refresh]",
+    options: [
+      ["--refresh", "Fetch the latest prices from models.dev into the cache (the only command that hits the network)"],
+    ],
+  },
   get: {
     summary: "Extract values from the catalog (filtered) without loading the whole file. Prints JSON.",
     usage: "glotfile get [<key-glob>…] [--key <glob>] [--locale <list>] [--state <list>] [--fields <list>] [--keys-only] [--format json|ndjson]",
@@ -1383,6 +1430,7 @@ export async function main(argv: string[]): Promise<void> {
   if (args.command === "split") return runSplit(args);
   if (args.command === "skill") return runSkill(args);
   if (args.command === "batch") return runBatch(args);
+  if (args.command === "prices") return runPrices(args);
   if (args.command === "get") return runGetCmd(args);
   if (args.command === "stats") return runStatsCmd(args);
   if (args.command === "set") return runSet(args);
