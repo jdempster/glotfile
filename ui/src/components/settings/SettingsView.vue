@@ -4,7 +4,7 @@ import {
   Globe, FileText, Cpu, BookOpen, Code2, ScanSearch, ShieldCheck,
   Plus, X, AlertTriangle, Check, Undo2, Save, Lock, Zap, Languages, RefreshCw, Search,
 } from "lucide-vue-next";
-import { fetchState, putConfig, getLocalSettings, putLocalSettings, getAiProfiles, putAiProfile, deleteAiProfile, setActiveAiProfile, getPrices, refreshPrices as refreshPricesApi, getPricesList } from "@/api.js";
+import { fetchState, putConfig, getLocalSettings, putLocalSettings, getAiProfiles, putAiProfile, deleteAiProfile, setActiveAiProfile, getPrices, refreshPrices as refreshPricesApi, getPricesList, aiTest } from "@/api.js";
 import type { PricesStatus, PriceRow } from "@/api.js";
 import type { Config, AiSettings } from "@/types.js";
 import { toast } from "@/components/ui/toast";
@@ -45,7 +45,9 @@ const AI_PROVIDERS = [
 const MODEL_SUGGESTIONS: Record<string, string[]> = {
   anthropic: ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
   openai: ["gpt-4o-mini", "gpt-4o", "gpt-4.1"],
-  bedrock: ["amazon.nova-pro-v1:0", "anthropic.claude-3-5-sonnet-20241022-v2:0", "meta.llama3-1-70b-instruct-v1:0"],
+  // On-demand Bedrock needs a region-prefixed inference profile (us./eu./apac.)
+  // for current Claude/Nova — a bare model id throws a ValidationException.
+  bedrock: ["eu.anthropic.claude-sonnet-4-6", "eu.amazon.nova-pro-v1:0", "eu.anthropic.claude-3-5-sonnet-20241022-v2:0"],
   openrouter: ["anthropic/claude-3.5-haiku", "openai/gpt-4o-mini", "google/gemini-2.0-flash-001"],
   ollama: ["translategemma:4b", "translategemma:12b", "qwen3.5:9b"],
   "claude-code": ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
@@ -259,6 +261,46 @@ watch(aiDraft, () => {
     }
   }, 500);
 }, { deep: true });
+
+// ── AI connection test ───────────────────────────────────────────────────────
+// One-click probe of the active provider/model: runs a throwaway translation on
+// the server and reports the (explained) outcome inline.
+const testing = ref(false);
+const testResult = ref<{ ok: boolean; error?: string } | null>(null);
+
+async function runAiTest() {
+  // Flush any pending debounced edit first, so the test runs against exactly
+  // what's on screen rather than a not-yet-saved draft.
+  const ai = aiToSettings();
+  if (JSON.stringify(ai) !== savedAiJson) {
+    if (aiSaveTimer) clearTimeout(aiSaveTimer);
+    try {
+      if (activeProfile.value) {
+        await putAiProfile(activeProfile.value, ai);
+        profiles.value = { ...profiles.value, [activeProfile.value]: ai };
+      } else {
+        await putLocalSettings({ ai });
+      }
+      savedAiJson = JSON.stringify(ai);
+    } catch (e) {
+      testResult.value = { ok: false, error: (e as Error).message };
+      return;
+    }
+  }
+  testing.value = true;
+  testResult.value = null;
+  try {
+    const res = await aiTest();
+    testResult.value = { ok: res.ok, error: res.error };
+  } catch (e) {
+    testResult.value = { ok: false, error: (e as Error).message };
+  } finally {
+    testing.value = false;
+  }
+}
+
+// A stale pass/fail is misleading once the config changes — clear it.
+watch(() => [aiDraft.provider, aiDraft.model, aiDraft.region, aiDraft.endpoint, activeProfile.value], () => { testResult.value = null; });
 
 // ── Model price cache (models.dev) ───────────────────────────────────────────
 // Status of ~/.glotfile/model-prices.json plus an explicit refresh. The refresh
@@ -1044,6 +1086,11 @@ function onSynced(): void {
                     <button type="button" class="font-mono underline-offset-2 hover:text-foreground hover:underline" @click="aiDraft.model = m">{{ m }}</button><span v-if="i < modelSuggestions.length - 1"> · </span>
                   </template>
                 </p>
+                <p v-if="isBedrock" class="text-xs text-muted-foreground">
+                  For on-demand use, prefix the id with your region group —
+                  <code class="font-mono">eu.</code>, <code class="font-mono">us.</code> or <code class="font-mono">apac.</code>
+                  — so it resolves to an inference profile.
+                </p>
               </div>
 
               <div v-if="isBedrock" class="grid gap-1.5">
@@ -1056,6 +1103,25 @@ function onSynced(): void {
                 <Input id="ai-endpoint" v-model="aiDraft.endpoint" class="font-mono" :placeholder="isOllama ? 'http://localhost:11434/v1' : 'Default (leave empty)'" />
                 <p v-if="isOllama" class="text-xs text-muted-foreground">Defaults to the local Ollama server. Override only for a remote instance — include the <code class="font-mono">/v1</code> suffix.</p>
                 <p v-else class="text-xs text-muted-foreground">Optional — for an in-region or self-hosted / OpenAI-compatible gateway.</p>
+              </div>
+
+              <!-- Connection test: probe credentials/model/connectivity before a real run -->
+              <div class="grid gap-1.5">
+                <div class="flex flex-wrap items-center gap-2">
+                  <Button type="button" variant="outline" size="sm" :disabled="testing" @click="runAiTest">
+                    <RefreshCw v-if="testing" class="size-3.5 animate-spin" />
+                    <Zap v-else class="size-3.5" />
+                    {{ testing ? "Testing…" : "Test connection" }}
+                  </Button>
+                  <span v-if="testResult?.ok" class="flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                    <Check class="size-3.5" /> Connected
+                  </span>
+                </div>
+                <div v-if="testResult && !testResult.ok" class="flex items-start gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-2 text-xs text-destructive">
+                  <AlertTriangle class="mt-0.5 size-3.5 shrink-0" />
+                  <span>{{ testResult.error }}</span>
+                </div>
+                <p class="text-xs text-muted-foreground">Runs one throwaway translation to verify credentials, model access and connectivity.</p>
               </div>
 
               <div class="mt-1 border-t border-border pt-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Translation</div>

@@ -117,6 +117,10 @@ export async function* translateStream(signal?: AbortSignal, keys?: string[], lo
         if (line.startsWith("event:")) { currentEvent = line.slice(6).trim(); continue; }
         if (line.startsWith("data:")) {
           const data = JSON.parse(line.slice(5).trim());
+          // A provider failure (bad credentials, missing permission, unknown
+          // model) arrives as an error event — surface it instead of ending
+          // the run silently. Callers catch and display the message.
+          if (currentEvent === "error") throw new Error(data.error ?? "Translation failed");
           yield { ...data, type: currentEvent } as TranslateEvent;
           currentEvent = "message";
         }
@@ -226,6 +230,11 @@ export const deleteAiProfile = (name: string) =>
   fetch(`/api/ai-profiles/${encodeURIComponent(name)}`, { method: "DELETE" }).then(json);
 export const setActiveAiProfile = (name: string | null) =>
   fetch("/api/ai-profiles/active", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }) }).then(json);
+
+// Probe the active AI config: builds the provider and runs one throwaway
+// translation. Always resolves (200) — `ok` and `error` carry the result.
+export interface AiTestResult { ok: boolean; provider: string; model: string; error?: string }
+export const aiTest = () => fetch("/api/ai-test", { method: "POST" }).then((r) => json<AiTestResult>(r));
 
 export const addToDictionary = (word: string) =>
   fetch("/api/dictionary", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ word }) }).then(json);
