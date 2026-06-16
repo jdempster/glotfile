@@ -20,6 +20,8 @@ import { submitBatchTranslation, applyBatchResults } from "./ai/batch-run.js";
 import { loadPendingBatch, clearPendingBatch, type PendingBatch } from "./ai/pending-batch.js";
 import { submitContextBatch, applyContextBatchResults } from "./ai/context-batch-run.js";
 import { loadPendingContextBatch, clearPendingContextBatch, type PendingContextBatch } from "./ai/pending-context-batch.js";
+import { submitGlossarySuggestBatch, applyGlossarySuggestBatchResults } from "./ai/glossary-batch-run.js";
+import { loadPendingGlossaryBatch, clearPendingGlossaryBatch, type PendingGlossaryBatch } from "./ai/pending-glossary-batch.js";
 import type { AiConfig } from "./schema.js";
 import { estimateTranslation, estimateContext, estimateGlossarySuggest } from "./ai/estimate.js";
 import { selectGlossarySources, knownTermList, buildGlossarySuggestSystemPrompt, buildGlossarySuggestBatchPrompt, GLOSSARY_SUGGEST_SCHEMA, dedupeTerms, type SuggestedTerm } from "./ai/glossary-suggest.js";
@@ -461,13 +463,15 @@ async function runBatch(args: ParsedArgs): Promise<void> {
   const projectRoot = dirname(resolve(args.statePath));
   const pending = loadPendingBatch(projectRoot);
   const ctxPending = loadPendingContextBatch(projectRoot);
-  if (!pending && !ctxPending) {
-    console.log("No pending batch. Start one with `glotfile translate --batch` or `glotfile build-context --batch`.");
+  const glossPending = loadPendingGlossaryBatch(projectRoot);
+  if (!pending && !ctxPending && !glossPending) {
+    console.log("No pending batch. Start one with `glotfile translate --batch`, `glotfile build-context --batch`, or `glotfile suggest-glossary --batch`.");
     return;
   }
   const action = args.batchAction ?? "status";
   if (pending) await runTranslationBatchAction(args, pending, action, projectRoot);
   if (ctxPending) await runContextBatchAction(args, ctxPending, action, projectRoot);
+  if (glossPending) await runGlossaryBatchAction(args, glossPending, action, projectRoot);
 }
 
 async function runTranslationBatchAction(args: ParsedArgs, pending: PendingBatch, action: "status" | "apply" | "cancel", projectRoot: string): Promise<void> {
@@ -558,6 +562,54 @@ async function runContextBatchAction(args: ParsedArgs, pending: PendingContextBa
   console.log(`Wrote context for ${outcome.written} key(s).`);
   if (outcome.retried) console.log(`${outcome.retried} job(s) re-run synchronously (batch entries failed or were malformed).`);
   for (const e of outcome.errors) console.warn(`skip ${e.key}: ${e.error}`);
+}
+
+async function runGlossaryBatchAction(args: ParsedArgs, pending: PendingGlossaryBatch, action: "status" | "apply" | "cancel", projectRoot: string): Promise<void> {
+  if (action === "cancel") {
+    // Best-effort remote cancel, same semantics as the context batch:
+    // clearing the local handle must work even when the provider is unreachable.
+    let remoteFailed = false;
+    try {
+      const ai = loadLocalSettings(projectRoot).ai;
+      const provider = makeProvider(ai);
+      if (supportsBatchComplete(provider)) {
+        await provider.cancelTranslationBatch(pending.batchId);
+      } else {
+        remoteFailed = true;
+      }
+    } catch {
+      remoteFailed = true;
+    }
+    clearPendingGlossaryBatch(projectRoot);
+    const suffix = remoteFailed ? " (remote cancel failed — it will expire server-side)" : "";
+    console.log(`Canceled glossary suggestion batch ${pending.batchId}.${suffix}`);
+    return;
+  }
+  const ai = loadLocalSettings(projectRoot).ai;
+  const provider = makeProviderOrExit(ai);
+  if (!provider) return;
+  if (!supportsBatchComplete(provider)) {
+    console.error(`Pending glossary batch was submitted via anthropic, but the configured provider "${ai.provider}" has no batch support.`);
+    process.exitCode = 1;
+    return;
+  }
+  const status = await provider.translationBatchStatus(pending.batchId);
+  const c = status.counts;
+  console.log(`Glossary suggestion batch ${pending.batchId} (${pending.total} source(s), submitted ${pending.createdAt})`);
+  console.log(`  ${status.status} — ${c.succeeded} succeeded, ${c.processing} processing, ${c.errored} errored, ${c.expired} expired, ${c.canceled} canceled`);
+  if (status.status !== "ended") {
+    if (action === "apply") console.log("Not finished yet — try again later.");
+    return;
+  }
+  // Finished: bare `glotfile batch` and `glotfile batch apply` both apply.
+  const outcome = await applyGlossarySuggestBatchResults(
+    () => loadState(args.statePath),
+    (s) => saveState(args.statePath, s),
+    provider, pending, projectRoot, ai,
+  );
+  console.log(`Found ${outcome.added} new candidate term(s).`);
+  if (outcome.retried) console.log(`${outcome.retried} job(s) re-run synchronously (batch entries failed or were malformed).`);
+  for (const e of outcome.errors) console.warn(`batch job failed: ${e.error}`);
 }
 
 // The on-disk file holding catalog keys (single glotfile.json, or split
@@ -878,6 +930,33 @@ async function runSuggestGlossary(args: ParsedArgs): Promise<void> {
   const system = buildGlossarySuggestSystemPrompt();
   const batchSize = aiCfg.contextBatchSize ?? aiCfg.batchSize ?? 10;
   const concurrency = aiCfg.contextConcurrency ?? aiCfg.concurrency ?? 3;
+
+  if (args.batch) {
+    if (!supportsBatchComplete(provider)) {
+      console.error(`Provider "${aiCfg.provider}" does not support batch mode. Currently anthropic only.`);
+      process.exitCode = 1;
+      return;
+    }
+    let pending;
+    try {
+      pending = await submitGlossarySuggestBatch(provider, sources, known, batchSize, aiCfg.model, projectRoot);
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exitCode = 1;
+      return;
+    }
+    appendLog(projectRoot, {
+      at: new Date().toISOString(),
+      kind: "glossary",
+      summary: `Submitted glossary suggestion batch ${pending.batchId} (${pending.total} sources)`,
+      model: aiCfg.model,
+      system,
+    });
+    console.log(`Submitted glossary suggestion batch ${pending.batchId} — ${pending.total} source string(s) at 50% batch pricing.`);
+    console.log("Check progress with `glotfile batch`; it applies results automatically when finished.");
+    return;
+  }
+
   const chunks: typeof sources[] = [];
   for (let i = 0; i < sources.length; i += batchSize) chunks.push(sources.slice(i, i + batchSize));
 
@@ -1340,12 +1419,13 @@ const COMMAND_HELP: Record<Exclude<ParsedArgs["command"], "help" | "version">, {
   },
   "suggest-glossary": {
     summary: "AI-scan source strings for candidate glossary terms (adds a review queue; existing terms are skipped).",
-    usage: "glotfile suggest-glossary [--key <glob>] [--limit <n>] [--since <date>] [--estimate]",
+    usage: "glotfile suggest-glossary [--key <glob>] [--limit <n>] [--since <date>] [--estimate] [--batch]",
     options: [
       ["--key <glob>", "Only scan keys matching this glob"],
       ["--limit <n>", "Scan at most n source strings"],
       ["--since <date>", "Only keys added since this date"],
       ["--estimate", "Print batches, tokens and estimated cost without scanning"],
+      ["--batch", "Submit via the provider's batch API (50% cost, async; anthropic only)"],
     ],
   },
   scan: {
