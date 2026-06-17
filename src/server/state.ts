@@ -292,7 +292,6 @@ export function setMetadata(state: State, key: string, partial: Partial<Omit<Key
   // A human write to `context` promotes it from AI-generated to human-authored.
   if ("context" in safe) {
     delete entry.contextSource;
-    delete entry.contextAt;
   }
   Object.assign(entry, safe);
   // Empty is represented by absence, not a stored empty value: a field cleared in

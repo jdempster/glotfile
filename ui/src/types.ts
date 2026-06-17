@@ -15,7 +15,7 @@ export interface LocaleValue {
 export interface Note { id: string; text: string; at: string }
 export interface PlaceholderMeta { type?: string; format?: string; example?: string }
 export interface KeyEntry {
-  context?: string; contextSource?: "ai"; contextAt?: string;
+  context?: string; contextSource?: "ai";
   notes?: Note[]; tags?: string[]; maxLength?: number; description?: string;
   screenshot?: string; skipTranslate?: boolean; createdAt?: string;
   plural?: { arg: string };

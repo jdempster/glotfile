@@ -135,7 +135,7 @@ export async function applyContextBatchResults(
   // applyContext itself skips deleted keys and (without force) keys that
   // gained context in the meantime.
   const fresh = load();
-  const { written, errors: applyErrors } = applyContext(fresh, applied, items, undefined, pending.force);
+  const { written, errors: applyErrors } = applyContext(fresh, applied, items, pending.force);
   errors.push(...applyErrors);
   // The handle is cleared only after a successful persist, so a throw anywhere
   // earlier leaves the batch resumable.

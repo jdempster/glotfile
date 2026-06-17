@@ -11,8 +11,6 @@ import { createKey } from "../state.js";
 import type { UsageCacheFile, Reference } from "../scan.js";
 import type { ContextRequest } from "./context.js";
 
-const CLOCK = () => "2026-06-08T10:00:00.000Z";
-
 function tmpDir() {
   return mkdtempSync(join(tmpdir(), "glot-ctx-"));
 }
@@ -210,22 +208,21 @@ describe("extractSnippets", () => {
 // --- applyContext ---
 
 describe("applyContext", () => {
-  it("writes context, contextSource:'ai', and contextAt when context is empty", () => {
+  it("writes context and contextSource:'ai' when context is empty", () => {
     const s = makeState({ k: {} });
     const reqs: ContextRequest[] = [{ id: "0", key: "k", source: "Hello", usageSnippets: [] }];
     const results = [{ id: "0", context: "A greeting shown on the welcome screen." }];
-    const { written } = applyContext(s, reqs, results, CLOCK);
+    const { written } = applyContext(s, reqs, results);
     expect(written).toBe(1);
     expect(s.keys["k"]!.context).toBe("A greeting shown on the welcome screen.");
     expect(s.keys["k"]!.contextSource).toBe("ai");
-    expect(s.keys["k"]!.contextAt).toBe(CLOCK());
   });
 
   it("does not overwrite human-authored context that appeared after selection", () => {
     const s = makeState({ k: { context: "Human wrote this after selection" } });
     const reqs: ContextRequest[] = [{ id: "0", key: "k", source: "Hello", usageSnippets: [] }];
     const results = [{ id: "0", context: "AI generated" }];
-    const { written } = applyContext(s, reqs, results, CLOCK);
+    const { written } = applyContext(s, reqs, results);
     expect(written).toBe(0);
     expect(s.keys["k"]!.context).toBe("Human wrote this after selection");
   });
@@ -234,7 +231,7 @@ describe("applyContext", () => {
     const s = makeState({ k: { context: "Old AI context", contextSource: "ai" } });
     const reqs: ContextRequest[] = [{ id: "0", key: "k", source: "Hello", usageSnippets: [] }];
     const results = [{ id: "0", context: "Fresh AI context" }];
-    const { written } = applyContext(s, reqs, results, CLOCK, true);
+    const { written } = applyContext(s, reqs, results, true);
     expect(written).toBe(1);
     expect(s.keys["k"]!.context).toBe("Fresh AI context");
     expect(s.keys["k"]!.contextSource).toBe("ai");
@@ -243,7 +240,7 @@ describe("applyContext", () => {
   it("rejects an empty context string", () => {
     const s = makeState({ k: {} });
     const reqs: ContextRequest[] = [{ id: "0", key: "k", source: "Hello", usageSnippets: [] }];
-    const { written, errors } = applyContext(s, reqs, [{ id: "0", context: "   " }], CLOCK);
+    const { written, errors } = applyContext(s, reqs, [{ id: "0", context: "   " }]);
     expect(written).toBe(0);
     expect(errors[0]!.error).toMatch(/empty/i);
   });
@@ -251,7 +248,7 @@ describe("applyContext", () => {
   it("rejects a context string over 500 chars", () => {
     const s = makeState({ k: {} });
     const reqs: ContextRequest[] = [{ id: "0", key: "k", source: "Hello", usageSnippets: [] }];
-    const { written, errors } = applyContext(s, reqs, [{ id: "0", context: "x".repeat(501) }], CLOCK);
+    const { written, errors } = applyContext(s, reqs, [{ id: "0", context: "x".repeat(501) }]);
     expect(written).toBe(0);
     expect(errors[0]!.error).toMatch(/long/i);
   });
@@ -259,7 +256,7 @@ describe("applyContext", () => {
   it("returns an error for a missing model result", () => {
     const s = makeState({ k: {} });
     const reqs: ContextRequest[] = [{ id: "0", key: "k", source: "Hello", usageSnippets: [] }];
-    const { errors } = applyContext(s, reqs, [{ id: "0", error: "model error" }], CLOCK);
+    const { errors } = applyContext(s, reqs, [{ id: "0", error: "model error" }]);
     expect(errors[0]!.error).toBe("model error");
   });
 });

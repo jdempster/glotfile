@@ -293,7 +293,7 @@ describe("defaultState", () => {
   });
 });
 
-describe("contextSource / contextAt fields", () => {
+describe("contextSource field", () => {
   function keyState(key: object) {
     return {
       version: 1,
@@ -308,17 +308,12 @@ describe("contextSource / contextAt fields", () => {
   }
 
   it("accepts contextSource: 'ai'", () => {
-    const s = validate(keyState({ contextSource: "ai", contextAt: "2026-06-08T00:00:00Z" }));
+    const s = validate(keyState({ contextSource: "ai" }));
     expect(s.keys["k"]!.contextSource).toBe("ai");
-    expect(s.keys["k"]!.contextAt).toBe("2026-06-08T00:00:00Z");
   });
 
   it("rejects contextSource that is not 'ai'", () => {
     expect(() => validate(keyState({ contextSource: "human" }))).toThrow(/contextSource/i);
-  });
-
-  it("rejects contextAt that is not a string", () => {
-    expect(() => validate(keyState({ contextAt: 123 }))).toThrow(/contextAt/i);
   });
 
   it("accepts a key with no contextSource (human-authored context)", () => {

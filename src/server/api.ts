@@ -577,7 +577,6 @@ export function createApi(deps: ApiDeps): Hono {
       if (clearContext === true) {
         delete entry.context;
         delete entry.contextSource;
-        delete entry.contextAt;
       }
       updated++;
     }
@@ -1601,7 +1600,7 @@ export function createApi(deps: ApiDeps): Hono {
           if (signal?.aborted) break;
           const batch = raw as { items: Array<{ id: string; context?: string; error?: string }> };
           const fresh = load();
-          const { written, errors } = applyContext(fresh, chunk, batch.items ?? [], undefined, body.force === true);
+          const { written, errors } = applyContext(fresh, chunk, batch.items ?? [], body.force === true);
           // Usage accrued since the last drain — approximate per-chunk
           // attribution under concurrency, exact in total across the run.
           const usage = provider.takeUsage?.();
