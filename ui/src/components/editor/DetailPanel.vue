@@ -549,7 +549,7 @@ async function save() {
                 <Sparkles class="size-2.5" /> AI
               </span>
             </TooltipTrigger>
-            <TooltipContent>{{ entry.contextAt ? `AI-generated ${fmtDate(entry.contextAt)}` : "AI-generated" }}</TooltipContent>
+            <TooltipContent>AI-generated</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger as-child>

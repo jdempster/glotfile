@@ -3,8 +3,6 @@ import { resolve } from "node:path";
 import type { State } from "../schema.js";
 import type { UsageCacheFile, Reference } from "../scan.js";
 import type { ImageData } from "./provider.js";
-import type { Clock } from "../state.js";
-import { systemClock } from "../state.js";
 import { quotedLiterals } from "../placeholders.js";
 
 export interface CodeSnippet {
@@ -205,7 +203,6 @@ export function applyContext(
   state: State,
   reqs: ContextRequest[],
   results: Array<{ id: string; context?: string; error?: string }>,
-  clock: Clock = systemClock,
   force = false,
 ): { written: number; errors: Array<{ key: string; error: string }> } {
   const byId = new Map(reqs.map((r) => [r.id, r]));
@@ -232,7 +229,6 @@ export function applyContext(
     if (!entry || (entry.context && !force)) continue;
     entry.context = context;
     entry.contextSource = "ai";
-    entry.contextAt = clock();
     written++;
   }
   return { written, errors };

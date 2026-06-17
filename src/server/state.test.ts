@@ -280,12 +280,10 @@ describe("mutations", () => {
     const s = defaultState();
     createKey(s, "k", "v");
     s.keys["k"]!.contextSource = "ai";
-    s.keys["k"]!.contextAt = "2026-06-08T00:00:00Z";
     s.keys["k"]!.context = "Old AI context";
     setMetadata(s, "k", { context: "My edited context" });
     expect(s.keys["k"]!.context).toBe("My edited context");
     expect(s.keys["k"]!.contextSource).toBeUndefined();
-    expect(s.keys["k"]!.contextAt).toBeUndefined();
   });
 
   it("setMetadata clears context/tags/maxLength when given empty values", () => {

@@ -63,7 +63,6 @@ export interface Suppression {
 export interface KeyEntry {
   context?: string;
   contextSource?: "ai";
-  contextAt?: string;
   notes?: Note[];
   tags?: string[];
   maxLength?: number;
@@ -373,9 +372,6 @@ export function validate(raw: unknown): State {
     }
     if (entry.contextSource !== undefined && entry.contextSource !== "ai") {
       fail(`key "${key}" contextSource must be "ai" if present`);
-    }
-    if (entry.contextAt !== undefined && typeof entry.contextAt !== "string") {
-      fail(`key "${key}" contextAt must be a string if present`);
     }
   }
   if (raw.glossary !== undefined && !Array.isArray(raw.glossary)) fail("glossary must be an array");

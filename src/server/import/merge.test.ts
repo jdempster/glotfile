@@ -90,7 +90,6 @@ describe("mergeStates", () => {
           ...scalar("A", { fr: { value: "Af" } }),
           context: "AI context",
           contextSource: "ai",
-          contextAt: "2026-01-01",
           notes: [{ id: "n1", text: "hi", at: "2026-01-01" }],
           description: "human desc",
         } as unknown as KeyEntry,
