@@ -33,7 +33,9 @@ const deleting = ref<GlossaryEntry | null>(null);
 const busy = ref(false);
 
 const search = ref("");
-const filteredEntries = computed(() => filterGlossary(entries.value, search.value));
+const filteredEntries = computed(() =>
+  filterGlossary(entries.value, search.value).slice().sort((a, b) => a.term.localeCompare(b.term)),
+);
 
 const targetLocales = computed(() => locales.value.filter((l) => l !== sourceLocale.value));
 
@@ -175,6 +177,7 @@ async function confirmDelete() {
                 <Badge v-if="s.doNotTranslate" variant="secondary">Do-not-translate</Badge>
                 <Badge v-if="s.caseSensitive" variant="outline">Case-sensitive</Badge>
                 <Badge v-if="s.wholeWord === false" variant="outline">Substring</Badge>
+                <Badge v-else variant="outline">Whole word</Badge>
               </div>
               <p v-if="s.note" class="mt-1 text-sm text-muted-foreground">{{ s.note }}</p>
               <p v-if="typeof s.occurrences === 'number'" class="mt-1 text-xs text-muted-foreground">
@@ -215,6 +218,7 @@ async function confirmDelete() {
               <Badge v-if="entry.doNotTranslate" variant="secondary">Do-not-translate</Badge>
               <Badge v-if="entry.caseSensitive" variant="outline">Case-sensitive</Badge>
               <Badge v-if="entry.wholeWord === false" variant="outline">Substring</Badge>
+              <Badge v-else variant="outline">Whole word</Badge>
             </div>
             <p v-if="entry.notes" class="mt-1 text-sm text-muted-foreground">{{ entry.notes }}</p>
             <div v-if="translationChips(entry).length" class="mt-2 flex flex-wrap gap-1.5">
