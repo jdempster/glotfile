@@ -5,7 +5,7 @@ import type { TranslationProvider, TranslationRequest, TranslationResult } from 
 import { relevantGlossary } from "../glossary.js";
 import { extractPlaceholders, quotedLiterals } from "../placeholders.js";
 import { categoriesFor } from "../plurals.js";
-import { applyMachineTranslation, applyMachineTranslationForms, type Clock, systemClock } from "../state.js";
+import { applyMachineTranslation, applyMachineTranslationForms } from "../state.js";
 import { cellState, type EffectiveState } from "../cell-state.js";
 import { globToRegExp } from "../glob.js";
 import { chunk } from "./batch.js";
@@ -279,7 +279,6 @@ export function applyResults(
   state: State,
   reqs: TranslationRequest[],
   results: TranslationResult[],
-  clock: Clock = systemClock,
   force = false,
 ): { written: number; errors: Array<{ key: string; locale: string; error: string }> } {
   const byId = new Map(reqs.map((r) => [r.id, r]));
@@ -293,7 +292,7 @@ export function applyResults(
         errors.push({ key: req.key, locale: req.targetLocale, error: res.error ?? "no translation" });
         continue;
       }
-      if (applyMachineTranslationForms(state, req.key, req.targetLocale, res.forms, clock, force)) written++;
+      if (applyMachineTranslationForms(state, req.key, req.targetLocale, res.forms, force)) written++;
       continue;
     }
     if (res.translation === undefined) {
@@ -301,7 +300,7 @@ export function applyResults(
       continue;
     }
     if (res.error) errors.push({ key: req.key, locale: req.targetLocale, error: res.error });
-    if (applyMachineTranslation(state, req.key, req.targetLocale, res.translation, clock, force)) written++;
+    if (applyMachineTranslation(state, req.key, req.targetLocale, res.translation, force)) written++;
   }
   return { written, errors };
 }

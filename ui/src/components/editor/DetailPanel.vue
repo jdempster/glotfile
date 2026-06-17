@@ -31,19 +31,10 @@ const emit = defineEmits<{ (e: "changed"): void }>();
 
 const fmtDate = (iso?: string) => (iso ? new Date(iso).toLocaleString() : "—");
 
-// Most recent edit across the key's locale values (ISO strings sort chronologically).
 const keyNameHtml = computed(() => {
   if (!props.keyName) return "";
   const escaped = props.keyName.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return escaped.replace(/\./g, ".<wbr>");
-});
-
-const lastUpdated = computed(() => {
-  let max = "";
-  for (const v of Object.values(props.entry?.values ?? {})) {
-    if (v.updatedAt && v.updatedAt > max) max = v.updatedAt;
-  }
-  return max || undefined;
 });
 
 const isPlural = computed(() => Boolean(props.entry?.plural));
@@ -641,9 +632,6 @@ async function save() {
       <div class="flex flex-col gap-1.5 text-[11.5px] text-muted-foreground">
         <div class="flex items-center justify-between gap-3">
           <span>Created</span><span class="font-mono text-[11px] text-foreground">{{ fmtDate(entry.createdAt) }}</span>
-        </div>
-        <div class="flex items-center justify-between gap-3">
-          <span>Last updated</span><span class="font-mono text-[11px] text-foreground">{{ fmtDate(lastUpdated) }}</span>
         </div>
       </div>
     </div>

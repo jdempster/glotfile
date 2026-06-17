@@ -79,10 +79,10 @@ describe("applyResults", () => {
   it("writes machine translations and reports errors", () => {
     const s = fixture();
     const reqs = selectRequests(s, { onlyMissing: true });
-    const { written, errors } = applyResults(s, reqs, [{ id: reqs[0]!.id, translation: "Hallo {name}" }], CLOCK);
+    const { written, errors } = applyResults(s, reqs, [{ id: reqs[0]!.id, translation: "Hallo {name}" }]);
     expect(written).toBe(1);
     expect(errors).toEqual([]);
-    expect(s.keys["k1"]!.values.de).toEqual({ value: "Hallo {name}", state: "machine", source: "ai", updatedAt: CLOCK() });
+    expect(s.keys["k1"]!.values.de).toEqual({ value: "Hallo {name}", state: "machine", source: "ai" });
   });
 
   it("writes an over-length translation (maxLength is a warning, not a hard discard)", () => {
@@ -90,7 +90,7 @@ describe("applyResults", () => {
     const [req] = selectRequests(s, { onlyMissing: false, locales: ["de"], keyGlob: "k1" });
     // Simulate what the pipeline produces after the fix: error set but translation present.
     const result: TranslationResult = { id: req!.id, translation: "Hallo {name}", error: "Exceeds maxLength (12 > 5)." };
-    const { written, errors } = applyResults(s, [req!], [result], CLOCK);
+    const { written, errors } = applyResults(s, [req!], [result]);
     expect(written).toBe(1);
     expect(errors).toHaveLength(1);
     expect(errors[0]!.error).toMatch(/maxLength/i);
@@ -101,10 +101,10 @@ describe("applyResults", () => {
     const s = fixture();
     const [req] = selectRequests(s, { onlyMissing: false, locales: ["fr"], keyGlob: "k1" });
     const result = [{ id: req!.id, translation: "Bonjour {name}" }];
-    expect(applyResults(s, [req!], result, CLOCK).written).toBe(0);
+    expect(applyResults(s, [req!], result).written).toBe(0);
     expect(s.keys["k1"]!.values.fr!.value).toBe("Salut {name}");
-    expect(applyResults(s, [req!], result, CLOCK, true).written).toBe(1);
-    expect(s.keys["k1"]!.values.fr).toEqual({ value: "Bonjour {name}", state: "machine", source: "ai", updatedAt: CLOCK() });
+    expect(applyResults(s, [req!], result, true).written).toBe(1);
+    expect(s.keys["k1"]!.values.fr).toEqual({ value: "Bonjour {name}", state: "machine", source: "ai" });
   });
 });
 
@@ -150,16 +150,16 @@ describe("applyResults (plural)", () => {
     const s = pluralFixture();
     const reqs = selectRequests(s, { onlyMissing: true });
     const forms = { one: "{count} produkt", few: "{count} produkty", many: "{count} produktów", other: "{count} produktu" };
-    const { written, errors } = applyResults(s, reqs, [{ id: reqs[0]!.id, forms }], CLOCK);
+    const { written, errors } = applyResults(s, reqs, [{ id: reqs[0]!.id, forms }]);
     expect(written).toBe(1);
     expect(errors).toEqual([]);
-    expect(s.keys["cart.items"]!.values.pl).toEqual({ forms, state: "machine", source: "ai", updatedAt: CLOCK() });
+    expect(s.keys["cart.items"]!.values.pl).toEqual({ forms, state: "machine", source: "ai" });
   });
 
   it("reports an error when a plural result carries no forms", () => {
     const s = pluralFixture();
     const reqs = selectRequests(s, { onlyMissing: true });
-    const { written, errors } = applyResults(s, reqs, [{ id: reqs[0]!.id, error: "boom" }], CLOCK);
+    const { written, errors } = applyResults(s, reqs, [{ id: reqs[0]!.id, error: "boom" }]);
     expect(written).toBe(0);
     expect(errors).toEqual([{ key: "cart.items", locale: "pl", error: "boom" }]);
   });

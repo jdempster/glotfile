@@ -10,7 +10,6 @@ export interface LocaleValue {
   forms?: Partial<Record<PluralForm, string>>;
   state: LocaleState;
   source?: string;
-  updatedAt?: string;
 }
 export interface Note { id: string; text: string; at: string }
 export interface PlaceholderMeta { type?: string; format?: string; example?: string }

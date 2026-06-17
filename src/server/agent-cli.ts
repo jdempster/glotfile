@@ -28,7 +28,6 @@ interface GetCell {
   value?: string;
   forms?: Partial<Record<PluralForm, string>>;
   state: EffectiveState;
-  updatedAt?: string;
 }
 
 export interface GetOutput {
@@ -46,7 +45,6 @@ function projectCell(cell: GetCell, fields: string[]): Record<string, unknown> {
     if (f === "value" && cell.value !== undefined) out.value = cell.value;
     else if (f === "value" && cell.forms !== undefined) out.forms = cell.forms;
     else if (f === "state") out.state = cell.state;
-    else if (f === "updatedAt" && cell.updatedAt !== undefined) out.updatedAt = cell.updatedAt;
   }
   return out;
 }
@@ -87,8 +85,8 @@ export function runGet(state: State, opts: GetOptions): GetOutput {
       if (stateSet && locale !== sourceLocale && !stateSet.has(st)) continue;
       const lv = entry.values[locale];
       const cell: GetCell = entry.plural
-        ? { forms: lv?.forms ?? {}, state: st, updatedAt: lv?.updatedAt }
-        : { value: lv?.value ?? "", state: st, updatedAt: lv?.updatedAt };
+        ? { forms: lv?.forms ?? {}, state: st }
+        : { value: lv?.value ?? "", state: st };
       const projected = projectCell(cell, fields);
       cells[locale] = projected;
       ndjson.push({ key, locale, ...projected });
@@ -130,12 +128,12 @@ function applyOne(state: State, op: ApplyOp, clock: Clock): void {
     case "create": createKey(state, op.key, op.value, clock); return;
     case "set-source": setSourceValue(state, op.key, op.value); return;
     case "set-target":
-      setTargetValue(state, op.key, op.locale, op.value, clock);
+      setTargetValue(state, op.key, op.locale, op.value);
       if (op.state && op.state !== "reviewed") setKeyState(state, op.key, op.locale, op.state);
       return;
     case "set-source-forms": setSourcePluralForms(state, op.key, op.forms); return;
     case "set-forms":
-      setPluralForms(state, op.key, op.locale, op.forms, clock);
+      setPluralForms(state, op.key, op.locale, op.forms);
       if (op.state && op.state !== "reviewed") setKeyState(state, op.key, op.locale, op.state);
       return;
     case "set-state": setKeyState(state, op.key, op.locale, op.state); return;

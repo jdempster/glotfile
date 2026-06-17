@@ -42,7 +42,7 @@ describe("disassemble/assemble", () => {
       tags: ["x"],
       values: {
         en: { value: "Hello", state: "source" },
-        fr: { value: "Bonjour", state: "reviewed", source: "ai", updatedAt: "2026-01-02T00:00:00.000Z" },
+        fr: { value: "Bonjour", state: "reviewed", source: "ai" },
       },
     };
     s.keys["b.only-en"] = { values: { en: { value: "Only", state: "source" } } };
@@ -55,7 +55,7 @@ describe("disassemble/assemble", () => {
     expect(parts.keys["a.key"]).toEqual({ createdAt: "2026-01-01T00:00:00.000Z", tags: ["x"] });
     expect(parts.keys["a.key"]).not.toHaveProperty("values");
     expect(parts.locales["en"]["a.key"]).toEqual({ value: "Hello", state: "source" });
-    expect(parts.locales["fr"]["a.key"].updatedAt).toBe("2026-01-02T00:00:00.000Z");
+    expect(parts.locales["fr"]["a.key"]).toEqual({ value: "Bonjour", state: "reviewed", source: "ai" });
     // b.only-en has no fr value, so it never appears in the fr bucket.
     expect(parts.locales["fr"]["b.only-en"]).toBeUndefined();
   });

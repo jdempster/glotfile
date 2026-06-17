@@ -219,8 +219,8 @@ describe("mutations", () => {
     const s = defaultState();
     s.config.locales = ["en", "fr"];
     createKey(s, "k", "Hi");
-    setTargetValue(s, "k", "fr", "Salut", CLOCK);
-    expect(s.keys["k"]!.values.fr).toEqual({ value: "Salut", state: "reviewed", updatedAt: CLOCK() });
+    setTargetValue(s, "k", "fr", "Salut");
+    expect(s.keys["k"]!.values.fr).toEqual({ value: "Salut", state: "reviewed" });
   });
 
   it("trims surrounding whitespace on save and folds whitespace-only to an empty string", () => {
@@ -230,9 +230,9 @@ describe("mutations", () => {
     expect(s.keys["k"]!.values.en!.value).toBe("Padded");
     setSourceValue(s, "k", "  Hi  ");
     expect(s.keys["k"]!.values.en!.value).toBe("Hi");
-    setTargetValue(s, "k", "fr", "   ", CLOCK);
+    setTargetValue(s, "k", "fr", "   ");
     expect(s.keys["k"]!.values.fr!.value).toBe("");
-    applyMachineTranslation(s, "k", "es", "  Salut  ", CLOCK);
+    applyMachineTranslation(s, "k", "es", "  Salut  ");
     expect(s.keys["k"]!.values.es!.value).toBe("Salut");
   });
 
@@ -240,10 +240,10 @@ describe("mutations", () => {
     const s = defaultState();
     s.config.locales = ["en", "fr"];
     createKey(s, "k", "Hi");
-    applyMachineTranslation(s, "k", "fr", "Salut", CLOCK);
-    expect(s.keys["k"]!.values.fr).toEqual({ value: "Salut", state: "machine", source: "ai", updatedAt: CLOCK() });
+    applyMachineTranslation(s, "k", "fr", "Salut");
+    expect(s.keys["k"]!.values.fr).toEqual({ value: "Salut", state: "machine", source: "ai" });
     setKeyState(s, "k", "fr", "reviewed");
-    const changed = applyMachineTranslation(s, "k", "fr", "Bonjour", CLOCK);
+    const changed = applyMachineTranslation(s, "k", "fr", "Bonjour");
     expect(changed).toBe(false);
     expect(s.keys["k"]!.values.fr!.value).toBe("Salut");
   });
@@ -252,10 +252,10 @@ describe("mutations", () => {
     const s = defaultState();
     s.config.locales = ["en", "fr"];
     createKey(s, "k", "Hi");
-    setTargetValue(s, "k", "fr", "Salut", CLOCK);
-    expect(applyMachineTranslation(s, "k", "fr", "Bonjour", CLOCK)).toBe(false);
-    expect(applyMachineTranslation(s, "k", "fr", "Bonjour", CLOCK, true)).toBe(true);
-    expect(s.keys["k"]!.values.fr).toEqual({ value: "Bonjour", state: "machine", source: "ai", updatedAt: CLOCK() });
+    setTargetValue(s, "k", "fr", "Salut");
+    expect(applyMachineTranslation(s, "k", "fr", "Bonjour")).toBe(false);
+    expect(applyMachineTranslation(s, "k", "fr", "Bonjour", true)).toBe(true);
+    expect(s.keys["k"]!.values.fr).toEqual({ value: "Bonjour", state: "machine", source: "ai" });
   });
 
   it("renameKey moves the entry; deleteKey removes it", () => {
@@ -320,7 +320,7 @@ describe("mutations", () => {
     const s = defaultState();
     s.config.locales = ["en", "fr"];
     createKey(s, "k", "Hi");
-    setTargetValue(s, "k", "fr", "Salut", CLOCK);
+    setTargetValue(s, "k", "fr", "Salut");
     clearValue(s, "k", "fr");
     expect(s.keys["k"]!.values.fr).toBeUndefined();
     expect(s.keys["k"]!.values.en!.value).toBe("Hi");
@@ -354,8 +354,8 @@ describe("locale mutations", () => {
     const s = defaultState();
     s.config.locales = ["en", "fr", "es"];
     createKey(s, "k", "Hi");
-    setTargetValue(s, "k", "fr", "Salut", CLOCK);
-    setTargetValue(s, "k", "es", "Hola", CLOCK);
+    setTargetValue(s, "k", "fr", "Salut");
+    setTargetValue(s, "k", "es", "Hola");
     removeLocale(s, "fr");
     expect(s.config.locales).toEqual(["en", "es"]);
     expect(s.keys["k"]!.values.fr).toBeUndefined();
@@ -481,11 +481,10 @@ describe("plural state operations", () => {
   it("sets target plural forms as reviewed with a timestamp", () => {
     const s = base();
     createKey(s, "cart.items", "{count} items", CLOCK, { plural: { arg: "count" } });
-    setPluralForms(s, "cart.items", "pl", { one: "{count} produkt", few: "{count} produkty", many: "{count} produktów", other: "{count} produktu" }, CLOCK);
+    setPluralForms(s, "cart.items", "pl", { one: "{count} produkt", few: "{count} produkty", many: "{count} produktów", other: "{count} produktu" });
     expect(s.keys["cart.items"]!.values.pl).toEqual({
       forms: { one: "{count} produkt", few: "{count} produkty", many: "{count} produktów", other: "{count} produktu" },
       state: "reviewed",
-      updatedAt: "2026-06-04T10:00:00.000Z",
     });
   });
 
@@ -521,7 +520,7 @@ describe("convert scalar <-> plural", () => {
   it("converts a scalar key to plural, seeding each locale's value as 'other'", () => {
     const s = base();
     createKey(s, "cart.items", "items");
-    setTargetValue(s, "cart.items", "fr", "articles", CLOCK);
+    setTargetValue(s, "cart.items", "fr", "articles");
     convertToPlural(s, "cart.items", "count");
     expect(s.keys["cart.items"]!.plural).toEqual({ arg: "count" });
     expect(s.keys["cart.items"]!.values.en!.forms).toEqual({ other: "items" });
@@ -565,40 +564,38 @@ describe("applyMachineTranslationForms", () => {
 
   it("writes machine forms with source 'ai'", () => {
     const s = base();
-    const wrote = applyMachineTranslationForms(s, "cart.items", "pl", { one: "{count} produkt", other: "{count} produktu" }, CLOCK);
+    const wrote = applyMachineTranslationForms(s, "cart.items", "pl", { one: "{count} produkt", other: "{count} produktu" });
     expect(wrote).toBe(true);
     expect(s.keys["cart.items"]!.values.pl).toEqual({
       forms: { one: "{count} produkt", other: "{count} produktu" },
       state: "machine",
       source: "ai",
-      updatedAt: "2026-06-04T10:00:00.000Z",
     });
   });
 
   it("does not overwrite a reviewed target", () => {
     const s = base();
-    setPluralForms(s, "cart.items", "pl", { other: "{count} produktu" }, CLOCK);
-    const wrote = applyMachineTranslationForms(s, "cart.items", "pl", { other: "nope" }, CLOCK);
+    setPluralForms(s, "cart.items", "pl", { other: "{count} produktu" });
+    const wrote = applyMachineTranslationForms(s, "cart.items", "pl", { other: "nope" });
     expect(wrote).toBe(false);
     expect(s.keys["cart.items"]!.values.pl!.forms!.other).toBe("{count} produktu");
   });
 
   it("overwrites a reviewed target when force=true", () => {
     const s = base();
-    setPluralForms(s, "cart.items", "pl", { other: "{count} produktu" }, CLOCK);
-    expect(applyMachineTranslationForms(s, "cart.items", "pl", { other: "x" }, CLOCK)).toBe(false);
-    expect(applyMachineTranslationForms(s, "cart.items", "pl", { other: "{count} nowe" }, CLOCK, true)).toBe(true);
+    setPluralForms(s, "cart.items", "pl", { other: "{count} produktu" });
+    expect(applyMachineTranslationForms(s, "cart.items", "pl", { other: "x" })).toBe(false);
+    expect(applyMachineTranslationForms(s, "cart.items", "pl", { other: "{count} nowe" }, true)).toBe(true);
     expect(s.keys["cart.items"]!.values.pl).toEqual({
       forms: { other: "{count} nowe" },
       state: "machine",
       source: "ai",
-      updatedAt: "2026-06-04T10:00:00.000Z",
     });
   });
 
   it("scalar applyMachineTranslation rejects a plural key", () => {
     const s = base();
-    expect(() => applyMachineTranslation(s, "cart.items", "pl", "x", CLOCK)).toThrow(/plural/);
+    expect(() => applyMachineTranslation(s, "cart.items", "pl", "x")).toThrow(/plural/);
   });
 });
 
@@ -650,7 +647,7 @@ describe("plural write-boundary hardening", () => {
   it("setPluralForms accepts exact (=N) selectors alongside categories", () => {
     const s = base();
     createKey(s, "k", "{count, plural, =1{one thing} other{many things}}", CLOCK, { plural: { arg: "count" } });
-    setPluralForms(s, "k", "pl", { "=1": "jedna rzecz", other: "wiele rzeczy" } as never, CLOCK);
+    setPluralForms(s, "k", "pl", { "=1": "jedna rzecz", other: "wiele rzeczy" } as never);
     expect(s.keys["k"]!.values.pl!.forms).toEqual({ "=1": "jedna rzecz", other: "wiele rzeczy" });
   });
 
@@ -663,7 +660,7 @@ describe("plural write-boundary hardening", () => {
   it("plural setters trim form bodies", () => {
     const s = base();
     createKey(s, "k", "{count} items", CLOCK, { plural: { arg: "count" } });
-    setPluralForms(s, "k", "pl", { one: "  {count} produkt  ", other: "  {count} produktu  " }, CLOCK);
+    setPluralForms(s, "k", "pl", { one: "  {count} produkt  ", other: "  {count} produktu  " });
     expect(s.keys["k"]!.values.pl!.forms).toEqual({ one: "{count} produkt", other: "{count} produktu" });
   });
 });
@@ -673,8 +670,8 @@ describe("setSourcePluralForms — stale marking", () => {
     const s = defaultState();
     s.config.locales = ["en", "fr", "de"];
     createKey(s, "items", "{count} item", () => CLOCK(), { plural: { arg: "count" } });
-    s.keys["items"]!.values["fr"] = { forms: { one: "un article", other: "{count} articles" }, state: "reviewed", updatedAt: CLOCK() };
-    s.keys["items"]!.values["de"] = { forms: { one: "ein Artikel", other: "{count} Artikel" }, state: "machine", updatedAt: CLOCK() };
+    s.keys["items"]!.values["fr"] = { forms: { one: "un article", other: "{count} articles" }, state: "reviewed" };
+    s.keys["items"]!.values["de"] = { forms: { one: "ein Artikel", other: "{count} Artikel" }, state: "machine" };
     return s;
   }
 
@@ -732,8 +729,8 @@ describe("setSourceValue — stale marking", () => {
     const s = defaultState();
     s.config.locales = ["en", "fr", "de"];
     createKey(s, "k", "Hello");
-    s.keys["k"]!.values["fr"] = { value: "Bonjour", state: "reviewed", updatedAt: CLOCK() };
-    s.keys["k"]!.values["de"] = { value: "Hallo", state: "machine", updatedAt: CLOCK() };
+    s.keys["k"]!.values["fr"] = { value: "Bonjour", state: "reviewed" };
+    s.keys["k"]!.values["de"] = { value: "Hallo", state: "machine" };
     return s;
   }
 
@@ -846,7 +843,7 @@ describe("setKeyState validation", () => {
     const s = defaultState();
     s.config.locales = ["en", "fr"];
     createKey(s, "k", "Hi");
-    setTargetValue(s, "k", "fr", "Salut", CLOCK);
+    setTargetValue(s, "k", "fr", "Salut");
     // A bogus value would otherwise be persisted and then make loadState throw.
     expect(() => setKeyState(s, "k", "fr", "frozen" as never)).toThrow(GlotfileError);
   });
@@ -857,7 +854,7 @@ describe("setters canonicalize the locale argument", () => {
     const s = defaultState();
     s.config.locales = ["en", "fr"];
     createKey(s, "k", "Hi");
-    setTargetValue(s, "k", "FR", "Salut", CLOCK);
+    setTargetValue(s, "k", "FR", "Salut");
     expect(s.keys["k"]!.values["fr"]!.value).toBe("Salut");
     expect(s.keys["k"]!.values["FR"]).toBeUndefined();
   });
@@ -866,9 +863,9 @@ describe("setters canonicalize the locale argument", () => {
     const s = defaultState();
     s.config.locales = ["en", "fr"];
     createKey(s, "k", "Hi");
-    setTargetValue(s, "k", "fr", "Salut", CLOCK);
+    setTargetValue(s, "k", "fr", "Salut");
     setKeyState(s, "k", "fr", "reviewed");
-    expect(applyMachineTranslation(s, "k", "FR", "Bonjour", CLOCK)).toBe(false);
+    expect(applyMachineTranslation(s, "k", "FR", "Bonjour")).toBe(false);
     expect(s.keys["k"]!.values["fr"]!.value).toBe("Salut");
   });
 
@@ -876,7 +873,7 @@ describe("setters canonicalize the locale argument", () => {
     const s = defaultState();
     s.config.locales = ["en", "fr"];
     createKey(s, "k", "Hi");
-    setTargetValue(s, "k", "fr", "Salut", CLOCK);
+    setTargetValue(s, "k", "fr", "Salut");
     removeLocale(s, "FR");
     expect(s.config.locales).toEqual(["en"]);
     expect(s.keys["k"]!.values["fr"]).toBeUndefined();

@@ -234,7 +234,7 @@ describe("api", () => {
     const s = defaultState();
     s.config.locales = ["en", "fr"];
     createKey(s, "k", "Hello");
-    s.keys["k"]!.values["fr"] = { value: "Bonjour", state: "reviewed", updatedAt: "2026-01-01T00:00:00.000Z" };
+    s.keys["k"]!.values["fr"] = { value: "Bonjour", state: "reviewed" };
     saveState(file, s);
     const res = await app.request("/keys/k", {
       method: "PATCH", headers: { "content-type": "application/json" },
@@ -251,7 +251,7 @@ describe("api", () => {
     const s = defaultState();
     s.config.locales = ["en", "fr"];
     createKey(s, "k", "Hello");
-    s.keys["k"]!.values["fr"] = { value: "Bonjour", state: "reviewed", updatedAt: "2026-01-01T00:00:00.000Z" };
+    s.keys["k"]!.values["fr"] = { value: "Bonjour", state: "reviewed" };
     saveState(file, s);
     const res = await app.request("/keys/k/values/en", {
       method: "PUT", headers: { "content-type": "application/json" },
@@ -267,8 +267,8 @@ describe("api", () => {
     const s = defaultState();
     s.config.locales = ["en", "fr", "de"];
     createKey(s, "k", "Hello");
-    s.keys["k"]!.values["fr"] = { value: "Bonjour", state: "reviewed", updatedAt: "2026-01-01T00:00:00.000Z" };
-    s.keys["k"]!.values["de"] = { value: "Hallo", state: "reviewed", updatedAt: "2026-01-01T00:00:00.000Z" };
+    s.keys["k"]!.values["fr"] = { value: "Bonjour", state: "reviewed" };
+    s.keys["k"]!.values["de"] = { value: "Hallo", state: "reviewed" };
     saveState(file, s);
     const res = await app.request("/keys/k/values/fr", {
       method: "PUT", headers: { "content-type": "application/json" },

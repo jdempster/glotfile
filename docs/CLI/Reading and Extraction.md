@@ -16,7 +16,7 @@ glotfile get "auth.*" --locale en,fr
 | `--key <glob>` | Another key glob, merged with the positionals. |
 | `--locale <list>` | Locales to show, comma-separated. Default: every configured locale, **source included** (so you always have the reference text). |
 | `--state <list>` | Only keys whose shown target locales are in these states: `source`, `missing`, `machine`, `needs-review`, `reviewed`. |
-| `--fields <list>` | Cell fields to project: `value,state` (default), add `updatedAt`, or `all` for the whole key entry (context/notes/tags/placeholders/plural). |
+| `--fields <list>` | Cell fields to project: `value,state` (default), or `all` for the whole key entry (context/notes/tags/placeholders/plural). |
 | `--keys-only` | Print just the matched key names, one per line — the cheapest overview. |
 | `--format <fmt>` | `json` (default, nested) or `ndjson` (one flat row per cell). |
 | `--file`, `-f <path>` | Target a different state file. |

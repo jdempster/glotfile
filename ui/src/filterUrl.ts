@@ -2,10 +2,10 @@ import type { KeyFilter, StateFacet, PluralityFacet } from "./filter.js";
 import type { CheckId } from "./types.js";
 import { ALL_CHECKS, ALL_STATES, ALL_PLURALITY } from "./checks.js";
 
-export type SortMode = "key-asc" | "key-desc" | "created" | "updated";
+export type SortMode = "key-asc" | "key-desc" | "created";
 export type ViewMode = "multilingual" | "bilingual";
 
-const ALL_SORTS: SortMode[] = ["key-asc", "key-desc", "created", "updated"];
+const ALL_SORTS: SortMode[] = ["key-asc", "key-desc", "created"];
 const ALL_VIEWS: ViewMode[] = ["multilingual", "bilingual"];
 
 export const EMPTY_FILTER: KeyFilter = {
