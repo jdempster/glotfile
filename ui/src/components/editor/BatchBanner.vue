@@ -13,6 +13,11 @@ const props = withDefaults(defineProps<{ kind?: "translate" | "context" | "gloss
 const emit = defineEmits<{ (e: "changed"): void }>();
 
 const pending = ref<BatchPending | null>(null);
+// Whether the selected provider supports batch at all. A pending batch can
+// outlive the provider that started it (e.g. submitted under Anthropic, then
+// switched to a sync-only provider) — without a batch-capable provider it can
+// neither be polled nor applied, so the banner must stay hidden.
+const supported = ref(false);
 const applying = ref(false);
 let timer: ReturnType<typeof setInterval> | undefined;
 
@@ -26,6 +31,7 @@ async function refresh() {
     } else {
       s = await batchStatus();
     }
+    supported.value = s.supported;
     pending.value = s.pending;
   } catch {
     // Transient fetch failure — keep showing the last known state.
@@ -95,7 +101,7 @@ async function cancel() {
 
 <template>
   <div
-    v-if="pending"
+    v-if="pending && supported"
     class="flex items-center gap-3 rounded-md border bg-muted/40 px-3 py-2 text-sm"
   >
     <component :is="ended ? Check : LoaderCircle" class="size-4 shrink-0" :class="ended ? 'text-emerald-600 dark:text-emerald-400' : 'animate-spin text-primary'" />

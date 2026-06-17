@@ -28,6 +28,26 @@ describe("BatchBanner", () => {
     expect(w.find("div").exists()).toBe(false);
   });
 
+  it("hides the banner when the provider does not support batch, even with a pending batch", async () => {
+    // A batch can outlive the provider that started it (submitted under Anthropic,
+    // then switched to a sync-only provider). Without a batch-capable provider it
+    // can't be applied, so the banner must stay hidden.
+    vi.mocked(batchStatus).mockResolvedValue({
+      supported: false,
+      pending: {
+        batchId: "batch_stale",
+        createdAt: "2026-06-12T00:00:00Z",
+        model: "claude-opus-4-8",
+        total: 10,
+        status: "ended",
+        counts: { processing: 0, succeeded: 10, errored: 0, canceled: 0, expired: 0 },
+      },
+    });
+    const w = mount(BatchBanner);
+    await flushPromises();
+    expect(w.find("div").exists()).toBe(false);
+  });
+
   it("shows progress while in flight and disables Apply", async () => {
     vi.mocked(batchStatus).mockResolvedValue({
       supported: true,
