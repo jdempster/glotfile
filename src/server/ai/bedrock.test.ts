@@ -39,6 +39,19 @@ describe("BedrockProvider", () => {
     expect(send).toHaveBeenCalledTimes(2);
   });
 
+  it("treats a non-array tool-use `items` as malformed instead of crashing on reply.map", async () => {
+    // The model emitted structured tool-use whose `items` is an object, not an
+    // array (seen in the wild). It must degrade to a per-item error, not throw
+    // a raw TypeError ("reply.map is not a function") that sinks the whole run.
+    const send = vi.fn(async () => ({
+      output: { message: { content: [{ toolUse: { name: "emit_translations", input: { items: { "0": "Salut" } } } }] } },
+    }));
+    const deps = { client: { send }, makeCommand: (i: unknown) => i };
+    const [res] = await new BedrockProvider(config, deps as never).translate([baseReq]);
+    expect(res!.translation).toBeUndefined();
+    expect(res!.error).toMatch(/malformed/i);
+  });
+
   it("reads plural forms from the tool-use output", async () => {
     const pluralReq: TranslationRequest = {
       id: "0", key: "k", source: "{count} items", sourceLocale: "en", targetLocale: "fr", placeholders: ["count"],
