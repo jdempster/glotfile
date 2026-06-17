@@ -144,7 +144,11 @@ export class BedrockProvider implements TranslationProvider {
     if ((res as { stopReason?: string }).stopReason === "max_tokens") {
       throw new MalformedReplyError(text || JSON.stringify(tool?.input ?? {}));
     }
-    if (tool?.input?.items) return tool.input.items;
+    // Only trust the tool output when `items` is actually an array; a model
+    // emitting it as an object/string would otherwise flow straight into
+    // reply.map and crash the run. Anything else falls through to the text path
+    // (and, ultimately, MalformedReplyError) like every other malformed reply.
+    if (Array.isArray(tool?.input?.items)) return tool.input.items;
     // Fallback for Meta (no tool-use) or a malformed reply: parse a JSON text
     // block. An unparseable reply throws MalformedReplyError; runBatched logs
     // the raw reply and retries the batch once before degrading.
