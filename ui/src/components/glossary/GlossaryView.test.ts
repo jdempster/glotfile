@@ -7,6 +7,7 @@ import type { GlossarySuggestion } from "@/types.js";
 
 vi.mock("@/api.js", () => ({
   getGlossary: vi.fn(() => Promise.resolve([])),
+  getFeatures: vi.fn(() => Promise.resolve({ glossarySuggest: true })),
   fetchState: vi.fn(() =>
     Promise.resolve({
       version: 1,
@@ -22,7 +23,7 @@ vi.mock("@/api.js", () => ({
 
 vi.mock("@/liveReload", () => ({ onExternalChange: vi.fn() }));
 
-import { getGlossarySuggestions, dismissGlossarySuggestion } from "@/api.js";
+import { getGlossarySuggestions, dismissGlossarySuggestion, getFeatures } from "@/api.js";
 
 const suggestion: GlossarySuggestion = {
   term: "Acme",
@@ -38,6 +39,7 @@ function mountView() {
 describe("GlossaryView suggestions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getFeatures).mockResolvedValue({ glossarySuggest: true });
     vi.mocked(getGlossarySuggestions).mockResolvedValue([suggestion]);
   });
 
@@ -93,5 +95,19 @@ describe("GlossaryView suggestions", () => {
     expect(dialog.exists()).toBe(true);
     expect(dialog.props("open")).toBe(true);
     expect(dialog.props("prefill")).toMatchObject({ term: "Acme" });
+  });
+
+  it("hides AI suggestion affordances and skips loading them when the beta flag is off", async () => {
+    vi.mocked(getFeatures).mockResolvedValue({ glossarySuggest: false });
+
+    const w = mountView();
+    await flushPromises();
+    await nextTick();
+
+    // No suggestion row rendered even though getGlossarySuggestions would return one.
+    expect(w.text()).not.toContain("Acme");
+    expect(w.text()).not.toContain("Suggest terms with AI");
+    // And we don't even fetch suggestions when the feature is hidden.
+    expect(getGlossarySuggestions).not.toHaveBeenCalled();
   });
 });

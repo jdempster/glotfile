@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { Plus, Pencil, Trash2, Search, X, Sparkles } from "lucide-vue-next";
-import { getGlossary, fetchState, deleteGlossaryEntry, getGlossarySuggestions, dismissGlossarySuggestion as apiDismiss, removeGlossarySuggestion } from "@/api.js";
+import { getGlossary, getFeatures, fetchState, deleteGlossaryEntry, getGlossarySuggestions, dismissGlossarySuggestion as apiDismiss, removeGlossarySuggestion } from "@/api.js";
 import { onExternalChange } from "@/liveReload";
 import { toast } from "@/components/ui/toast";
 import type { GlossaryEntry, GlossarySuggestion } from "@/types.js";
@@ -44,7 +44,14 @@ const suggestOpen = ref(false);
 const prefill = ref<GlossaryEntry | null>(null);
 const acceptingTerm = ref<string | null>(null);
 
-async function reloadSuggestions() { suggestions.value = await getGlossarySuggestions(); }
+// AI glossary suggestions are gated behind a server beta flag (GLOTFILE_BETA_*).
+// Off by default — hide the affordances and skip loading suggestions.
+const betaSuggest = ref(false);
+
+async function reloadSuggestions() {
+  if (!betaSuggest.value) { suggestions.value = []; return; }
+  suggestions.value = await getGlossarySuggestions();
+}
 
 async function reload() {
   const [glossary, state] = await Promise.all([getGlossary(), fetchState()]);
@@ -54,7 +61,10 @@ async function reload() {
   loaded.value = true;
 }
 reload();
-reloadSuggestions();
+getFeatures()
+  .then((f) => { betaSuggest.value = f.glossarySuggest; })
+  .catch(() => { betaSuggest.value = false; })
+  .finally(() => { void reloadSuggestions(); });
 // Refresh when the catalog changes on disk out of band (the glossary lives in the
 // state file too).
 onExternalChange(() => { void reload(); void reloadSuggestions(); });
@@ -122,7 +132,7 @@ async function confirmDelete() {
           <p class="text-sm text-muted-foreground">Do-not-translate terms and forced translations.</p>
         </div>
         <div class="flex items-center gap-2">
-          <Button variant="outline" @click="suggestOpen = true">
+          <Button v-if="betaSuggest" variant="outline" @click="suggestOpen = true">
             <Sparkles class="size-4" /> Suggest terms with AI
           </Button>
           <Button @click="add">
@@ -149,9 +159,9 @@ async function confirmDelete() {
         </button>
       </div>
 
-      <BatchBanner ref="suggestBanner" kind="glossary-suggest" @changed="reloadSuggestions" />
+      <BatchBanner v-if="betaSuggest" ref="suggestBanner" kind="glossary-suggest" @changed="reloadSuggestions" />
 
-      <div v-if="suggestions.length" class="flex flex-col gap-2">
+      <div v-if="betaSuggest && suggestions.length" class="flex flex-col gap-2">
         <p class="text-sm font-medium">AI term suggestions</p>
         <ul class="flex flex-col gap-2">
           <li
@@ -244,7 +254,7 @@ async function confirmDelete() {
       @saved="onDialogSaved"
     />
 
-    <GlossarySuggestDialog v-model:open="suggestOpen" @found="reloadSuggestions" @batch-submitted="suggestBanner?.refresh()" />
+    <GlossarySuggestDialog v-if="betaSuggest" v-model:open="suggestOpen" @found="reloadSuggestions" @batch-submitted="suggestBanner?.refresh()" />
 
     <Dialog :open="deleting !== null" @update:open="(v) => { if (!v) deleting = null; }">
       <DialogContent class="max-w-md">

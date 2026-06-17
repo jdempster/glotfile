@@ -40,6 +40,8 @@ Use it for two things:
 
 ## AI term suggestions
 
+> **Beta — off by default.** This feature is still being refined and is hidden unless you opt in. Start Glotfile with the `GLOTFILE_BETA_GLOSSARY_SUGGEST=1` environment variable set to reveal the **Suggest terms with AI** button, the `suggest-glossary` command, and the related API routes. Without it, the affordances are hidden and the routes return 404.
+
 Instead of building the glossary by hand, you can let Glotfile scan your source strings and propose candidates. Hit **Suggest terms with AI** in the Glossary view, or run:
 
 ```

@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context, type Next } from "hono";
 import { streamSSE } from "hono/streaming";
 import {
   loadState, saveState, createKey, renameKey, deleteKey,
@@ -28,6 +28,7 @@ import { getAdapter, type ExportedFile, type ExportWarning } from "./adapters/in
 import { readFileSync, existsSync, readdirSync, statSync, rmSync } from "node:fs";
 import { dirname, resolve, basename, relative, sep } from "node:path";
 import { makeProvider } from "./ai/index.js";
+import { betaFeatures, glossarySuggestEnabled } from "./beta.js";
 import { selectRequests, applyResults, attachScreenshotsForProvider, runLocaleParallel } from "./ai/run.js";
 import { buildSystemPrompt, supportsBatchTranslate, supportsBatchComplete, type TranslationProvider, type TranslationRequest } from "./ai/provider.js";
 import { explainProviderError } from "./ai/explain-error.js";
@@ -162,6 +163,10 @@ export function createApi(deps: ApiDeps): Hono {
   const uiPrefsPath = deps.uiPrefsPath ?? defaultUiPrefsPath();
 
   app.get("/state", (c) => c.json(load()));
+
+  // Beta-feature flags. The UI fetches this on load to decide whether to render
+  // affordances that are still behind an env-var gate (see ./beta.ts).
+  app.get("/features", (c) => c.json(betaFeatures()));
 
   // Server-sent events: the UI opens this once and re-fetches whenever an external
   // change to the state lands on disk. Held open until the client disconnects; a
@@ -759,6 +764,21 @@ export function createApi(deps: ApiDeps): Hono {
     logChange({ kind: "glossary", summary: `Deleted glossary term "${term}"`, before });
     return c.json({ ok: true });
   });
+
+  // Glossary AI suggestions are a beta feature (see ./beta.ts). Gate every
+  // suggest route — registered before the handlers below so it runs first — so
+  // a hidden UI can't be driven via the API either. 404 keeps the surface area
+  // invisible rather than advertising a disabled feature.
+  const requireGlossarySuggest = async (c: Context, next: Next) => {
+    if (!glossarySuggestEnabled()) {
+      return c.json({ error: "Glossary AI suggestions are in beta. Set GLOTFILE_BETA_GLOSSARY_SUGGEST=1 to enable them." }, 404);
+    }
+    await next();
+  };
+  app.use("/glossary/suggest", requireGlossarySuggest);
+  app.use("/glossary/suggest/*", requireGlossarySuggest);
+  app.use("/glossary/suggestions", requireGlossarySuggest);
+  app.use("/glossary/suggestions/*", requireGlossarySuggest);
 
   app.get("/glossary/suggestions", (c) => {
     const s = load();

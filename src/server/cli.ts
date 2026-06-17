@@ -13,6 +13,7 @@ import { STATES, type LocaleState, type State } from "./schema.js";
 import { exportToDisk } from "./export-run.js";
 import { detectFormat, splitDirFor } from "./storage.js";
 import { makeProvider } from "./ai/index.js";
+import { glossarySuggestEnabled } from "./beta.js";
 import { loadLocalSettings } from "./local-settings.js";
 import { selectRequests, applyResults, attachScreenshotsForProvider, runLocaleParallel } from "./ai/run.js";
 import { buildSystemPrompt, supportsBatchTranslate, supportsBatchComplete, type BatchTranslationProvider, type TranslationProvider } from "./ai/provider.js";
@@ -895,6 +896,11 @@ async function runBuildContext(args: ParsedArgs): Promise<void> {
 }
 
 async function runSuggestGlossary(args: ParsedArgs): Promise<void> {
+  if (!glossarySuggestEnabled()) {
+    console.error("`suggest-glossary` is a beta feature. Set GLOTFILE_BETA_GLOSSARY_SUGGEST=1 to enable it.");
+    process.exitCode = 1;
+    return;
+  }
   const state = loadState(args.statePath);
   const projectRoot = dirname(resolve(args.statePath));
   const sources = selectGlossarySources(state, { keyGlob: args.keyGlob, limit: args.limit, since: args.since });
@@ -1543,7 +1549,10 @@ function printHelp(command?: Exclude<ParsedArgs["command"], "help" | "version">)
     console.log(`${lines.join("\n")}\n${formatOpts([...options, ...GLOBAL_OPTS])}`);
     return;
   }
-  const commands = COMMANDS.map((c) => [c, COMMAND_HELP[c].summary] as Opt);
+  // Hide beta commands from the top-level listing unless their env gate is set.
+  const commands = COMMANDS
+    .filter((c) => c !== "suggest-glossary" || glossarySuggestEnabled())
+    .map((c) => [c, COMMAND_HELP[c].summary] as Opt);
   console.log(
     [
       "glotfile — a local-first translation catalog for your repo.",
