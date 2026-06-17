@@ -1479,7 +1479,7 @@ const COMMAND_HELP: Record<Exclude<ParsedArgs["command"], "help" | "version">, {
       ["--key <glob>", "Additional key glob (merged with positionals)"],
       ["--locale <list>", "Locales to show (default: all configured locales, source included)"],
       ["--state <list>", "Only keys whose shown target locales are in these states: source|missing|machine|needs-review|reviewed"],
-      ["--fields <list>", "Cell fields to project: value,state,updatedAt (default value,state); 'all' = the full key entry"],
+      ["--fields <list>", "Cell fields to project: value,state (default value,state); 'all' = the full key entry"],
       ["--keys-only", "Print just the matched key names, one per line"],
       ["--format <fmt>", "json (default, nested) or ndjson (one row per cell)"],
     ],

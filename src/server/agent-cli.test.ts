@@ -87,7 +87,7 @@ describe("applyOps", () => {
     const r = applyOps(s, ops, { clock: CLOCK });
     expect(r.errors).toEqual([]);
     expect(r.applied).toBe(4);
-    expect(s.keys["auth.login"]!.values.de).toEqual({ value: "Anmelden", state: "machine", updatedAt: CLOCK() });
+    expect(s.keys["auth.login"]!.values.de).toEqual({ value: "Anmelden", state: "machine" });
     expect(s.keys["home.cta"]!.values.en!.value).toBe("Get started");
     expect(s.keys["auth.logout"]!.values.de!.state).toBe("reviewed");
     expect(s.keys["auth.logout"]!.values.fr).toBeUndefined();

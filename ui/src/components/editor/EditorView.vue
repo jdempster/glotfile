@@ -278,18 +278,6 @@ const rows = computed<string[]>(() => {
     };
     return [...keys].sort((a, b) => createdAt(b) - createdAt(a));
   }
-  if (sort.value === "updated") {
-    const updatedAt = (k: string): number => {
-      const vals = Object.values(s?.keys[k]?.values ?? {});
-      let max = 0;
-      for (const v of vals) {
-        const t = v.updatedAt ? Date.parse(v.updatedAt) : 0;
-        if (t > max) max = t;
-      }
-      return max;
-    };
-    return [...keys].sort((a, b) => updatedAt(b) - updatedAt(a));
-  }
   // key-asc is filterKeys' natural order.
   return keys;
 });
@@ -496,7 +484,6 @@ async function onCreated(key: string) {
             <SelectItem value="key-asc">Key A→Z</SelectItem>
             <SelectItem value="key-desc">Key Z→A</SelectItem>
             <SelectItem value="created">Recently created</SelectItem>
-            <SelectItem value="updated">Recently updated</SelectItem>
           </SelectContent>
         </Select>
 

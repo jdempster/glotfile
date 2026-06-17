@@ -180,7 +180,6 @@ export function setSourceValue(state: State, key: string, value: string): void {
     for (const [locale, lv] of Object.entries(entry.values)) {
       if (locale === state.config.sourceLocale) continue;
       if (lv.state === "reviewed" || lv.state === "machine") {
-        // updatedAt is intentionally preserved — it reflects when the translation was last written.
         lv.state = "needs-review";
       }
     }
@@ -188,10 +187,10 @@ export function setSourceValue(state: State, key: string, value: string): void {
   }
 }
 
-export function setTargetValue(state: State, key: string, locale: string, value: string, clock: Clock = systemClock): void {
+export function setTargetValue(state: State, key: string, locale: string, value: string): void {
   const entry = requireKey(state, key);
   if (entry.plural) throw new GlotfileError(`Key is a plural; use the plural setters: ${key}`);
-  entry.values[canonLocale(locale)] = { value: value.trim(), state: "reviewed", updatedAt: clock() };
+  entry.values[canonLocale(locale)] = { value: value.trim(), state: "reviewed" };
 }
 
 function formSignature(forms: Partial<Record<PluralForm, string>>): string {
@@ -211,7 +210,6 @@ export function setSourcePluralForms(state: State, key: string, forms: Partial<R
     for (const [locale, lv] of Object.entries(entry.values)) {
       if (locale === state.config.sourceLocale) continue;
       if (lv.state === "reviewed" || lv.state === "machine") {
-        // updatedAt is intentionally preserved — it reflects when the translation was last written.
         lv.state = "needs-review";
       }
     }
@@ -224,12 +222,11 @@ export function setPluralForms(
   key: string,
   locale: string,
   forms: Partial<Record<PluralForm, string>>,
-  clock: Clock = systemClock,
 ): void {
   const entry = requirePlural(state, key);
   const loc = canonLocale(locale);
   if (loc === state.config.sourceLocale) throw new GlotfileError("Use setSourcePluralForms for the source locale");
-  entry.values[loc] = { forms: normalizeForms(forms), state: "reviewed", updatedAt: clock() };
+  entry.values[loc] = { forms: normalizeForms(forms), state: "reviewed" };
 }
 
 export function convertToPlural(state: State, key: string, arg: string): void {
@@ -430,29 +427,28 @@ export function removeCustomWord(state: State, word: string): void {
 
 // Returns false (no write) if the target is reviewed (FR-21), unless `force` is set —
 // an explicit per-cell re-translate overwrites a reviewed value (and resets it to machine).
-export function applyMachineTranslation(state: State, key: string, locale: string, value: string, clock: Clock = systemClock, force = false): boolean {
+export function applyMachineTranslation(state: State, key: string, locale: string, value: string, force = false): boolean {
   const entry = requireKey(state, key);
   if (entry.plural) throw new GlotfileError(`Key is a plural; use applyMachineTranslationForms: ${key}`);
   const loc = canonLocale(locale);
   if (!force && entry.values[loc]?.state === "reviewed") return false;
-  entry.values[loc] = { value: value.trim(), state: "machine", source: "ai", updatedAt: clock() };
+  entry.values[loc] = { value: value.trim(), state: "machine", source: "ai" };
   return true;
 }
 
 // Forms equivalent of applyMachineTranslation: honours the reviewed-guard
-// (FR-21) and stamps machine/ai/updatedAt. Returns false (no write) when the
+// (FR-21) and stamps machine/ai. Returns false (no write) when the
 // target is already reviewed, unless `force` is set (an explicit re-translate).
 export function applyMachineTranslationForms(
   state: State,
   key: string,
   locale: string,
   forms: Partial<Record<PluralCategory, string>>,
-  clock: Clock = systemClock,
   force = false,
 ): boolean {
   const entry = requirePlural(state, key);
   const loc = canonLocale(locale);
   if (!force && entry.values[loc]?.state === "reviewed") return false;
-  entry.values[loc] = { forms: normalizeForms(forms), state: "machine", source: "ai", updatedAt: clock() };
+  entry.values[loc] = { forms: normalizeForms(forms), state: "machine", source: "ai" };
   return true;
 }

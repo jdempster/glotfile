@@ -1314,7 +1314,7 @@ export function createApi(deps: ApiDeps): Hono {
       }
       // Re-load before applying so user edits made during the AI call are not overwritten.
       const latest = load();
-      ({ written, errors } = applyResults(latest, toTranslate, results, undefined, force));
+      ({ written, errors } = applyResults(latest, toTranslate, results, force));
       const usage = provider.takeUsage?.();
       // The AI log records only what was SENT to the provider (egress-only).
       const entry: LogEntry = {
