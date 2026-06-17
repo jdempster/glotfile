@@ -136,6 +136,7 @@ export interface BatchPending {
   error?: string;
 }
 export interface BatchStatusResponse { supported: boolean; pending: BatchPending | null }
+export interface Features { glossarySuggest: boolean }
 export interface BatchApplyResult {
   written: number;
   errors: TranslateError[];

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, readFileSync, existsSync, symlinkSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -2290,6 +2290,10 @@ describe("GET /events (live-reload SSE)", () => {
 });
 
 describe("POST /glossary/suggest + GET /glossary/suggestions", () => {
+  // Glossary AI suggestions are behind a beta env gate; enable it for these tests.
+  beforeAll(() => { process.env.GLOTFILE_BETA_GLOSSARY_SUGGEST = "1"; });
+  afterAll(() => { delete process.env.GLOTFILE_BETA_GLOSSARY_SUGGEST; });
+
   function setupSuggest() {
     const dir = mkdtempSync(join(tmpdir(), "glot-suggest-"));
     const file = join(dir, "glotfile.json");
@@ -2418,6 +2422,10 @@ describe("POST /glossary/suggest + GET /glossary/suggestions", () => {
 });
 
 describe("glossary-suggest batch endpoints", () => {
+  // Glossary AI suggestions are behind a beta env gate; enable it for these tests.
+  beforeAll(() => { process.env.GLOTFILE_BETA_GLOSSARY_SUGGEST = "1"; });
+  afterAll(() => { delete process.env.GLOTFILE_BETA_GLOSSARY_SUGGEST; });
+
   // Each test gets its own temp dir so glossary-suggest-batch.json state doesn't bleed.
   function setupGlossaryBatch() {
     const dir = mkdtempSync(join(tmpdir(), "glot-gloss-batch-"));
@@ -2576,5 +2584,33 @@ describe("glossary-suggest batch endpoints", () => {
     const body = await res.json() as { supported: boolean; pending: unknown };
     expect(typeof body.supported).toBe("boolean");
     expect(body.pending).toBeNull();
+  });
+});
+
+describe("glossary-suggest beta gate (env unset)", () => {
+  // No beforeAll setting the env var — the feature is off by default.
+  beforeAll(() => { delete process.env.GLOTFILE_BETA_GLOSSARY_SUGGEST; });
+
+  it("GET /features reports glossarySuggest:false", async () => {
+    const { app } = setup();
+    const res = await app.request("/features");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ glossarySuggest: false });
+  });
+
+  it("404s every glossary-suggest route when disabled", async () => {
+    const { app } = setup();
+    const routes: [string, RequestInit?][] = [
+      ["/glossary/suggestions"],
+      ["/glossary/suggest", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }],
+      ["/glossary/suggest/estimate", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }],
+      ["/glossary/suggest/batch/status"],
+      ["/glossary/suggest/batch", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }],
+      ["/glossary/suggestions/dismiss", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ term: "x" }) }],
+    ];
+    for (const [path, init] of routes) {
+      const res = await app.request(path, init);
+      expect(res.status, `${path} should be gated`).toBe(404);
+    }
   });
 });
