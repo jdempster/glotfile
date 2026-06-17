@@ -177,6 +177,9 @@ describe("api", () => {
     s.keys = {
       greeting: { values: { en: { value: "Hi {name}", state: "source" }, fr: { value: "Salut", state: "reviewed" } } },
     };
+    // Spelling is incidental here; turning it off keeps the test off the slow
+    // real-dictionary load path (cold nspell load is flaky under suite load).
+    s.config.lint = { rules: { spelling: "off" } };
     saveState(file, s);
 
     const res = await app.request("/lint");
@@ -189,7 +192,7 @@ describe("api", () => {
     expect(body.counts.error).toBeGreaterThan(0);
 
     // Turning the rule off in config.lint.rules removes it from the report.
-    s.config.lint = { rules: { "placeholder-mismatch": "off" } };
+    s.config.lint = { rules: { "placeholder-mismatch": "off", spelling: "off" } };
     saveState(file, s);
     const skipped = await (await app.request("/lint")).json();
     expect(skipped.findings.some((f: { ruleId: string }) => f.ruleId === "placeholder-mismatch")).toBe(false);
