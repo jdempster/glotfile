@@ -233,3 +233,15 @@ Now translating a locale, or adding a key, changes only the relevant file(s).
 New projects stay as a single `glotfile.json`; splitting is an explicit,
 one-time, reviewable commit. The CLI, web UI, and exports behave identically
 either way.
+
+## Sponsor
+
+Glotfile is free and MIT-licensed, built and maintained in the open. If it saves
+you time, consider [sponsoring its development](https://github.com/sponsors/jdempster) — even a few dollars a month helps.
+
+The immediate goal is **proper distribution**: code signing and notarization so
+Glotfile installs without Gatekeeper or SmartScreen warnings on macOS and
+Windows. That needs an Apple Developer ID (~$99/yr) and a Windows certificate —
+small, recurring costs that sponsorship covers directly.
+
+[**❤ Sponsor Glotfile →**](https://github.com/sponsors/jdempster)
