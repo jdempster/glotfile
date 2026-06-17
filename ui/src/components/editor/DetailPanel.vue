@@ -34,7 +34,7 @@ const fmtDate = (iso?: string) => (iso ? new Date(iso).toLocaleString() : "—")
 const keyNameHtml = computed(() => {
   if (!props.keyName) return "";
   const escaped = props.keyName.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  return escaped.replace(/\./g, ".<wbr>");
+  return escaped.replace(/\./g, "<wbr>.");
 });
 
 const isPlural = computed(() => Boolean(props.entry?.plural));

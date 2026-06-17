@@ -41,7 +41,7 @@ const props = defineProps<{
 
 const keyNameHtml = computed(() => {
   const escaped = props.keyName.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  return escaped.replace(/\./g, ".<wbr>");
+  return escaped.replace(/\./g, "<wbr>.");
 });
 
 const issuesByLocale = computed(() => {
