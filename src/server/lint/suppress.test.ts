@@ -5,7 +5,6 @@ import { addSuppression, removeSuppression, setSourceValue, setSourcePluralForms
 import { validate } from "../schema.js";
 import type { State, KeyEntry } from "../schema.js";
 
-const clock = () => "2026-01-01T00:00:00.000Z";
 const quiet = { loadSpeller: async () => null, warn: () => {} };
 
 function state(): State {
@@ -53,29 +52,29 @@ describe("sourceHash", () => {
 });
 
 describe("addSuppression / removeSuppression", () => {
-  it("records rule, locale, source hash and timestamp", () => {
+  it("records rule, locale and source hash", () => {
     const s = state();
-    addSuppression(s, "a.key", "identical-to-source", "fr", clock);
+    addSuppression(s, "a.key", "identical-to-source", "fr");
     const sup = s.keys["a.key"]!.suppressions![0]!;
-    expect(sup).toMatchObject({ rule: "identical-to-source", locale: "fr", at: clock() });
+    expect(sup).toMatchObject({ rule: "identical-to-source", locale: "fr" });
     expect(sup.source).toBe(sourceHash(s.keys["a.key"]!, "en"));
   });
 
   it("replaces an existing suppression for the same rule+locale", () => {
     const s = state();
-    addSuppression(s, "a.key", "identical-to-source", "fr", clock);
-    addSuppression(s, "a.key", "identical-to-source", "fr", clock);
+    addSuppression(s, "a.key", "identical-to-source", "fr");
+    addSuppression(s, "a.key", "identical-to-source", "fr");
     expect(s.keys["a.key"]!.suppressions).toHaveLength(1);
   });
 
   it("rejects unknown rule ids", () => {
     const s = state();
-    expect(() => addSuppression(s, "a.key", "nope", "fr", clock)).toThrow(/rule/i);
+    expect(() => addSuppression(s, "a.key", "nope", "fr")).toThrow(/rule/i);
   });
 
   it("removeSuppression drops the entry and the empty array", () => {
     const s = state();
-    addSuppression(s, "a.key", "identical-to-source", "fr", clock);
+    addSuppression(s, "a.key", "identical-to-source", "fr");
     removeSuppression(s, "a.key", "identical-to-source", "fr");
     expect(s.keys["a.key"]!.suppressions).toBeUndefined();
   });
@@ -84,7 +83,7 @@ describe("addSuppression / removeSuppression", () => {
 describe("findSuppression / staleness", () => {
   it("matches only while the source hash is current", () => {
     const s = state();
-    addSuppression(s, "a.key", "identical-to-source", "fr", clock);
+    addSuppression(s, "a.key", "identical-to-source", "fr");
     const entry = s.keys["a.key"]!;
     expect(findSuppression(entry, "en", "identical-to-source", "fr")).toBeTruthy();
     entry.values.en!.value = "Logotype";
@@ -94,7 +93,7 @@ describe("findSuppression / staleness", () => {
   it("pruneStaleSuppressions removes only stale entries", () => {
     const s = state();
     const entry = s.keys["a.key"]!;
-    addSuppression(s, "a.key", "identical-to-source", "fr", clock);
+    addSuppression(s, "a.key", "identical-to-source", "fr");
     entry.suppressions!.push({ rule: "whitespace", locale: "fr", source: "deadbeef" });
     pruneStaleSuppressions(entry, "en");
     expect(entry.suppressions).toHaveLength(1);
@@ -105,7 +104,7 @@ describe("findSuppression / staleness", () => {
 describe("source edits expire suppressions", () => {
   it("setSourceValue prunes suppressions when the source meaningfully changes", () => {
     const s = state();
-    addSuppression(s, "a.key", "identical-to-source", "fr", clock);
+    addSuppression(s, "a.key", "identical-to-source", "fr");
     setSourceValue(s, "a.key", "Logo "); // whitespace-only change: keep
     expect(s.keys["a.key"]!.suppressions).toHaveLength(1);
     setSourceValue(s, "a.key", "Logotype");
@@ -114,7 +113,7 @@ describe("source edits expire suppressions", () => {
 
   it("setSourcePluralForms prunes suppressions when forms change", () => {
     const s = state();
-    addSuppression(s, "p.key", "identical-to-source", "fr", clock);
+    addSuppression(s, "p.key", "identical-to-source", "fr");
     setSourcePluralForms(s, "p.key", { one: "{n} file", other: "{n} files" });
     expect(s.keys["p.key"]!.suppressions).toHaveLength(1);
     setSourcePluralForms(s, "p.key", { one: "{n} doc", other: "{n} docs" });
@@ -123,7 +122,7 @@ describe("source edits expire suppressions", () => {
 
   it("removeLocale drops that locale's suppressions", () => {
     const s = state();
-    addSuppression(s, "a.key", "identical-to-source", "fr", clock);
+    addSuppression(s, "a.key", "identical-to-source", "fr");
     removeLocale(s, "fr");
     expect(s.keys["a.key"]!.suppressions).toBeUndefined();
   });
@@ -132,7 +131,7 @@ describe("source edits expire suppressions", () => {
 describe("runLint with suppressions", () => {
   it("drops suppressed findings and reports a suppressed count", async () => {
     const s = state();
-    addSuppression(s, "a.key", "identical-to-source", "fr", clock);
+    addSuppression(s, "a.key", "identical-to-source", "fr");
     const r = await runLint(s, quiet);
     expect(r.findings.some((f) => f.key === "a.key" && f.ruleId === "identical-to-source")).toBe(false);
     expect(r.counts.suppressed).toBe(1);
@@ -140,7 +139,7 @@ describe("runLint with suppressions", () => {
 
   it("includeSuppressed keeps them, flagged, without affecting counts or ok", async () => {
     const s = state();
-    addSuppression(s, "a.key", "identical-to-source", "fr", clock);
+    addSuppression(s, "a.key", "identical-to-source", "fr");
     const r = await runLint(s, { ...quiet, includeSuppressed: true });
     const f = r.findings.find((x) => x.key === "a.key" && x.ruleId === "identical-to-source");
     expect(f?.suppressed).toBe(true);
@@ -150,7 +149,7 @@ describe("runLint with suppressions", () => {
 
   it("a stale suppression no longer hides the finding", async () => {
     const s = state();
-    addSuppression(s, "a.key", "identical-to-source", "fr", clock);
+    addSuppression(s, "a.key", "identical-to-source", "fr");
     // Simulate an out-of-band source edit that bypassed the setters.
     s.keys["a.key"]!.values.en!.value = "Brand";
     s.keys["a.key"]!.values.fr!.value = "Brand";
@@ -164,7 +163,7 @@ describe("split storage", () => {
   it("suppressions survive disassemble/assemble", async () => {
     const { disassemble, assemble } = await import("../storage.js");
     const s = state();
-    addSuppression(s, "a.key", "identical-to-source", "fr", clock);
+    addSuppression(s, "a.key", "identical-to-source", "fr");
     const reloaded = validate(assemble(disassemble(s)));
     expect(reloaded.keys["a.key"]!.suppressions).toEqual(s.keys["a.key"]!.suppressions);
   });
@@ -173,7 +172,7 @@ describe("split storage", () => {
 describe("schema validation", () => {
   it("accepts valid suppressions and rejects malformed ones", () => {
     const s = state();
-    addSuppression(s, "a.key", "identical-to-source", "fr", clock);
+    addSuppression(s, "a.key", "identical-to-source", "fr");
     const reloaded = validate(JSON.parse(JSON.stringify(s)));
     expect(reloaded.keys["a.key"]!.suppressions).toHaveLength(1);
 
@@ -192,7 +191,7 @@ describe("acceptFindings", () => {
     const { acceptFindings } = await import("./accept.js");
     const s = state();
     const r = await runLint(s, quiet);
-    const result = acceptFindings(s, r.findings, { rules: ["identical-to-source"], locales: ["fr"] }, clock);
+    const result = acceptFindings(s, r.findings, { rules: ["identical-to-source"], locales: ["fr"] });
     expect(result.accepted).toBe(1);
     expect(s.keys["a.key"]!.suppressions).toHaveLength(1);
     const after = await runLint(s, quiet);
@@ -205,11 +204,11 @@ describe("acceptFindings", () => {
     s.keys["e.key"] = { values: { en: { value: "Hi {n}", state: "source" }, fr: { value: "Salut", state: "reviewed" } } };
     const r = await runLint(s, quiet);
     expect(r.findings.some((f) => f.severity === "error")).toBe(true);
-    const result = acceptFindings(s, r.findings, {}, clock);
+    const result = acceptFindings(s, r.findings, {});
     expect(result.byRule["placeholder-mismatch"]).toBeUndefined();
     expect(result.byRule["identical-to-source"]).toBe(1);
     // Accepting again is a no-op: the findings are already suppressed.
-    const again = acceptFindings(s, (await runLint(s, quiet)).findings, {}, clock);
+    const again = acceptFindings(s, (await runLint(s, quiet)).findings, {});
     expect(again.accepted).toBe(0);
   });
 });
@@ -223,7 +222,7 @@ describe("runChecks respects quality config", () => {
       values: { en: { value: "Hi", state: "source" }, fr: { value: "Bonjour", state: "reviewed" } },
     };
     expect(runChecks(s).issues.filter((i) => i.check === "length")).toHaveLength(1);
-    addSuppression(s, "m.key", "max-length", "fr", clock);
+    addSuppression(s, "m.key", "max-length", "fr");
     expect(runChecks(s).issues.filter((i) => i.check === "length")).toHaveLength(0);
   });
 
@@ -242,6 +241,6 @@ describe("runChecks respects quality config", () => {
 // Type-level usage so the test compiles only when KeyEntry carries suppressions.
 const _typeProbe: KeyEntry = {
   values: {},
-  suppressions: [{ rule: "spelling", locale: "fr", source: "abc", at: "2026-01-01T00:00:00.000Z" }],
+  suppressions: [{ rule: "spelling", locale: "fr", source: "abc" }],
 };
 void _typeProbe;

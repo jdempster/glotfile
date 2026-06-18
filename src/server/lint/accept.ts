@@ -1,5 +1,5 @@
 import type { State } from "../schema.js";
-import { addSuppression, systemClock, type Clock } from "../state.js";
+import { addSuppression } from "../state.js";
 import type { Finding } from "./types.js";
 
 export interface AcceptOptions {
@@ -18,7 +18,7 @@ export interface AcceptResult {
 // `lint --accept`). Project-level findings (locale "") have no key to attach a
 // suppression to and are always skipped.
 export function acceptFindings(
-  state: State, findings: Finding[], opts: AcceptOptions = {}, clock: Clock = systemClock,
+  state: State, findings: Finding[], opts: AcceptOptions = {},
 ): AcceptResult {
   const byRule: Record<string, number> = {};
   let accepted = 0;
@@ -28,7 +28,7 @@ export function acceptFindings(
     if (opts.rules && !opts.rules.includes(f.ruleId)) continue;
     if (opts.locales && !opts.locales.includes(f.locale)) continue;
     if (!state.keys[f.key]) continue;
-    addSuppression(state, f.key, f.ruleId, f.locale, clock);
+    addSuppression(state, f.key, f.ruleId, f.locale);
     byRule[f.ruleId] = (byRule[f.ruleId] ?? 0) + 1;
     accepted++;
   }

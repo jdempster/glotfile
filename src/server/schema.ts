@@ -56,7 +56,6 @@ export interface Suppression {
   rule: RuleId;
   locale: string;
   source: string;
-  at?: string;
 }
 
 export interface KeyEntry {
@@ -355,9 +354,6 @@ export function validate(raw: unknown): State {
         }
         if (!RULE_IDS.includes(s.rule as RuleId)) {
           fail(`key "${key}" suppression has unknown rule id "${String(s.rule)}"`);
-        }
-        if (s.at !== undefined && typeof s.at !== "string") {
-          fail(`key "${key}" suppression "at" must be a string`);
         }
       }
     }
