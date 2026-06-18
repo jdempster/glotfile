@@ -1823,6 +1823,9 @@ describe("suppression routes", () => {
     const file = join(dir, "glotfile.json");
     const s = defaultState();
     s.config.locales = ["en", "fr"];
+    // Spelling is incidental here; turning it off keeps these /lint requests off
+    // the slow real-dictionary load path (cold nspell load is flaky under suite load).
+    s.config.lint = { rules: { spelling: "off" } };
     createKey(s, "ui.logo", "Logo");
     s.keys["ui.logo"]!.values.fr = { value: "Logo", state: "reviewed" };
     saveState(file, s);
