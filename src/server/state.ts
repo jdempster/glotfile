@@ -340,11 +340,11 @@ export function removeLocale(state: State, locale: string): void {
   }
 }
 
-export function addSuppression(state: State, key: string, rule: string, locale: string, clock: Clock = systemClock): void {
+export function addSuppression(state: State, key: string, rule: string, locale: string): void {
   const entry = requireKey(state, key);
   if (!RULE_IDS.includes(rule as RuleId)) throw new GlotfileError(`Unknown lint rule: ${rule}`);
   const list = (entry.suppressions ?? []).filter((s) => !(s.rule === rule && s.locale === locale));
-  list.push({ rule: rule as RuleId, locale, source: sourceHash(entry, state.config.sourceLocale), at: clock() });
+  list.push({ rule: rule as RuleId, locale, source: sourceHash(entry, state.config.sourceLocale) });
   entry.suppressions = list;
 }
 
