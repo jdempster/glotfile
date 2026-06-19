@@ -1,0 +1,178 @@
+{
+  "$schema": "https://glotfile.dev/schema/v1.json",
+  "config": {
+    "autoExport": true,
+    "format": {
+      "finalNewline": true,
+      "indent": 2,
+      "sortKeys": true
+    },
+    "localeInstructions": {
+      "de": "Use the formal Sie; prefer 'düngen' for feeding a plant.",
+      "es": "Use a friendly, informal tú.",
+      "fr": "Use vouvoiement; keep a warm, encouraging tone."
+    },
+    "locales": [
+      "en",
+      "de",
+      "es",
+      "fr"
+    ],
+    "outputs": [
+      {
+        "adapter": "i18next-json",
+        "path": "public/locales/{locale}/translation.json"
+      }
+    ],
+    "projectContext": "Sprout is a houseplant-care app; treat 'feed' as giving a plant fertilizer, never as a social-media feed.",
+    "sourceLocale": "en",
+    "spelling": {
+      "customWords": [
+        "Sprout",
+        "houseplant",
+        "repot"
+      ]
+    }
+  },
+  "glossary": [
+    {
+      "caseSensitive": true,
+      "doNotTranslate": true,
+      "notes": "Brand name. Never translate.",
+      "term": "Sprout"
+    },
+    {
+      "doNotTranslate": true,
+      "notes": "Paid tier. Keep the full name verbatim in every language.",
+      "term": "Sprout Pro"
+    },
+    {
+      "notes": "In Sprout, 'feed' means fertilizing a plant — never a content feed. Translate to the gardening sense (fr: nourrir/fertiliser, de: düngen).",
+      "term": "feed",
+      "wholeWord": true
+    },
+    {
+      "notes": "Forced UI label for the light-level setting so every locale matches the design.",
+      "term": "Light",
+      "translations": {
+        "de": "Licht",
+        "es": "Luz",
+        "fr": "Luminosité"
+      }
+    }
+  ],
+  "glossarySuggestions": [],
+  "keys": {
+    "care.feed.cta": {
+      "context": "Button on the plant detail screen that opens the fertilizer scheduler.",
+      "tags": [
+        "care",
+        "cta"
+      ],
+      "values": {
+        "de": {
+          "source": "ai",
+          "state": "machine",
+          "value": "Diese Pflanze düngen"
+        },
+        "en": {
+          "state": "source",
+          "value": "Feed this plant"
+        },
+        "es": {
+          "state": "needs-review",
+          "value": "Alimenta esta planta"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Nourrir cette plante"
+        }
+      }
+    },
+    "onboarding.welcome.title": {
+      "context": "First screen a new gardener sees after install.",
+      "contextSource": "ai",
+      "notes": [
+        {
+          "at": "2026-06-12T09:15:00.000Z",
+          "id": "n-welcome-1",
+          "text": "Keep it under one line on a narrow phone."
+        }
+      ],
+      "tags": [
+        "onboarding"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Willkommen bei Sprout"
+        },
+        "en": {
+          "state": "source",
+          "value": "Welcome to Sprout"
+        },
+        "es": {
+          "source": "ai",
+          "state": "machine",
+          "value": "Te damos la bienvenida a Sprout"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Bienvenue dans Sprout"
+        }
+      }
+    },
+    "paywall.pro.cta": {
+      "context": "Upgrade button shown on the paywall.",
+      "tags": [
+        "paywall",
+        "cta"
+      ],
+      "values": {
+        "de": {
+          "source": "ai",
+          "state": "machine",
+          "value": "Auf Sprout Pro upgraden"
+        },
+        "en": {
+          "state": "source",
+          "value": "Upgrade to Sprout Pro"
+        },
+        "es": {
+          "source": "ai",
+          "state": "machine",
+          "value": "Mejora a Sprout Pro"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Passer à Sprout Pro"
+        }
+      }
+    },
+    "settings.light.label": {
+      "description": "Row label in Settings; the glossary forces the localized term.",
+      "tags": [
+        "settings"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Licht"
+        },
+        "en": {
+          "state": "source",
+          "value": "Light"
+        },
+        "es": {
+          "state": "reviewed",
+          "value": "Luz"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Luminosité"
+        }
+      }
+    }
+  },
+  "version": 1
+}

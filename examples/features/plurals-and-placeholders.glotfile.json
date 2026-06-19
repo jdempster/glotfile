@@ -1,0 +1,140 @@
+{
+  "$schema": "https://glotfile.dev/schema/v1.json",
+  "config": {
+    "autoExport": true,
+    "format": {
+      "finalNewline": true,
+      "indent": 2,
+      "sortKeys": true
+    },
+    "locales": [
+      "en",
+      "ar",
+      "fr",
+      "pl"
+    ],
+    "outputs": [
+      {
+        "adapter": "flutter-arb",
+        "path": "lib/l10n/app_{locale}.arb"
+      }
+    ],
+    "sourceLocale": "en",
+    "spelling": {
+      "customWords": [
+        "Sprout"
+      ]
+    }
+  },
+  "glossary": [],
+  "glossarySuggestions": [],
+  "keys": {
+    "care.water.tip": {
+      "context": "Care tip whose wording depends on the plant type (ICU select).",
+      "tags": [
+        "care"
+      ],
+      "values": {
+        "en": {
+          "state": "source",
+          "value": "{type, select, succulent {Let the soil dry out fully between waterings} fern {Keep the soil evenly moist} other {Water about once a week}}"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "{type, select, succulent {Laissez le terreau sécher complètement entre deux arrosages} fern {Gardez le terreau toujours humide} other {Arrosez environ une fois par semaine}}"
+        }
+      }
+    },
+    "plants.count": {
+      "context": "Header on the collection screen counting how many plants the user owns.",
+      "plural": {
+        "arg": "count"
+      },
+      "tags": [
+        "collection"
+      ],
+      "values": {
+        "ar": {
+          "forms": {
+            "few": "{count} نباتات",
+            "many": "{count} نبتة",
+            "one": "نبتة واحدة",
+            "other": "{count} نبتة",
+            "two": "نبتتان",
+            "zero": "لا توجد نباتات"
+          },
+          "source": "ai",
+          "state": "machine"
+        },
+        "en": {
+          "forms": {
+            "=0": "No plants yet",
+            "one": "{count} plant",
+            "other": "{count} plants"
+          },
+          "state": "source"
+        },
+        "fr": {
+          "forms": {
+            "one": "{count} plante",
+            "other": "{count} plantes"
+          },
+          "state": "reviewed"
+        },
+        "pl": {
+          "forms": {
+            "few": "{count} rośliny",
+            "many": "{count} roślin",
+            "one": "{count} roślina",
+            "other": "{count} rośliny"
+          },
+          "state": "reviewed"
+        }
+      }
+    },
+    "share.invite": {
+      "context": "Share-sheet message. '{{link}}' is an app-managed literal token kept verbatim.",
+      "tags": [
+        "share"
+      ],
+      "values": {
+        "en": {
+          "state": "source",
+          "value": "I'm growing my collection with Sprout — join me at '{{link}}'"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Je fais pousser ma collection avec Sprout — rejoignez-moi sur '{{link}}'"
+        }
+      }
+    },
+    "widget.lastWatered": {
+      "context": "Home-screen widget subtitle. {days} is filled at runtime.",
+      "placeholders": {
+        "days": {
+          "example": "3",
+          "type": "int"
+        }
+      },
+      "tags": [
+        "widget"
+      ],
+      "values": {
+        "en": {
+          "state": "source",
+          "value": "Watered {days} days ago"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Arrosée il y a {days} jours"
+        },
+        "pl": {
+          "source": "ai",
+          "state": "machine",
+          "value": "Podlano {days} dni temu"
+        }
+      }
+    }
+  },
+  "version": 1
+}

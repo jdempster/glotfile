@@ -1,0 +1,171 @@
+{
+  "$schema": "https://glotfile.dev/schema/v1.json",
+  "config": {
+    "autoExport": true,
+    "format": {
+      "finalNewline": true,
+      "indent": 2,
+      "sortKeys": true
+    },
+    "locales": [
+      "en",
+      "de",
+      "fr",
+      "zh-hant"
+    ],
+    "outputs": [
+      {
+        "adapter": "flutter-arb",
+        "path": "lib/l10n/app_{locale}.arb"
+      },
+      {
+        "adapter": "i18next-json",
+        "emptyAs": "source",
+        "localeAliases": {
+          "en": [
+            "en-US",
+            "en-GB"
+          ]
+        },
+        "path": "web/public/locales/{locale}/translation.json",
+        "style": "nested"
+      },
+      {
+        "adapter": "apple-strings",
+        "localeCase": "bcp47-hyphen",
+        "path": "ios/Sprout/{locale}.lproj/Localizable.strings"
+      },
+      {
+        "adapter": "laravel-php",
+        "path": "api/lang/{locale}/{namespace}.php"
+      },
+      {
+        "adapter": "rails-yaml",
+        "includeLocale": true,
+        "localeMap": {
+          "zh-hant": "zh-TW"
+        },
+        "path": "rails/config/locales/{locale}.yml"
+      },
+      {
+        "adapter": "angular-xliff",
+        "localeCase": "bcp47-hyphen",
+        "path": "ng/src/locale/messages.{locale}.xlf",
+        "skipSourceLocale": true
+      }
+    ],
+    "sourceLocale": "en",
+    "spelling": {
+      "customWords": [
+        "Sprout"
+      ]
+    }
+  },
+  "glossary": [
+    {
+      "caseSensitive": true,
+      "doNotTranslate": true,
+      "notes": "Brand name.",
+      "term": "Sprout"
+    }
+  ],
+  "glossarySuggestions": [],
+  "keys": {
+    "app.name": {
+      "tags": [
+        "brand"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Sprout"
+        },
+        "en": {
+          "state": "source",
+          "value": "Sprout"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Sprout"
+        },
+        "zh-hant": {
+          "state": "reviewed",
+          "value": "Sprout"
+        }
+      }
+    },
+    "nav.myPlants": {
+      "tags": [
+        "nav"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Meine Pflanzen"
+        },
+        "en": {
+          "state": "source",
+          "value": "My plants"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Mes plantes"
+        },
+        "zh-hant": {
+          "source": "ai",
+          "state": "machine",
+          "value": "我的植物"
+        }
+      }
+    },
+    "reminder.water.title": {
+      "context": "Push-notification title for a watering reminder.",
+      "tags": [
+        "notification"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Zeit zum Gießen"
+        },
+        "en": {
+          "state": "source",
+          "value": "Time to water"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "C'est l'heure d'arroser"
+        },
+        "zh-hant": {
+          "state": "needs-review",
+          "value": "該澆水了"
+        }
+      }
+    },
+    "settings.title": {
+      "tags": [
+        "settings"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Einstellungen"
+        },
+        "en": {
+          "state": "source",
+          "value": "Settings"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Réglages"
+        },
+        "zh-hant": {
+          "source": "ai",
+          "state": "machine",
+          "value": "設定"
+        }
+      }
+    }
+  },
+  "version": 1
+}

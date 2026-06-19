@@ -1,0 +1,144 @@
+{
+  "$schema": "https://glotfile.dev/schema/v1.json",
+  "config": {
+    "autoExport": true,
+    "format": {
+      "finalNewline": true,
+      "indent": 2,
+      "sortKeys": true
+    },
+    "lint": {
+      "ignore": [
+        "legal.*",
+        "debug.*"
+      ],
+      "rules": {
+        "identical-to-source": "off",
+        "max-length": "error",
+        "spelling": "warn"
+      },
+      "spelling": {
+        "locales": {
+          "de": "de",
+          "fr": "fr"
+        }
+      }
+    },
+    "locales": [
+      "en",
+      "de",
+      "fr"
+    ],
+    "outputs": [
+      {
+        "adapter": "i18next-json",
+        "path": "public/locales/{locale}/translation.json"
+      }
+    ],
+    "scan": {
+      "accessors": [
+        "l10n",
+        "S"
+      ],
+      "exclude": [
+        "**/*.test.*",
+        "**/*.spec.*"
+      ],
+      "include": [
+        "lib/**",
+        "src/**"
+      ],
+      "keep": [
+        "analytics.*",
+        "experiments.*"
+      ],
+      "patterns": [
+        "\\bt\\(['\"]([^'\"]+)['\"]\\)"
+      ]
+    },
+    "sourceLocale": "en",
+    "spelling": {
+      "customWords": [
+        "Sprout",
+        "Monstera",
+        "Pothos",
+        "repot",
+        "houseplant"
+      ]
+    }
+  },
+  "glossary": [],
+  "glossarySuggestions": [],
+  "keys": {
+    "cta.upgrade": {
+      "context": "Primary paywall button; space is tight on small screens.",
+      "description": "Must fit a 24-character button.",
+      "maxLength": 24,
+      "tags": [
+        "paywall",
+        "cta"
+      ],
+      "values": {
+        "de": {
+          "state": "reviewed",
+          "value": "Sprout Pro holen"
+        },
+        "en": {
+          "state": "source",
+          "value": "Go Sprout Pro"
+        },
+        "fr": {
+          "state": "reviewed",
+          "value": "Passer à Pro"
+        }
+      }
+    },
+    "debug.lastSync": {
+      "context": "Developer-only diagnostics row; matched by the lint ignore glob.",
+      "tags": [
+        "debug"
+      ],
+      "values": {
+        "en": {
+          "state": "source",
+          "value": "Last sync: {timestamp}"
+        }
+      }
+    },
+    "legal.tos": {
+      "description": "Legal copy is authored per-region by counsel, so it is excluded from lint (ignore) and never machine-translated.",
+      "skipTranslate": true,
+      "tags": [
+        "legal"
+      ],
+      "values": {
+        "en": {
+          "state": "source",
+          "value": "By continuing you agree to the Sprout Terms of Service."
+        }
+      }
+    },
+    "plants.empty": {
+      "context": "Empty state when the collection has no plants yet.",
+      "tags": [
+        "collection"
+      ],
+      "values": {
+        "de": {
+          "state": "needs-review",
+          "value": "Noch keine Pflanzen — füge deine erste Monstera oder Pothos hinzu."
+        },
+        "en": {
+          "state": "source",
+          "value": "No plants yet — add your first Monstera or Pothos."
+        },
+        "fr": {
+          "source": "ai",
+          "state": "machine",
+          "value": "Aucune plante pour l'instant — ajoutez votre premier Monstera ou Pothos."
+        }
+      }
+    }
+  },
+  "version": 1
+}
