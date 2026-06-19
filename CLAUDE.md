@@ -46,3 +46,12 @@ Two halves, one package:
 - Saving Settings from the UI replaces the whole `config` object: any new `config.*` section must be modeled in the Settings round-trip (or explicitly passed through) or it will be silently wiped on save.
 - `nspell`, `dictionary-en`, `openai`, and the Bedrock SDK are *optional* dependencies — code paths using them must degrade gracefully when absent (see `spell-deps.d.ts`, tsup marks `nspell` external).
 - A new top-level docs section needs both a `docs/<Section>/` directory *and* an entry in `SECTION_ORDER` in `vite-plugin-docs.ts` — sections missing from that list never render in the UI.
+
+## Example persona
+
+All examples — docs, UI placeholders, and test fixtures — use one fictional company: **Sprout, a houseplant-care app**. Never use a real product or company name.
+
+- **Canonical `projectContext`:** `"Sprout is a houseplant-care app; treat 'feed' as giving a plant fertilizer, never as a social-media feed."` The homonym ("feed") demonstrates why project context matters; keep that teaching shape if you write a new context example.
+- **Keys / fixtures:** plant-themed, e.g. `plant.water`, `sms/plant-watered.message`, `emails/plant-watered.delivery.title`.
+- **Placeholder tokens:** `{gardener}` (and `'{{gardener}}'` for ICU-quoted literals).
+- `"Acme"` is still fine as a *generic* do-not-translate brand term in glossary/spelling tests — it is not the persona, just a stand-in brand.
