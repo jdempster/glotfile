@@ -31,7 +31,12 @@ import { dirname, resolve, basename, relative, sep } from "node:path";
 import { makeProvider } from "./ai/index.js";
 import { betaFeatures, glossarySuggestEnabled } from "./beta.js";
 import { selectRequests, applyResults, attachScreenshotsForProvider, runLocaleParallel } from "./ai/run.js";
-import { buildSystemPrompt, supportsBatchTranslate, supportsBatchComplete, type TranslationProvider, type TranslationRequest } from "./ai/provider.js";
+import { buildSystemPrompt, supportsBatchTranslate, supportsBatchComplete, supportsChat, type TranslationProvider, type TranslationRequest } from "./ai/provider.js";
+import { runChatTurn } from "./ai/chat.js";
+import { buildToolRegistry } from "./ai/chat-tools/index.js";
+import { buildChatSystemPrompt } from "./ai/chat-prompt.js";
+import { loadChat, saveChat, clearChat } from "./chats.js";
+import type { ToolContext } from "./ai/chat-types.js";
 import { explainProviderError } from "./ai/explain-error.js";
 import { submitBatchTranslation, applyBatchResults } from "./ai/batch-run.js";
 import { loadPendingBatch, clearPendingBatch } from "./ai/pending-batch.js";
@@ -40,7 +45,7 @@ import { loadPendingContextBatch, clearPendingContextBatch } from "./ai/pending-
 import { submitGlossarySuggestBatch, applyGlossarySuggestBatchResults } from "./ai/glossary-batch-run.js";
 import { loadPendingGlossaryBatch, clearPendingGlossaryBatch } from "./ai/pending-glossary-batch.js";
 import { estimateTranslation, estimateContext, estimateGlossarySuggest } from "./ai/estimate.js";
-import { usageCostUsd, resolvePricing } from "./ai/pricing.js";
+import { usageCostUsd, resolvePricing, addUsage } from "./ai/pricing.js";
 import { refreshPrices } from "./ai/price-fetch.js";
 import { loadPriceCache, defaultPriceCachePath, invalidatePriceCache } from "./ai/price-cache.js";
 import { appendLog, readLog, type LogEntry } from "./log.js";
@@ -130,6 +135,11 @@ export function createApi(deps: ApiDeps): Hono {
     translateQueue = next.then(() => {}, () => {});
     return next;
   };
+
+  // Confirm-gated chat tools suspend the orchestrator until the UI approves the
+  // action via POST /chat/confirm. The in-flight turn registers a resolver here
+  // keyed by the tool-use id; the confirm route resolves it.
+  const pendingConfirms = new Map<string, (approved: boolean) => void>();
 
   // Debounced auto-export: editing in the UI rewrites only the changed locale files
   // so a running app dev server reflects the change immediately. Off unless serve
@@ -1616,6 +1626,93 @@ export function createApi(deps: ApiDeps): Hono {
     } catch (e) {
       return c.json({ error: explainProviderError(aiCfg.provider, e) }, 502);
     }
+  });
+
+  // ---- Translation Assistant chat ----
+
+  app.get("/chat", (c) => c.json(loadChat(projectRoot)));
+
+  app.delete("/chat", (c) => {
+    clearChat(projectRoot);
+    return c.json({ ok: true });
+  });
+
+  // Resolve a pending confirm-gated tool (the UI's Apply/Skip card posts here).
+  app.post("/chat/confirm", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const toolUseId = typeof body.toolUseId === "string" ? body.toolUseId : "";
+    const resolver = pendingConfirms.get(toolUseId);
+    if (!resolver) return c.json({ error: "No pending confirmation for that action." }, 404);
+    resolver(!!body.approved);
+    return c.json({ ok: true });
+  });
+
+  // Stream one assistant turn over SSE: forwards text deltas, tool action rows,
+  // and confirm prompts; runs the tool loop; persists the transcript + usage.
+  app.post("/chat/stream", async (c) => {
+    const signal = c.req.raw.signal;
+    const body = await c.req.json().catch(() => ({}));
+    const message = typeof body.message === "string" ? body.message : "";
+    return streamSSE(c, (stream) => withTranslateLock(async () => {
+      if (!message.trim()) {
+        await stream.writeSSE({ event: "error", data: JSON.stringify({ error: "message is required" }) });
+        return;
+      }
+      const aiCfg = loadLocalSettings(projectRoot).ai;
+      let provider: TranslationProvider;
+      try {
+        provider = deps.makeProvider ? deps.makeProvider() : makeProvider(aiCfg);
+      } catch (e) {
+        await stream.writeSSE({ event: "error", data: JSON.stringify({ error: explainProviderError(aiCfg.provider, e) }) });
+        return;
+      }
+      if (!supportsChat(provider)) {
+        await stream.writeSSE({ event: "error", data: JSON.stringify({ error: "The Translation Assistant requires an Anthropic provider. Switch your AI provider to Anthropic in Settings." }) });
+        return;
+      }
+
+      const transcript = loadChat(projectRoot);
+      const ctx: ToolContext = { projectRoot, statePath: deps.statePath, load, persist, provider, signal };
+      const turnConfirmIds = new Set<string>();
+      try {
+        const updated = await runChatTurn(transcript.messages, message, {
+          provider,
+          tools: buildToolRegistry(),
+          ctx,
+          system: buildChatSystemPrompt(load()),
+          onEvent: (e) => { void stream.writeSSE({ event: e.type, data: JSON.stringify(e) }); },
+          confirm: (req) => new Promise<boolean>((resolve) => {
+            turnConfirmIds.add(req.toolUseId);
+            pendingConfirms.set(req.toolUseId, (approved) => { pendingConfirms.delete(req.toolUseId); resolve(approved); });
+            signal?.addEventListener("abort", () => {
+              if (pendingConfirms.delete(req.toolUseId)) resolve(false);
+            }, { once: true });
+          }),
+          signal,
+        });
+
+        const usage = provider.takeUsage?.();
+        transcript.messages = updated;
+        transcript.model = aiCfg.model;
+        if (!transcript.createdAt) transcript.createdAt = new Date().toISOString();
+        if (usage) addUsage(transcript.cumulativeUsage, usage);
+        saveChat(projectRoot, transcript);
+        appendLog(projectRoot, {
+          at: new Date().toISOString(),
+          kind: "chat",
+          summary: `Assistant turn (${updated.length} message(s))`,
+          model: aiCfg.model,
+          usage,
+          estimatedCostUsd: usageCostUsd(usage, aiCfg),
+        });
+      } catch (e) {
+        if (!signal?.aborted) {
+          await stream.writeSSE({ event: "error", data: JSON.stringify({ error: explainProviderError(aiCfg.provider, e) }) });
+        }
+      } finally {
+        for (const id of turnConfirmIds) pendingConfirms.delete(id);
+      }
+    }));
   });
 
   app.post("/context/build", async (c) => {

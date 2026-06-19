@@ -5,6 +5,7 @@ import {
   Plus, X, AlertTriangle, Check, Undo2, Save, Lock, Zap, Languages, RefreshCw, Search, Loader2, Sparkles,
 } from "lucide-vue-next";
 import { fetchState, putConfig, getLocalSettings, putLocalSettings, getAiProfiles, putAiProfile, deleteAiProfile, setActiveAiProfile, getPrices, refreshPrices as refreshPricesApi, getPricesList, aiTest, suggestProjectContext, suggestLocaleInstruction } from "@/api.js";
+import { refreshAvailability as refreshChatAvailability } from "@/chat";
 import type { PricesStatus, PriceRow } from "@/api.js";
 import type { Config, AiSettings } from "@/types.js";
 import { toast } from "@/components/ui/toast";
@@ -260,6 +261,8 @@ watch(aiDraft, () => {
         await putLocalSettings({ ai });
       }
       savedAiJson = JSON.stringify(ai);
+      // Provider may have changed — show/hide the Assistant toggle accordingly.
+      void refreshChatAvailability();
       aiJustSaved.value = true;
       if (aiSavedTimer) clearTimeout(aiSavedTimer);
       aiSavedTimer = setTimeout(() => { aiJustSaved.value = false; }, 1700);
@@ -687,6 +690,8 @@ async function selectProfile(name: string | null) {
   await setActiveAiProfile(name);
   const ai = name ? (profiles.value[name] ?? aiToSettings()) : (await getLocalSettings()).ai;
   applyAiDraft(ai);
+  // The active profile may use a different provider — re-evaluate chat availability.
+  void refreshChatAvailability();
 }
 
 async function createProfile() {

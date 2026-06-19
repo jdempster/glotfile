@@ -18,7 +18,7 @@ interface PanelWidth {
   syncValue: (v: unknown) => void;
 }
 
-function panelWidth(prefKey: "keyColumnWidth" | "detailPanelWidth", def: number, min: number, max: number): PanelWidth {
+function panelWidth(prefKey: "keyColumnWidth" | "detailPanelWidth" | "chatPanelWidth", def: number, min: number, max: number): PanelWidth {
   const storageKey = `glotfile-${prefKey}`;
   const clamp = (px: number) => Math.min(max, Math.max(min, Math.round(px)));
   const cached = () => {
@@ -52,6 +52,7 @@ function panelWidth(prefKey: "keyColumnWidth" | "detailPanelWidth", def: number,
 // Defaults match the previously hard-coded Tailwind widths.
 export const keyColumn = panelWidth("keyColumnWidth", 272, 180, 560);
 export const detailPanel = panelWidth("detailPanelWidth", 420, 320, 720);
+export const chatPanel = panelWidth("chatPanelWidth", 416, 320, 720);
 
 // Reconcile with the machine-wide prefs after mount, same as the theme.
 export async function syncPanelWidths(prefs?: UiPrefs): Promise<void> {
@@ -59,6 +60,7 @@ export async function syncPanelWidths(prefs?: UiPrefs): Promise<void> {
     const p = prefs ?? (await getUiPrefs());
     keyColumn.syncValue(p.keyColumnWidth);
     detailPanel.syncValue(p.detailPanelWidth);
+    chatPanel.syncValue(p.chatPanelWidth);
   } catch {
     /* offline or API error: keep the cached widths */
   }

@@ -1,0 +1,80 @@
+import { describe, it, expect } from "vitest";
+import { stateReadTools } from "./read-state.js";
+import { defaultState, type State } from "../../schema.js";
+import type { ChatTool, ToolContext } from "../chat-types.js";
+
+const tool = (name: string): ChatTool => {
+  const t = stateReadTools.find((x) => x.def.name === name);
+  if (!t) throw new Error(`no tool ${name}`);
+  return t;
+};
+
+// A Sprout houseplant-care fixture: en source, de partially translated.
+function sproutState(): State {
+  const s = defaultState();
+  s.config.locales = ["en", "de"];
+  s.config.projectContext = "Sprout is a houseplant-care app; treat 'feed' as giving a plant fertilizer, never as a social-media feed.";
+  s.config.localeInstructions = { de: "Use informal du." };
+  s.glossary = [{ term: "Sprout", doNotTranslate: true, notes: "product name" }];
+  s.keys = {
+    "plant.water": { values: { en: { value: "Water your plant", state: "source" } } },
+    "plant.feed": {
+      context: "Button to fertilize a plant.",
+      values: {
+        en: { value: "Feed your plant {gardener}", state: "source" },
+        de: { value: "Dünge deine Pflanze {gardener}", state: "reviewed" },
+      },
+    },
+  };
+  return s;
+}
+
+const ctxFor = (s: State): ToolContext => ({ projectRoot: "/x", statePath: "", load: () => s, persist: () => {}, provider: null as never });
+
+describe("state read tools", () => {
+  const ctx = ctxFor(sproutState());
+
+  it("overview reports locales, key count, and guidance flags", async () => {
+    const o = (await tool("overview").run({}, ctx)) as {
+      sourceLocale: string; locales: string[]; keyCount: number;
+      perLocale: { locale: string; missing: number }[];
+      guidance: { hasProjectContext: boolean; glossaryTermCount: number };
+    };
+    expect(o.sourceLocale).toBe("en");
+    expect(o.locales).toContain("de");
+    expect(o.keyCount).toBe(2);
+    expect(o.perLocale.find((l) => l.locale === "de")!.missing).toBe(1);
+    expect(o.guidance.hasProjectContext).toBe(true);
+    expect(o.guidance.glossaryTermCount).toBe(1);
+  });
+
+  it("search_keys matches on source text", async () => {
+    const r = (await tool("search_keys").run({ query: "feed" }, ctx)) as { keys: { key: string }[] };
+    expect(r.keys.map((k) => k.key)).toContain("plant.feed");
+    expect(r.keys.map((k) => k.key)).not.toContain("plant.water");
+  });
+
+  it("search_keys matches on key glob", async () => {
+    const r = (await tool("search_keys").run({ keyGlob: "plant.*" }, ctx)) as { keys: { key: string }[] };
+    expect(r.keys.map((k) => k.key).sort()).toEqual(["plant.feed", "plant.water"]);
+  });
+
+  it("read_key returns source, context, and per-locale state", async () => {
+    const r = (await tool("read_key").run({ key: "plant.feed" }, ctx)) as {
+      source: string; context?: string; values: Record<string, { state: string; value?: string }>;
+    };
+    expect(r.source).toContain("Feed your plant");
+    expect(r.context).toContain("fertilize");
+    expect(r.values.de!.state).toBe("reviewed");
+  });
+
+  it("read_guidance returns project context, locale rules, and glossary", async () => {
+    const r = (await tool("read_guidance").run({}, ctx)) as {
+      projectContext: string; localeInstructions: Record<string, string>;
+      glossary: { term: string }[];
+    };
+    expect(r.projectContext).toContain("Sprout");
+    expect(r.localeInstructions.de).toContain("informal");
+    expect(r.glossary.map((g) => g.term)).toContain("Sprout");
+  });
+});

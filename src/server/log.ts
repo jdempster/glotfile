@@ -34,7 +34,7 @@ export interface AiLogJobFailure {
 export type LogKind =
   | "translation" | "key" | "metadata" | "config"
   | "glossary" | "note" | "dictionary" | "import" | "suppression"
-  | "translate" | "context";
+  | "translate" | "context" | "chat";
 
 // One activity-log entry. General edits carry a before/after audit pair; AI
 // operations (kind translate/context) additionally carry the prompt and results.

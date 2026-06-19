@@ -103,8 +103,9 @@ const EXT_SCANNER: Record<string, string> = {
   ".mm": "apple",
 };
 
-// Directories always excluded regardless of user config
-const ALWAYS_EXCLUDE = new Set([
+// Directories always excluded regardless of user config. Exported so the chat
+// assistant's codebase tools (ai/chat-tools/read-codebase.ts) skip the same dirs.
+export const ALWAYS_EXCLUDE = new Set([
   "node_modules", ".git", ".glotfile", ".claude", "dist", "build",
   "vendor", "coverage", ".next", ".nuxt", ".turbo", "__pycache__",
 ]);
@@ -434,7 +435,8 @@ export function extractLiterals(content: string): Array<{ literal: string; line:
 // runScan
 // ---------------------------------------------------------------------------
 
-function matchesGlob(relPath: string, glob: string): boolean {
+// Exported for reuse by the chat assistant's codebase tools.
+export function matchesGlob(relPath: string, glob: string): boolean {
   // Convert glob to regex: ** = any path segment(s), * = single segment chars
   const escaped = glob
     .replace(/[.+^${}()|[\]\\]/g, "\\$&")

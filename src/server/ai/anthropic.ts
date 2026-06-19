@@ -5,8 +5,9 @@ import {
   type TranslationProvider, type TranslationRequest, type TranslationResult,
   type CompletionRequest, type BatchCompleteCallback, type MalformedReplyCallback,
   type BatchJobSpec, type BatchJobOutcome, type BatchRunStatus, type BatchCompletionProvider,
-  type CompletionBatchJob, type CompletionBatchOutcome,
+  type CompletionBatchJob, type CompletionBatchOutcome, type ChatProvider,
 } from "./provider.js";
+import type { ChatMessage, ChatContentBlock, ChatEvent, ToolDef } from "./chat-types.js";
 import { runBatched, parseReplyItems, MalformedReplyError, type ReplyItem } from "./batch.js";
 import { addUsage, type TokenUsage } from "./pricing.js";
 
@@ -29,7 +30,7 @@ interface BatchEntry {
 // Minimal shape we use from the SDK — lets tests inject a fake.
 interface MessagesClient {
   messages: {
-    create(args: unknown, opts?: { signal?: AbortSignal }): Promise<{ content: Array<{ type: string; text?: string }>; usage?: ApiUsage; stop_reason?: string }>;
+    create(args: unknown, opts?: { signal?: AbortSignal }): Promise<{ content: Array<{ type: string; text?: string; id?: string; name?: string; input?: unknown }>; usage?: ApiUsage; stop_reason?: string }>;
     batches?: {
       create(args: unknown): Promise<{ id: string }>;
       retrieve(id: string): Promise<{ processing_status: string; request_counts: BatchRunStatus["counts"] }>;
@@ -39,7 +40,7 @@ interface MessagesClient {
   };
 }
 
-export class AnthropicProvider implements BatchCompletionProvider {
+export class AnthropicProvider implements BatchCompletionProvider, ChatProvider {
   private client: MessagesClient;
   private usage: TokenUsage = { inputTokens: 0, outputTokens: 0, cacheCreationInputTokens: 0, cacheReadInputTokens: 0 };
   constructor(private config: AiConfig, client?: MessagesClient) {
@@ -121,6 +122,40 @@ export class AnthropicProvider implements BatchCompletionProvider {
     } catch {
       return {};
     }
+  }
+
+  // Map our provider-agnostic chat blocks to the Messages API content shape.
+  private toApiContent(blocks: ChatContentBlock[]): unknown[] {
+    return blocks.map((b) => {
+      if (b.type === "text") return { type: "text", text: b.text };
+      if (b.type === "tool_use") return { type: "tool_use", id: b.id, name: b.name, input: b.input };
+      return { type: "tool_result", tool_use_id: b.toolUseId, content: b.content, is_error: b.isError ?? false };
+    });
+  }
+
+  // One conversational turn. The system prompt + tools are stable across a
+  // conversation, so they're cache-flagged. Yields the assistant's text and any
+  // tool_use requests, then turn_end; the orchestrator runs the tools and calls
+  // chat() again with the appended history.
+  async *chat(messages: ChatMessage[], tools: ToolDef[], system: string, signal?: AbortSignal): AsyncGenerator<ChatEvent> {
+    const res = await this.client.messages.create({
+      model: this.config.model,
+      max_tokens: 4096,
+      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+      ...(tools.length
+        ? { tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.schema })) }
+        : {}),
+      messages: messages.map((m) => ({ role: m.role, content: this.toApiContent(m.content) })),
+    }, { signal });
+    this.recordUsage(res.usage);
+    for (const block of res.content) {
+      if (block.type === "text") {
+        if (block.text) yield { type: "text", delta: block.text };
+      } else if (block.type === "tool_use") {
+        yield { type: "tool_use", id: block.id ?? "", name: block.name ?? "", input: block.input };
+      }
+    }
+    yield { type: "turn_end", stopReason: res.stop_reason ?? "end_turn" };
   }
 
   private batchesClient() {

@@ -1,6 +1,7 @@
 import type { PluralCategory } from "../schema.js";
 import type { ReplyItem } from "./batch.js";
 import type { TokenUsage } from "./pricing.js";
+import type { ChatMessage, ToolDef, ChatEvent } from "./chat-types.js";
 
 export interface GlossaryHint {
   term: string;
@@ -140,6 +141,19 @@ export interface BatchCompletionProvider extends BatchTranslationProvider {
 
 export function supportsBatchComplete(p: TranslationProvider): p is BatchCompletionProvider {
   return typeof (p as Partial<BatchCompletionProvider>).submitCompletionBatch === "function";
+}
+
+// Optional capability: multi-turn conversational tool-use, powering the
+// Translation Assistant chat. chat() runs ONE model turn — it yields the
+// assistant's text and any tool_use requests, then ends; the orchestrator
+// (ai/chat.ts) executes the tools and calls chat() again with the appended
+// history. Anthropic implements this today; other providers may later.
+export interface ChatProvider extends TranslationProvider {
+  chat(messages: ChatMessage[], tools: ToolDef[], system: string, signal?: AbortSignal): AsyncIterable<ChatEvent>;
+}
+
+export function supportsChat(p: TranslationProvider): p is ChatProvider {
+  return typeof (p as Partial<ChatProvider>).chat === "function";
 }
 
 export function buildSystemPrompt(reqs: TranslationRequest[]): string {

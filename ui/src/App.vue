@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, shallowRef, onMounted, computed } from "vue";
-import { ChevronsUpDown, ChevronRight, Check, ScanSearch, Loader2 } from "lucide-vue-next";
+import { ChevronsUpDown, ChevronRight, Check, ScanSearch, Loader2, Sparkles } from "lucide-vue-next";
+import { isOpen as chatOpen, toggleOpen as toggleChat, available as chatAvailable, refreshAvailability as refreshChatAvailability } from "@/chat";
 import { fetchState, getFile, listFiles, setFile, type FileInfo, type ActiveFile } from "./api.js";
 import type { State } from "./types.js";
 import EditorView from "./components/editor/EditorView.vue";
+import ChatDock from "./components/chat/ChatDock.vue";
 import AnalyticsView from "./components/analytics/AnalyticsView.vue";
 import GlossaryView from "./components/glossary/GlossaryView.vue";
 import SettingsView from "./components/settings/SettingsView.vue";
@@ -54,6 +56,8 @@ async function reload() {
 onExternalChange(reload);
 onMounted(async () => {
   await reload();
+  // Show the Assistant toggle only when the active provider supports chat.
+  void refreshChatAvailability();
   // Surface the most recent scan (incl. the boot scan) in the header chip.
   void refreshScanSummary();
   // Open the live-reload channel once the app is up.
@@ -183,6 +187,25 @@ const localeSummary = computed(() => {
               <div class="mt-1 font-mono">{{ scanDetail }}</div>
             </TooltipContent>
           </Tooltip>
+          <template v-if="chatAvailable">
+          <span aria-hidden="true" class="text-xs text-muted-foreground/50">·</span>
+          <Tooltip>
+            <TooltipTrigger as-child>
+              <button
+                type="button"
+                :aria-label="chatOpen ? 'Close Lingo' : 'Open Lingo'"
+                :class="[
+                  'flex size-8 items-center justify-center rounded-md transition-colors',
+                  chatOpen ? 'bg-primary text-primary-foreground' : 'bg-primary/15 text-primary hover:bg-primary/25',
+                ]"
+                @click="toggleChat"
+              >
+                <Sparkles class="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Lingo · ⌘/Ctrl + J</TooltipContent>
+          </Tooltip>
+          </template>
         </div>
       </header>
 
@@ -197,6 +220,7 @@ const localeSummary = computed(() => {
         <DocsView v-else-if="route === 'docs'" />
       </main>
     </div>
+    <ChatDock />
     <Toaster />
     <ShortcutsDialog v-model:open="shortcutsOpen" />
     <ImportWizard

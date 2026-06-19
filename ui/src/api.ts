@@ -1,4 +1,4 @@
-import type { State, Config, LocalSettings, GlossaryEntry, GlossarySuggestion, ExportPreview, ExportResult, TranslateResult, TranslateEstimate, ContextEstimate, TranslateStart, TranslateLocaleStart, TranslateProgress, TranslateLocaleDone, TranslateDone, LogEntry, Note, CheckId, ChecksResponse, LintReport, Stats, BatchStatusResponse, BatchApplyResult, ContextBatchApplyResult, GlossarySuggestEstimate, GlossarySuggestBatchApplyResult, Features } from "./types.js";
+import type { State, Config, LocalSettings, GlossaryEntry, GlossarySuggestion, ExportPreview, ExportResult, TranslateResult, TranslateEstimate, ContextEstimate, TranslateStart, TranslateLocaleStart, TranslateProgress, TranslateLocaleDone, TranslateDone, LogEntry, Note, CheckId, ChecksResponse, LintReport, Stats, BatchStatusResponse, BatchApplyResult, ContextBatchApplyResult, GlossarySuggestEstimate, GlossarySuggestBatchApplyResult, Features, ChatStreamEvent, ChatTranscript } from "./types.js";
 
 type TranslateEvent = TranslateStart | TranslateLocaleStart | TranslateProgress | TranslateLocaleDone | TranslateDone;
 
@@ -96,6 +96,64 @@ export const glossarySuggestBatchApply = () =>
   fetch("/api/glossary/suggest/batch/apply", { method: "POST" }).then((r) => json<GlossarySuggestBatchApplyResult>(r));
 export const glossarySuggestBatchCancel = () =>
   fetch("/api/glossary/suggest/batch/cancel", { method: "POST" }).then((r) => json<{ canceled: string }>(r));
+
+// --- Translation Assistant chat ---
+
+export const getChat = () => fetch("/api/chat").then((r) => json<ChatTranscript>(r));
+export const clearChat = () => fetch("/api/chat", { method: "DELETE" }).then(json);
+export const confirmChatTool = (toolUseId: string, approved: boolean) =>
+  fetch("/api/chat/confirm", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ toolUseId, approved }),
+  }).then(json);
+
+// Stream one assistant turn. Unlike translateStream, an "error" event is yielded
+// (not thrown) so the store can render it inline as part of the conversation.
+export async function* chatStream(message: string, signal?: AbortSignal): AsyncGenerator<ChatStreamEvent> {
+  let res: Response;
+  try {
+    res = await fetch("/api/chat/stream", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message }),
+      signal,
+    });
+  } catch (e) {
+    if ((e as Error).name === "AbortError") return;
+    throw e;
+  }
+  if (!res.ok || !res.body) throw new Error(res.statusText);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let currentEvent = "message";
+  try {
+    while (true) {
+      let chunk: ReadableStreamReadResult<Uint8Array>;
+      try {
+        chunk = await reader.read();
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
+        throw e;
+      }
+      if (chunk.done) break;
+      buf += decoder.decode(chunk.value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop() ?? "";
+      for (const line of lines) {
+        if (line.startsWith("event:")) { currentEvent = line.slice(6).trim(); continue; }
+        if (line.startsWith("data:")) {
+          const data = JSON.parse(line.slice(5).trim());
+          yield { ...data, type: currentEvent } as ChatStreamEvent;
+          currentEvent = "message";
+        }
+      }
+    }
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+}
 
 export async function* translateStream(signal?: AbortSignal, keys?: string[], locales?: string[]): AsyncGenerator<TranslateEvent> {
   let res: Response;
@@ -231,6 +289,7 @@ export interface UiPrefs {
   theme: "system" | "light" | "dark";
   keyColumnWidth?: number;
   detailPanelWidth?: number;
+  chatPanelWidth?: number;
 }
 export const getUiPrefs = () => fetch("/api/ui-prefs").then((r) => json<UiPrefs>(r));
 export const putUiPrefs = (patch: Partial<UiPrefs>) =>

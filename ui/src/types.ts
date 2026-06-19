@@ -177,10 +177,32 @@ export interface TranslateDone { type: "done"; written: number; errors: Translat
 
 export interface GlossaryHint { term: string; doNotTranslate?: boolean; forced?: string; notes?: string }
 
+// Translation Assistant chat. The transcript mirrors the server's persisted
+// shape; ChatStreamEvent mirrors the SSE events from /chat/stream.
+export type ChatContentBlock =
+  | { type: "text"; text: string }
+  | { type: "tool_use"; id: string; name: string; input: unknown }
+  | { type: "tool_result"; toolUseId: string; content: string; isError?: boolean };
+export interface ChatMessage { role: "user" | "assistant"; content: ChatContentBlock[] }
+export interface ChatTranscript {
+  messages: ChatMessage[];
+  model: string;
+  createdAt: string;
+  cumulativeUsage: { inputTokens: number; outputTokens: number; cacheCreationInputTokens: number; cacheReadInputTokens: number };
+}
+export type ChatStreamEvent =
+  | { type: "text"; delta: string }
+  | { type: "tool-start"; id: string; name: string; humanSummary: string }
+  | { type: "tool-end"; id: string; result?: unknown; error?: string }
+  | { type: "tool-progress"; id: string; done: number; total: number; detail?: string }
+  | { type: "confirm-required"; id: string; name: string; humanSummary: string; input: unknown }
+  | { type: "done" }
+  | { type: "error"; error: string };
+
 export type LogKind =
   | "translation" | "key" | "metadata" | "config"
   | "glossary" | "note" | "dictionary" | "import"
-  | "translate" | "context";
+  | "translate" | "context" | "chat";
 
 // One activity-log entry. General edits carry a before/after audit pair; AI
 // operations (kind translate/context) additionally carry the prompt and results.

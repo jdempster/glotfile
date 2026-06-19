@@ -1,6 +1,7 @@
 import { ref, onMounted, onUnmounted } from "vue";
 import { navigate } from "@/router";
 import { reduceChord, type ChordState } from "@/hotkeys";
+import { isOpen as chatOpen, open as openChat, toggleOpen as toggleChat, focusInput as focusChatInput, inputFocused as chatInputFocused, available as chatAvailable } from "@/chat";
 
 // Module-level singleton so ShortcutsDialog can v-model:open it while the
 // listener below toggles it — both sides share this one ref.
@@ -23,6 +24,20 @@ export function useNavHotkeys(): void {
   }
 
   function onKeydown(e: KeyboardEvent) {
+    // Cmd/Ctrl+J toggles the assistant dock from anywhere (even while typing) —
+    // handled before the modifier guard below swallows it. Only when the chat
+    // feature is available (Anthropic provider).
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "j") {
+      if (chatAvailable.value) {
+        // Closed → open + focus. Open but unfocused → focus. Open AND focused →
+        // hide (so the same key that summons it also dismisses it while typing).
+        if (!chatOpen.value) { openChat(); focusChatInput(); }
+        else if (chatInputFocused.value) toggleChat();
+        else focusChatInput();
+        e.preventDefault();
+      }
+      return;
+    }
     // Guards lifted from EditorView.onKeydown so the two handlers behave
     // identically and never hijack typing or fight a browser shortcut.
     // (Shift is intentionally not guarded — "?" is Shift+/.)

@@ -11,6 +11,7 @@ export interface UiPrefs {
   // UI defaults (which live in the UI layer, not here).
   keyColumnWidth?: number;
   detailPanelWidth?: number;
+  chatPanelWidth?: number;
 }
 
 const THEMES: ThemeMode[] = ["system", "light", "dark"];
@@ -40,6 +41,7 @@ export function loadUiPrefs(path: string): UiPrefs {
   const prefs: UiPrefs = { theme: isThemeMode(raw.theme) ? raw.theme : DEFAULTS.theme };
   if (isPanelWidth(raw.keyColumnWidth)) prefs.keyColumnWidth = Math.round(raw.keyColumnWidth);
   if (isPanelWidth(raw.detailPanelWidth)) prefs.detailPanelWidth = Math.round(raw.detailPanelWidth);
+  if (isPanelWidth(raw.chatPanelWidth)) prefs.chatPanelWidth = Math.round(raw.chatPanelWidth);
   return prefs;
 }
 
