@@ -29,6 +29,21 @@ Free-text search plus state facets let you focus:
 
 You can also filter by **tag** and narrow to a single locale.
 
+### Search syntax
+
+By default the search box matches across **keys, values and context**. Scope it with a prefix, or use a regular expression — the `?` next to the box lists the same options:
+
+| Type | Matches |
+|---|---|
+| `auth` | Everything: key names, translations, and context notes |
+| `key:auth` | Key names only |
+| `value:Sign in` | Translations only (every locale, including plural forms) |
+| `context:button` | Context notes only |
+| `/^auth\./` | A regular expression (wrap in `/…/`) |
+| `value:/sign\s?in/` | A scoped regular expression |
+
+Search is case-insensitive. A half-typed regex simply matches nothing until it's valid. The query is part of the URL, so a search survives a reload and can be shared. Press <kbd>/</kbd> to jump to the box and <kbd>Esc</kbd> to clear it.
+
 ## Per-key detail panel
 
 Selecting a key opens its detail panel for metadata: **context**, **notes**, **tags**, **max length**, **screenshot**, the **skip-translate** flag, and the plural marker.

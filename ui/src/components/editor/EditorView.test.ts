@@ -101,7 +101,7 @@ describe("EditorView '/' search hotkey", () => {
     });
     await flushPromises();
 
-    const search = w.get('input[placeholder="Search keys, values, context…"]').element as HTMLInputElement;
+    const search = w.get('input[placeholder^="Search…"]').element as HTMLInputElement;
     expect(document.activeElement).not.toBe(search);
 
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "/" }));

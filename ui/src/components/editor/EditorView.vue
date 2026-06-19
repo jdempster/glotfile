@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, shallowRef, computed, watch, onMounted, onUnmounted } from "vue";
 import { useVirtualizer } from "@tanstack/vue-virtual";
-import { Search, Plus, ListFilter, FileDown, Sparkles, X, TriangleAlert, ScanSearch, Loader2, Check, Minus } from "lucide-vue-next";
+import { Search, Plus, ListFilter, FileDown, Sparkles, X, TriangleAlert, ScanSearch, Loader2, Check, Minus, CircleQuestionMark } from "lucide-vue-next";
 import type { State, Issue } from "@/types.js";
 import { filterKeys, type KeyFilter } from "@/filter.js";
 import { filterFromUrl, filterToUrl, type SortMode, type ViewMode } from "@/filterUrl.js";
@@ -418,19 +418,44 @@ async function onCreated(key: string) {
           <Input
             ref="searchInput"
             v-model="filter.text"
-            placeholder="Search keys, values, context…"
-            class="h-8 w-64 pl-8 pr-8"
+            placeholder="Search… try key:, value:, context:, /regex/"
+            class="h-8 w-72 pl-8 pr-14"
             @keydown.esc="filter.text = ''"
           />
           <button
             v-if="filter.text"
             type="button"
-            class="absolute right-1.5 top-1/2 grid size-5 -translate-y-1/2 place-items-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            class="absolute right-7 top-1/2 grid size-5 -translate-y-1/2 place-items-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="Clear search"
             @click="filter.text = ''"
           >
             <X class="size-3.5" />
           </button>
+          <Popover>
+            <PopoverTrigger as-child>
+              <button
+                type="button"
+                class="absolute right-1.5 top-1/2 grid size-5 -translate-y-1/2 place-items-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="Search syntax help"
+              >
+                <CircleQuestionMark class="size-3.5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" class="w-80 text-sm">
+              <p class="mb-2 font-medium">Search syntax</p>
+              <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
+                <dt class="text-muted-foreground">(no prefix)</dt><dd>Search keys, values and context</dd>
+                <dt><code class="rounded bg-muted px-1 py-0.5 font-mono text-xs">key:</code></dt><dd>Match key names only</dd>
+                <dt><code class="rounded bg-muted px-1 py-0.5 font-mono text-xs">value:</code></dt><dd>Match translations (all locales)</dd>
+                <dt><code class="rounded bg-muted px-1 py-0.5 font-mono text-xs">context:</code></dt><dd>Match context notes</dd>
+                <dt><code class="rounded bg-muted px-1 py-0.5 font-mono text-xs">/…/</code></dt><dd>Regular expression</dd>
+              </dl>
+              <p class="mt-2 text-xs text-muted-foreground">
+                Combine them: <code class="rounded bg-muted px-1 py-0.5 font-mono text-xs">value:/sign\s?in/</code>.
+                Search is case-insensitive.
+              </p>
+            </PopoverContent>
+          </Popover>
         </div>
 
         <Popover>
