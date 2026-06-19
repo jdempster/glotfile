@@ -64,6 +64,10 @@ export const translate = (body: unknown) =>
   fetch("/api/translate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => json<TranslateResult>(r));
 export const translateEstimate = (body: { keys?: string[]; locales?: string[] }) =>
   fetch("/api/translate/estimate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => json<TranslateEstimate>(r));
+export const suggestProjectContext = () =>
+  fetch("/api/guidance/suggest/context", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }).then((r) => json<{ projectContext: string }>(r));
+export const suggestLocaleInstruction = (body: { locale: string; projectContext?: string }) =>
+  fetch("/api/guidance/suggest/locale", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => json<{ instruction: string }>(r));
 export const batchStatus = () =>
   fetch("/api/batch/status").then((r) => json<BatchStatusResponse>(r));
 export const batchSubmit = (body: { keys?: string[]; locales?: string[] }) =>

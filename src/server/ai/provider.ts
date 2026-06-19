@@ -40,6 +40,12 @@ export interface TranslationRequest {
   image?: ImageData;
   // Present ⇒ this is a plural item; the model must return `forms`.
   plural?: PluralRequest;
+  // Project-wide description (config.projectContext), injected into the system
+  // prompt for every locale. Identical across all requests in a run.
+  projectContext?: string;
+  // Extra translation rules for this request's target locale
+  // (config.localeInstructions[targetLocale]). Stamped in selectRequests.
+  localeInstruction?: string;
 }
 export interface TranslationResult {
   id: string;
@@ -136,10 +142,31 @@ export function supportsBatchComplete(p: TranslationProvider): p is BatchComplet
   return typeof (p as Partial<BatchCompletionProvider>).submitCompletionBatch === "function";
 }
 
-export function buildSystemPrompt(hasPluralItems: boolean): string {
+export function buildSystemPrompt(reqs: TranslationRequest[]): string {
+  const hasPluralItems = reqs.some((r) => r.plural !== undefined);
+  // Project context is config-global, so every request carries the same value;
+  // take the first one that has it.
+  const projectContext = reqs.find((r) => r.projectContext)?.projectContext?.trim();
+  // Per-locale rules only make sense for a single-locale batch — every real
+  // provider send is single-locale (runLocaleParallel groups by targetLocale).
+  // A mixed-locale array only happens for the activity-log/estimate summary,
+  // where attributing one locale's rules to all items would mislabel them, so
+  // omit them there rather than lie.
+  const locales = new Set(reqs.map((r) => r.targetLocale));
+  const targetLocale = reqs[0]?.targetLocale ?? "";
+  const localeInstruction = locales.size === 1 ? reqs[0]?.localeInstruction?.trim() : undefined;
   const lines = [
     "You are a professional software localization engine for a UI string catalog.",
     "Your goal: translate each source UI string into its target locale accurately and idiomatically, as a native speaker would phrase it in a real app interface.",
+  ];
+  if (projectContext) {
+    lines.push(
+      "",
+      "Project context (applies to every string you translate):",
+      projectContext,
+    );
+  }
+  lines.push(
     "",
     "You are given, per item: the key path, the source text, optional human context, the target locale, an optional max length, the list of interpolation placeholders, an optional `literals` list, and any relevant glossary entries. Some items also include a screenshot image showing where the string appears in the UI — use it to disambiguate meaning, tone, and length.",
     "",
@@ -152,11 +179,18 @@ export function buildSystemPrompt(hasPluralItems: boolean): string {
     "- Quotation marks and apostrophes: punctuate exactly as a professional native translator instinctively would for the target language — its typographic conventions (e.g. „German“, «French», “English”, ’ for apostrophes), applied with judgment about what is quoted prose versus a literal that must stay untouched. Never emit a raw ASCII double-quote (\") inside a translated string — it corrupts the JSON reply.",
     "- Match the register and capitalization conventions of the target language and of UI microcopy.",
     "- Return ONLY the translated string for each item — no quotes, notes, or explanations.",
-  ];
+  );
   if (hasPluralItems) {
     lines.push(
       "",
       "Plural items: an item with a `plural` field gives you the source plural FORMS (keyed by CLDR category) and the `categories` REQUIRED for the target language. Return a `forms` object with one idiomatic translation per REQUIRED category — including categories the source language does not have (infer them from meaning). Keep the count token shown in the source forms (e.g. {count}) in every form that states a quantity; the `zero`, `one`, and `two` forms MAY omit it when that is natural in the target language — e.g. \"No files\", \"One file\", or a dual form that encodes the count grammatically (Arabic ملفان). Never introduce a placeholder the source did not have. For these items return `forms` instead of `translation`.",
+    );
+  }
+  if (localeInstruction) {
+    lines.push(
+      "",
+      `Additional instructions for the target language (${targetLocale}) — apply these on top of the rules above:`,
+      localeInstruction,
     );
   }
   return lines.join("\n");
@@ -201,14 +235,22 @@ export function buildBatchPrompt(reqs: TranslationRequest[]): string {
     JSON.stringify(items, null, 2);
 }
 
-export function buildTranslateGemmaSystemPrompt(sourceLocale: string, targetLocale: string): string {
+export function buildTranslateGemmaSystemPrompt(
+  sourceLocale: string,
+  targetLocale: string,
+  guidance?: { projectContext?: string; localeInstruction?: string },
+): string {
+  const projectContext = guidance?.projectContext?.trim();
+  const localeInstruction = guidance?.localeInstruction?.trim();
   return (
     `You are a professional ${sourceLocale} to ${targetLocale} translator. ` +
     `Your goal is to accurately convey the meaning and nuances of the original ${sourceLocale} text ` +
     `while adhering to ${targetLocale} grammar, vocabulary, and cultural sensitivities. ` +
+    (projectContext ? `Project context: ${projectContext} ` : "") +
     `Produce only the ${targetLocale} translation, without any additional explanations or commentary. ` +
     `Preserve every interpolation placeholder exactly as written (e.g. {site}, {count}, {name}) — do not translate, rename, or remove them. ` +
     `Preserve markdown formatting markers exactly as written (e.g. **bold**, *italic*, __underline__) — copy them into the translation in the same positions. ` +
+    (localeInstruction ? `Additional instructions for ${targetLocale}: ${localeInstruction} ` : "") +
     `Please translate the following ${sourceLocale} text into ${targetLocale}:`
   );
 }

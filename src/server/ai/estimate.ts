@@ -67,7 +67,7 @@ export function estimateTranslation(state: State, ai: AiConfig, opts: SelectOpti
     let outputTokens = 0;
     const batches = chunk(group, Math.max(1, ai.batchSize));
     for (const batch of batches) {
-      const system = buildSystemPrompt(batch.some((r) => r.plural !== undefined));
+      const system = buildSystemPrompt(batch);
       inputTokens += estimateTokens(system) + estimateTokens(buildBatchPrompt(batch));
       for (const r of batch) outputTokens += estimateOutputTokens(r);
     }

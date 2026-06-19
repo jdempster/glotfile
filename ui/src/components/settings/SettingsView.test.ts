@@ -31,7 +31,11 @@ vi.mock("@/api.js", () => ({
   putAiProfile: vi.fn(() => Promise.resolve()),
   deleteAiProfile: vi.fn(() => Promise.resolve()),
   setActiveAiProfile: vi.fn(() => Promise.resolve()),
+  suggestProjectContext: vi.fn(() => Promise.resolve({ projectContext: "Sprout is a houseplant-care app." })),
+  suggestLocaleInstruction: (...args: unknown[]) => suggestLocaleInstruction(...args),
 }));
+
+const suggestLocaleInstruction = vi.fn((..._args: unknown[]) => Promise.resolve({ instruction: "Use vouvoiement." }));
 
 // Imported after the mock is declared so SettingsView and the test share one router module.
 import SettingsView from "./SettingsView.vue";
@@ -198,6 +202,80 @@ describe("SettingsView subtab history", () => {
     await flushPromises();
 
     expect(w.text()).toContain("How the usage scanner finds where keys are referenced");
+    w.unmount();
+  });
+});
+
+describe("SettingsView translation guidance", () => {
+  beforeEach(() => {
+    mockState = { version: 1, config: makeConfig(), keys: {} };
+    putConfig.mockClear();
+    location.hash = "";
+  });
+  afterEach(() => {
+    setLeaveGuard(null);
+    location.hash = "";
+  });
+
+  it("shows a project-context field and a per-target-language rule field (not the source)", async () => {
+    const w = mountView("#settings?section=guidance");
+    await flushPromises();
+    expect(w.find("#project-context").exists()).toBe(true);
+    // fr is a target → has a rule field; en is the source → does not.
+    expect(w.find("#locale-instruction-fr").exists()).toBe(true);
+    expect(w.find("#locale-instruction-en").exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("saves the project context and per-locale instruction into the config", async () => {
+    const w = mountView("#settings?section=guidance");
+    await flushPromises();
+
+    await w.get("#project-context").setValue("Sprout is a houseplant-care app.");
+    await w.get("#locale-instruction-fr").setValue("Use vouvoiement.");
+    await flushPromises();
+
+    await w.get("[data-testid='save-config']").trigger("click");
+    await flushPromises();
+
+    expect(putConfig).toHaveBeenCalledTimes(1);
+    expect(putConfig).toHaveBeenCalledWith(expect.objectContaining({
+      projectContext: "Sprout is a houseplant-care app.",
+      localeInstructions: { fr: "Use vouvoiement." },
+    }));
+    w.unmount();
+  });
+
+  it("fills the project-context field from an AI suggestion", async () => {
+    const w = mountView("#settings?section=guidance");
+    await flushPromises();
+
+    await w.get("[data-testid='suggest-context']").trigger("click");
+    await flushPromises();
+
+    expect((w.get("#project-context").element as HTMLTextAreaElement).value).toBe("Sprout is a houseplant-care app.");
+    w.unmount();
+  });
+
+  it("fills a locale field from an AI suggestion, passing the current project context", async () => {
+    const w = mountView("#settings?section=guidance");
+    await flushPromises();
+
+    await w.get("#project-context").setValue("Sprout is a plant app.");
+    await w.get("[data-testid='suggest-locale-fr']").trigger("click");
+    await flushPromises();
+
+    expect(suggestLocaleInstruction).toHaveBeenCalledWith({ locale: "fr", projectContext: "Sprout is a plant app." });
+    expect((w.get("#locale-instruction-fr").element as HTMLTextAreaElement).value).toBe("Use vouvoiement.");
+    w.unmount();
+  });
+
+  it("disables Suggest when no AI model is configured", async () => {
+    const { getLocalSettings } = await import("@/api.js");
+    vi.mocked(getLocalSettings).mockResolvedValueOnce({ ai: { ...defaultLocal.ai, model: "" }, editor: "vscode" } as never);
+    const w = mountView("#settings?section=guidance");
+    await flushPromises();
+    expect((w.get("[data-testid='suggest-context']").element as HTMLButtonElement).disabled).toBe(true);
     w.unmount();
   });
 });

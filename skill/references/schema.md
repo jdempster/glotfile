@@ -34,6 +34,8 @@ In **split** layout this is spread across `glotfile/config.json` (holds `version
   ],
   "format": { "indent": 2, "sortKeys": true, "finalNewline": true },
   "autoExport": true,                      // serve re-exports on change (default)
+  "projectContext": "Sprout is a houseplant-care app…", // AI: project-wide guidance
+  "localeInstructions": { "fr": "Use vouvoiement." },                 // AI: per-locale rules
   "spelling": { "customWords": [] },
   "lint": { "rules": {}, "ignore": [], "spelling": {} },
   "scan": {                                // tunes `scan` / `prune --unused`
@@ -48,6 +50,21 @@ In **split** layout this is spread across `glotfile/config.json` (holds `version
 `{locale}` in an output `path` is replaced with each locale's export token.
 **Saving Settings from the UI replaces the whole `config` object** — any new `config.*`
 section must be modeled in the round-trip or it is silently wiped.
+
+### `config.projectContext` / `config.localeInstructions` — steering AI translation
+
+Two optional fields that shape every AI translation prompt:
+
+- **`projectContext`** (string) — a project-wide description (what the product is, how its
+  key terms should be read, overall tone). Injected into the system prompt for *every* locale.
+- **`localeInstructions`** (object) — extra rules for one locale, keyed by canonical
+  (lowercase BCP-47) locale, e.g. `{ "fr": "Use vouvoiement." }`. Each value is appended to
+  that locale's system prompt, on top of the project context.
+
+Edit them via the UI (Settings → Translation guidance) or directly in `config`; `glotfile
+suggest-guidance --context | --locale <code>` drafts a starting point from the catalog with the
+AI model (add `--write` to save it). Respect what's there before translating — they encode the
+project's terminology and register decisions.
 
 ### `config.scan` — keeping the scanner honest
 

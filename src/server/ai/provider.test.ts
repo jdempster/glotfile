@@ -33,14 +33,14 @@ const pluralReq: TranslationRequest = {
 
 describe("prompt assembly", () => {
   it("system prompt states the hard constraints", () => {
-    const sys = buildSystemPrompt(false);
+    const sys = buildSystemPrompt([req]);
     expect(sys).toMatch(/preserve/i);
     expect(sys).toMatch(/placeholder/i);
     expect(sys).toMatch(/only/i);
   });
 
   it("system prompt mentions the goal, glossary, and screenshots", () => {
-    const sys = buildSystemPrompt(false);
+    const sys = buildSystemPrompt([req]);
     expect(sys).toMatch(/goal/i);
     expect(sys).toMatch(/glossary/i);
     expect(sys).toMatch(/screenshot/i);
@@ -64,7 +64,7 @@ describe("prompt assembly", () => {
   });
 
   it("system prompt tells the model to reproduce the provided literals verbatim", () => {
-    const sys = buildSystemPrompt(false);
+    const sys = buildSystemPrompt([req]);
     // references the per-item `literals` field, not just generic apostrophe advice
     expect(sys).toMatch(/literals/i);
     expect(sys).toMatch(/exactly|verbatim/i);
@@ -83,15 +83,15 @@ describe("prompt assembly", () => {
     expect(text).toContain("'{{gardener}}'");
   });
 
-  it("system prompt includes plural handling when hasPluralItems is true", () => {
-    const sys = buildSystemPrompt(true);
+  it("system prompt includes plural handling when a request is a plural item", () => {
+    const sys = buildSystemPrompt([pluralReq]);
     expect(sys).toMatch(/plural/i);
     expect(sys).toMatch(/categor/i);
     expect(sys).toMatch(/forms/i);
   });
 
-  it("system prompt omits plural handling when hasPluralItems is false", () => {
-    const sys = buildSystemPrompt(false);
+  it("system prompt omits plural handling when no request is a plural item", () => {
+    const sys = buildSystemPrompt([req]);
     expect(sys).not.toMatch(/plural items/i);
     expect(sys).not.toMatch(/\bforms\b/i);
   });
@@ -136,6 +136,43 @@ describe("prompt assembly", () => {
     };
     const text = buildBatchPrompt([withHints, { ...req, id: "1" }]);
     expect(text).toMatch(/glossary entries are constraints/i);
+  });
+});
+
+describe("prompt guidance (project context + per-locale rules)", () => {
+  const projectContext = "Sprout is a houseplant-care app; treat 'feed' as fertilizing a plant, never a content feed.";
+  const frReq: TranslationRequest = { ...req, targetLocale: "fr", projectContext, localeInstruction: "Use vouvoiement throughout." };
+  const deReq: TranslationRequest = { ...req, id: "2", targetLocale: "de", projectContext, localeInstruction: "Use the formal Sie." };
+
+  it("injects the project context into the system prompt when a request carries it", () => {
+    const sys = buildSystemPrompt([frReq]);
+    expect(sys).toContain(projectContext);
+    expect(sys).toMatch(/project context/i);
+  });
+
+  it("injects the per-locale instruction for a single-locale batch", () => {
+    const sys = buildSystemPrompt([frReq, { ...frReq, id: "1", key: "auth.signOut" }]);
+    expect(sys).toContain("Use vouvoiement throughout.");
+    // labelled with the target locale so the model knows whom the rule is for
+    expect(sys).toContain("fr");
+  });
+
+  it("omits the per-locale instruction when the batch spans multiple locales, but keeps the shared project context", () => {
+    const sys = buildSystemPrompt([frReq, deReq]);
+    expect(sys).toContain(projectContext);
+    expect(sys).not.toContain("Use vouvoiement throughout.");
+    expect(sys).not.toContain("Use the formal Sie.");
+  });
+
+  it("adds no project-context or locale-instruction blocks when requests carry none", () => {
+    const sys = buildSystemPrompt([req]);
+    expect(sys).not.toMatch(/project context/i);
+    expect(sys).not.toMatch(/additional instructions/i);
+  });
+
+  it("still reports plural handling based on the requests, not a boolean flag", () => {
+    expect(buildSystemPrompt([pluralReq])).toMatch(/plural items/i);
+    expect(buildSystemPrompt([req])).not.toMatch(/plural items/i);
   });
 });
 
@@ -188,6 +225,15 @@ describe("translategemma strategy", () => {
     const sys = buildTranslateGemmaSystemPrompt("en", "fr");
     expect(sys).toMatch(/placeholder/i);
     expect(sys).toMatch(/markdown/i);
+  });
+
+  it("system prompt folds in the project context and per-locale instruction when supplied", () => {
+    const sys = buildTranslateGemmaSystemPrompt("en", "fr", {
+      projectContext: "Sprout is a houseplant-care app.",
+      localeInstruction: "Use vouvoiement.",
+    });
+    expect(sys).toContain("Sprout is a houseplant-care app.");
+    expect(sys).toContain("Use vouvoiement.");
   });
 
   it("user prompt is two blank lines then the source text", () => {

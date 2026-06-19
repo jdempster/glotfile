@@ -47,7 +47,7 @@ export class OllamaProvider extends OpenAIProvider {
       const res = await this.client.chat.completions.create({
         model: this.config.model,
         messages: [
-          { role: "system", content: buildTranslateGemmaSystemPrompt(req.sourceLocale, req.targetLocale) },
+          { role: "system", content: buildTranslateGemmaSystemPrompt(req.sourceLocale, req.targetLocale, { projectContext: req.projectContext, localeInstruction: req.localeInstruction }) },
           { role: "user", content: buildTranslateGemmaUserPrompt(req.source) },
         ],
       }, { signal });

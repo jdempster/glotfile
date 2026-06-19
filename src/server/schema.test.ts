@@ -380,6 +380,51 @@ describe("config.exportLocales", () => {
   });
 });
 
+describe("config.projectContext", () => {
+  it("accepts a string", () => {
+    const s = defaultState();
+    s.config.projectContext = "Sprout is a houseplant-care app.";
+    expect(() => validate(s)).not.toThrow();
+    expect(validate(s).config.projectContext).toBe("Sprout is a houseplant-care app.");
+  });
+
+  it("accepts state with no projectContext", () => {
+    expect(validate(defaultState()).config.projectContext).toBeUndefined();
+  });
+
+  it("rejects a non-string projectContext", () => {
+    const s = defaultState();
+    s.config.projectContext = 42 as unknown as string;
+    expect(() => validate(s)).toThrow(/projectContext must be a string/);
+  });
+});
+
+describe("config.localeInstructions", () => {
+  it("accepts a map of locale to instruction string", () => {
+    const s = defaultState();
+    s.config.locales = ["en", "fr"];
+    s.config.localeInstructions = { fr: "Use vouvoiement." };
+    expect(() => validate(s)).not.toThrow();
+    expect(validate(s).config.localeInstructions?.fr).toBe("Use vouvoiement.");
+  });
+
+  it("accepts state with no localeInstructions", () => {
+    expect(validate(defaultState()).config.localeInstructions).toBeUndefined();
+  });
+
+  it("rejects a non-object localeInstructions", () => {
+    const s = defaultState();
+    s.config.localeInstructions = "nope" as unknown as Record<string, string>;
+    expect(() => validate(s)).toThrow(/localeInstructions must be an object/);
+  });
+
+  it("rejects a non-string instruction value", () => {
+    const s = defaultState();
+    s.config.localeInstructions = { fr: 5 as unknown as string };
+    expect(() => validate(s)).toThrow(/localeInstructions\["fr"\] must be a string/);
+  });
+});
+
 describe("key placeholder metadata", () => {
   it("accepts valid placeholder metadata", () => {
     const s = defaultState();

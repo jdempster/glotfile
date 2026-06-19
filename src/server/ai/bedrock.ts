@@ -116,7 +116,7 @@ export class BedrockProvider implements TranslationProvider {
   private buildInput(batch: TranslationRequest[]): unknown {
     const input: Record<string, unknown> = {
       modelId: this.config.model,
-      system: [{ text: buildSystemPrompt(batch.some((r) => r.plural !== undefined)) }],
+      system: [{ text: buildSystemPrompt(batch) }],
       messages: [{ role: "user", content: this.buildContentBlocks(batch) }],
     };
     // Force structured output via a single tool, except for models without

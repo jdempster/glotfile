@@ -90,6 +90,17 @@ describe("load/save", () => {
     expect(loaded.keys["k"]!.values["en_US"]).toBeUndefined();
   });
 
+  it("canonicalizes config.localeInstructions keys to BCP-47 on save/load", () => {
+    const p = join(mkdtempSync(join(tmpdir(), "glot-")), "glotfile.json");
+    const s = defaultState();
+    s.config.locales = ["en", "pt-br"];
+    s.config.localeInstructions = { PT_BR: "Use você." };
+    saveState(p, s);
+    const loaded = loadState(p);
+    expect(loaded.config.localeInstructions?.["pt-br"]).toBe("Use você.");
+    expect(loaded.config.localeInstructions?.["PT_BR"]).toBeUndefined();
+  });
+
   it("downgrades a version-2 file to version 1 on load", () => {
     const p = join(mkdtempSync(join(tmpdir(), "glot-")), "glotfile.json");
     // A version-2 file whose value merely looks like an ICU plural must load

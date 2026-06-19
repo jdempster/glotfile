@@ -10,6 +10,7 @@ import {
   mergeGlossarySuggestions, dismissGlossarySuggestion, removeGlossarySuggestion,
 } from "./state.js";
 import { selectGlossarySources, knownTermList, buildGlossarySuggestSystemPrompt, buildGlossarySuggestBatchPrompt, GLOSSARY_SUGGEST_SCHEMA, dedupeTerms, type SuggestedTerm } from "./ai/glossary-suggest.js";
+import { buildProjectContextSystemPrompt, buildProjectContextUserPrompt, PROJECT_CONTEXT_SCHEMA, buildLocaleInstructionSystemPrompt, buildLocaleInstructionUserPrompt, LOCALE_INSTRUCTION_SCHEMA } from "./ai/guidance-suggest.js";
 import { sourceKeysForTerm } from "./glossary.js";
 import { acceptFindings } from "./lint/accept.js";
 import { findMissing, loadUsageCache, computeUsedKeys, literalMatcher } from "./scan.js";
@@ -1197,7 +1198,7 @@ export function createApi(deps: ApiDeps): Hono {
 
       let totalWritten = 0;
       const allErrors: Array<{ key: string; locale: string; error: string }> = [];
-      const system = buildSystemPrompt(reqs.some((r) => r.plural !== undefined));
+      const system = buildSystemPrompt(reqs);
       const reqById = new Map(reqs.map((r) => [r.id, r]));
 
       // The plan: every target locale and how many strings it needs, so the UI
@@ -1344,7 +1345,7 @@ export function createApi(deps: ApiDeps): Hono {
         model: aiCfg.model,
         usage,
         estimatedCostUsd: usageCostUsd(usage, aiCfg),
-        system: buildSystemPrompt(toTranslate.some((r) => r.plural !== undefined)),
+        system: buildSystemPrompt(toTranslate),
         // Log the screenshot PATH only — never the image bytes.
         items: toTranslate.map((r) => ({
           id: r.id,
@@ -1432,7 +1433,7 @@ export function createApi(deps: ApiDeps): Hono {
       kind: "translate",
       summary: `Submitted batch ${pending.batchId} (${pending.total} items)`,
       model: aiCfg.model,
-      system: buildSystemPrompt(reqs.some((r) => r.plural !== undefined)),
+      system: buildSystemPrompt(reqs),
       items: reqs.map((r) => ({ id: r.id, key: r.key, source: r.source, targetLocale: r.targetLocale, context: r.context, glossary: r.glossary, screenshot: s.keys[r.key]?.screenshot })),
     });
     console.log(`[batch] submitted ${pending.batchId} — ${pending.total} string(s)`);
@@ -1558,6 +1559,63 @@ export function createApi(deps: ApiDeps): Hono {
     const cache = loadUsageCache(projectRoot);
     if (!cache) return c.json({ indexed: false, used: [] });
     return c.json({ indexed: true, scannedAt: cache.scannedAt, used: computeUsedKeys(load(), cache) });
+  });
+
+  // Translation-guidance AI suggestions: one-shot completions backing the
+  // "Suggest" buttons in Settings → Translation guidance. They never mutate
+  // state — the UI fills the field and the user saves (or discards).
+  const GUIDANCE_SAMPLE_LIMIT = 200;
+
+  app.post("/guidance/suggest/context", async (c) => {
+    const s0 = load();
+    const sources = selectGlossarySources(s0, { limit: GUIDANCE_SAMPLE_LIMIT });
+    if (!sources.length) return c.json({ error: "No source strings to learn from yet — add some keys first." }, 400);
+    const aiCfg = loadLocalSettings(projectRoot).ai;
+    let provider: TranslationProvider;
+    try {
+      provider = deps.makeProvider ? deps.makeProvider() : makeProvider(aiCfg);
+    } catch (e) {
+      return c.json({ error: explainProviderError(aiCfg.provider, e) }, 400);
+    }
+    try {
+      const raw = await provider.complete({
+        system: buildProjectContextSystemPrompt(),
+        content: [{ type: "text", text: buildProjectContextUserPrompt(sources, knownTermList(s0)) }],
+        schema: PROJECT_CONTEXT_SCHEMA,
+      });
+      const projectContext = String((raw as { projectContext?: string }).projectContext ?? "").trim();
+      return c.json({ projectContext });
+    } catch (e) {
+      return c.json({ error: explainProviderError(aiCfg.provider, e) }, 502);
+    }
+  });
+
+  app.post("/guidance/suggest/locale", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const locale = typeof body.locale === "string" ? body.locale.trim() : "";
+    if (!locale) return c.json({ error: "locale is required" }, 400);
+    const projectContext = typeof body.projectContext === "string" ? body.projectContext : "";
+    const s0 = load();
+    const sources = selectGlossarySources(s0, { limit: GUIDANCE_SAMPLE_LIMIT });
+    if (!sources.length) return c.json({ error: "No source strings to learn from yet — add some keys first." }, 400);
+    const aiCfg = loadLocalSettings(projectRoot).ai;
+    let provider: TranslationProvider;
+    try {
+      provider = deps.makeProvider ? deps.makeProvider() : makeProvider(aiCfg);
+    } catch (e) {
+      return c.json({ error: explainProviderError(aiCfg.provider, e) }, 400);
+    }
+    try {
+      const raw = await provider.complete({
+        system: buildLocaleInstructionSystemPrompt(),
+        content: [{ type: "text", text: buildLocaleInstructionUserPrompt(locale, projectContext, sources, knownTermList(s0)) }],
+        schema: LOCALE_INSTRUCTION_SCHEMA,
+      });
+      const instruction = String((raw as { instruction?: string }).instruction ?? "").trim();
+      return c.json({ instruction });
+    } catch (e) {
+      return c.json({ error: explainProviderError(aiCfg.provider, e) }, 502);
+    }
   });
 
   app.post("/context/build", async (c) => {

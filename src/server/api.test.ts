@@ -2620,3 +2620,73 @@ describe("glossary-suggest beta gate (env unset)", () => {
     }
   });
 });
+
+describe("POST /guidance/suggest", () => {
+  function setupGuidance(makeProvider?: () => unknown) {
+    const dir = mkdtempSync(join(tmpdir(), "glot-guid-"));
+    const file = join(dir, "glotfile.json");
+    const s = defaultState();
+    s.config.locales = ["en", "fr"];
+    createKey(s, "nav.signIn", "Sign in");
+    createKey(s, "plant.water", "Water");
+    saveState(file, s);
+    return createApi({ statePath: file, makeProvider: makeProvider as never });
+  }
+
+  const provider = () => ({
+    translate: async () => [],
+    supportsVision: () => false,
+    complete: async () => ({ projectContext: "Sprout is a houseplant-care app.", instruction: "Use vouvoiement." }),
+  });
+
+  it("suggests a project context from the catalog", async () => {
+    const app = setupGuidance(provider);
+    const res = await app.request("/guidance/suggest/context", {
+      method: "POST", headers: { "content-type": "application/json" }, body: "{}",
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ projectContext: "Sprout is a houseplant-care app." });
+  });
+
+  it("suggests a per-locale instruction grounded in the supplied project context", async () => {
+    const app = setupGuidance(provider);
+    const res = await app.request("/guidance/suggest/locale", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ locale: "fr", projectContext: "Sprout is a plant app." }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ instruction: "Use vouvoiement." });
+  });
+
+  it("returns 400 when the locale is missing", async () => {
+    const app = setupGuidance(provider);
+    const res = await app.request("/guidance/suggest/locale", {
+      method: "POST", headers: { "content-type": "application/json" }, body: "{}",
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBeTruthy();
+  });
+
+  it("returns 400 when the provider cannot be created", async () => {
+    const app = setupGuidance(() => { throw new Error("Could not load credentials from any providers"); });
+    const res = await app.request("/guidance/suggest/context", {
+      method: "POST", headers: { "content-type": "application/json" }, body: "{}",
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/credentials/i);
+  });
+
+  it("returns 400 when there are no source strings to learn from", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "glot-guid-empty-"));
+    const file = join(dir, "glotfile.json");
+    const s = defaultState();
+    s.config.locales = ["en", "fr"];
+    saveState(file, s);
+    const app = createApi({ statePath: file, makeProvider: provider as never });
+    const res = await app.request("/guidance/suggest/context", {
+      method: "POST", headers: { "content-type": "application/json" }, body: "{}",
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBeTruthy();
+  });
+});

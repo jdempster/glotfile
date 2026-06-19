@@ -2,9 +2,9 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from "vue";
 import {
   Globe, FileText, Cpu, BookOpen, Code2, ScanSearch, ShieldCheck,
-  Plus, X, AlertTriangle, Check, Undo2, Save, Lock, Zap, Languages, RefreshCw, Search, Loader2,
+  Plus, X, AlertTriangle, Check, Undo2, Save, Lock, Zap, Languages, RefreshCw, Search, Loader2, Sparkles,
 } from "lucide-vue-next";
-import { fetchState, putConfig, getLocalSettings, putLocalSettings, getAiProfiles, putAiProfile, deleteAiProfile, setActiveAiProfile, getPrices, refreshPrices as refreshPricesApi, getPricesList, aiTest } from "@/api.js";
+import { fetchState, putConfig, getLocalSettings, putLocalSettings, getAiProfiles, putAiProfile, deleteAiProfile, setActiveAiProfile, getPrices, refreshPrices as refreshPricesApi, getPricesList, aiTest, suggestProjectContext, suggestLocaleInstruction } from "@/api.js";
 import type { PricesStatus, PriceRow } from "@/api.js";
 import type { Config, AiSettings } from "@/types.js";
 import { toast } from "@/components/ui/toast";
@@ -16,6 +16,7 @@ import { setLeaveGuard, navigate, getHashSearch, type Route } from "@/router";
 import { runScan, scanPending, scanDetail } from "@/scanStatus.js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -29,7 +30,7 @@ import OutputEditor from "./OutputEditor.vue";
 import ScanListField from "./ScanListField.vue";
 import SyncWizard from "@/components/sync/SyncWizard.vue";
 
-const SECTION_IDS = ["languages", "outputs", "ai", "scan", "quality", "dictionary", "editor"] as const;
+const SECTION_IDS = ["languages", "guidance", "outputs", "ai", "scan", "quality", "dictionary", "editor"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
 
 const ADAPTERS = ["flutter-arb", "laravel-php", "vue-i18n-json", "next-intl-json", "angular-xliff", "rails-yaml", "apple-strings"];
@@ -76,6 +77,7 @@ const draft = reactive<ConfigForm>({
   customWords: [],
   lintRules: {}, lintIgnore: [],
   scanAccessors: [], scanPatterns: [], scanInclude: [], scanExclude: [], scanKeep: [],
+  projectContext: "", localeInstructions: {},
 });
 
 const loaded = ref(false);
@@ -125,6 +127,8 @@ function applyForm(f: ConfigForm) {
   draft.scanInclude  = [...f.scanInclude];
   draft.scanExclude  = [...f.scanExclude];
   draft.scanKeep     = [...f.scanKeep];
+  draft.projectContext = f.projectContext;
+  draft.localeInstructions = { ...f.localeInstructions };
 }
 
 function snapSaved() {
@@ -145,6 +149,8 @@ function snapSaved() {
     scanInclude:  [...draft.scanInclude],
     scanExclude:  [...draft.scanExclude],
     scanKeep:     [...draft.scanKeep],
+    projectContext: draft.projectContext,
+    localeInstructions: { ...draft.localeInstructions },
   };
 }
 
@@ -396,7 +402,7 @@ const compareBarWidth = (v: number) => `${Math.max(1.5, (v / maxComparedPrice.va
 
 // ── Dirty tracking ───────────────────────────────────────────────────────────
 
-const NON_AUTOSAVE: SectionId[] = ["languages", "outputs", "scan", "quality", "dictionary"];
+const NON_AUTOSAVE: SectionId[] = ["languages", "guidance", "outputs", "scan", "quality", "dictionary"];
 // AI + editor are per-developer local settings (autosaved to .glotfile), not committed config.
 const LOCAL_SECTIONS: SectionId[] = ["ai", "editor"];
 
@@ -404,6 +410,8 @@ function sectionEq(id: SectionId): boolean {
   if (!saved.value) return true;
   const d = draft, s = saved.value;
   if (id === "languages") return JSON.stringify(d.locales) === JSON.stringify(s.locales) && d.sourceLocale === s.sourceLocale;
+  if (id === "guidance") return d.projectContext === s.projectContext
+    && JSON.stringify(d.localeInstructions) === JSON.stringify(s.localeInstructions);
   // Outputs now also owns the global format defaults + auto-export + export-language limit (Format folded in).
   if (id === "outputs")   return JSON.stringify(d.outputs) === JSON.stringify(s.outputs)
     && String(d.indent) === String(s.indent) && d.finalNewline === s.finalNewline && d.autoExport === s.autoExport
@@ -444,6 +452,7 @@ function onEditorChange(id: EditorId) {
 interface SectionDef { id: SectionId; title: string; autosave?: boolean }
 const SECTION_META: Record<SectionId, { title: string; autosave?: boolean }> = {
   languages:  { title: "Languages" },
+  guidance:   { title: "Translation guidance" },
   outputs:    { title: "Export targets" },
   ai:         { title: "AI" },
   scan:       { title: "Scan" },
@@ -453,6 +462,7 @@ const SECTION_META: Record<SectionId, { title: string; autosave?: boolean }> = {
 };
 const SECTIONS: SectionDef[] = [
   { id: "languages",  title: "Languages" },
+  { id: "guidance",   title: "Translation guidance" },
   { id: "outputs",    title: "Export targets" },
   { id: "scan",       title: "Scan" },
   { id: "quality",    title: "Quality checks" },
@@ -461,6 +471,12 @@ const SECTIONS: SectionDef[] = [
 
 function sectionSummary(id: SectionId): string {
   if (id === "languages")  return `${draft.locales.length} language${draft.locales.length === 1 ? "" : "s"}`;
+  if (id === "guidance") {
+    const ctx = draft.projectContext.trim() ? 1 : 0;
+    const rules = Object.values(draft.localeInstructions).filter((v) => v.trim()).length;
+    const parts = [ctx && "Project context", rules && `${rules} locale rule${rules === 1 ? "" : "s"}`].filter(Boolean);
+    return parts.length ? parts.join(" · ") : "Not set";
+  }
   if (id === "outputs")    return `${draft.outputs.length} target${draft.outputs.length === 1 ? "" : "s"}${draft.autoExport ? " · auto" : ""}${draft.exportLocales.length ? " · limited" : ""}`;
   if (id === "ai") return activeProfile.value ? `${activeProfile.value} · ${aiDraft.model}` : `${aiDraft.provider} · ${aiDraft.model}`;
   if (id === "scan") {
@@ -593,6 +609,53 @@ function removeLocale(loc: string) {
   draft.locales = draft.locales.filter((l) => l !== loc);
 }
 
+// ── Translation guidance ─────────────────────────────────────────────────────
+// Per-locale rules apply to the languages we translate INTO (everything but the source).
+const targetLocales = computed(() => draft.locales.filter((l) => l !== draft.sourceLocale));
+
+function setLocaleInstruction(loc: string, value: string) {
+  const next = { ...draft.localeInstructions };
+  // Drop the key when cleared so the saved snapshot ({}) and an emptied field compare equal.
+  if (value === "") delete next[loc];
+  else next[loc] = value;
+  draft.localeInstructions = next;
+}
+
+// AI "Suggest" affordances. Disabled until a model is configured (the server also
+// rejects an unconfigured provider; we surface that as a toast). Each fills the
+// field with a draft the user reviews and saves — nothing is persisted here.
+const aiReady = computed(() => !!aiDraft.model.trim());
+const suggestingContext = ref(false);
+const suggestingLocales = reactive<Record<string, boolean>>({});
+
+async function suggestContext() {
+  if (suggestingContext.value) return;
+  suggestingContext.value = true;
+  try {
+    const { projectContext } = await suggestProjectContext();
+    if (projectContext) draft.projectContext = projectContext;
+    else toast.error("The model returned an empty suggestion.");
+  } catch (e) {
+    toast.error((e as Error).message);
+  } finally {
+    suggestingContext.value = false;
+  }
+}
+
+async function suggestLocale(loc: string) {
+  if (suggestingLocales[loc]) return;
+  suggestingLocales[loc] = true;
+  try {
+    const { instruction } = await suggestLocaleInstruction({ locale: loc, projectContext: draft.projectContext });
+    if (instruction) setLocaleInstruction(loc, instruction);
+    else toast.error("The model returned an empty suggestion.");
+  } catch (e) {
+    toast.error((e as Error).message);
+  } finally {
+    suggestingLocales[loc] = false;
+  }
+}
+
 // ── Outputs ──────────────────────────────────────────────────────────────────
 
 function addOutput()           { draft.outputs.push({ adapter: "flutter-arb", path: "", emptyAs: "omit", style: "nested", indent: null, finalNewline: null, includeLocale: true, localeAliases: {} }); }
@@ -720,6 +783,7 @@ function onSynced(): void {
             : 'border-border/60 bg-background text-muted-foreground',
         ]">
           <Globe      v-if="sec.id === 'languages'"  class="size-4" />
+          <Sparkles   v-else-if="sec.id === 'guidance'" class="size-4" />
           <FileText   v-else-if="sec.id === 'outputs'" class="size-4" />
           <Cpu        v-else-if="sec.id === 'ai'"      class="size-4" />
           <ScanSearch v-else-if="sec.id === 'scan'"    class="size-4" />
@@ -777,7 +841,7 @@ function onSynced(): void {
     <!-- ── Detail pane ── -->
     <div class="relative flex min-w-0 flex-1 flex-col">
       <div class="flex-1 overflow-y-auto px-8 pb-28 pt-7">
-        <div class="max-w-[680px]">
+        <div :class="activeSection === 'guidance' ? 'max-w-[920px]' : 'max-w-[680px]'">
 
           <!-- Section heading -->
           <div class="mb-6">
@@ -791,6 +855,11 @@ function onSynced(): void {
 
             <p v-if="activeSection === 'languages'" class="mt-1.5 text-sm text-muted-foreground">
               The source language is translated into every other language.
+            </p>
+            <p v-else-if="activeSection === 'guidance'" class="mt-1.5 text-sm text-muted-foreground">
+              Steer AI translation with a description of your product and per-language rules.
+              Both are committed to <code class="rounded border bg-muted px-1 py-0.5 font-mono text-xs">glotfile.json</code>
+              and added to the model's system prompt on every run.
             </p>
             <p v-else-if="activeSection === 'outputs'" class="mt-1.5 text-sm text-muted-foreground">
               Where compiled translation files are written. Use
@@ -887,6 +956,76 @@ function onSynced(): void {
               <p v-if="newLocale.trim()" class="flex items-center gap-1.5 text-xs text-muted-foreground">
                 Preview: <LanguageLabel :code="newLocale.trim()" show-name :size="14" />
               </p>
+            </div>
+          </div>
+
+          <!-- ── Translation guidance body ── -->
+          <div v-else-if="activeSection === 'guidance'" class="flex flex-col gap-7">
+            <div class="grid gap-1.5">
+              <div class="flex items-center justify-between gap-3">
+                <Label for="project-context">Project context</Label>
+                <Button
+                  type="button" variant="outline" size="sm" class="shrink-0"
+                  data-testid="suggest-context"
+                  :disabled="!aiReady || suggestingContext"
+                  :title="aiReady ? 'Draft a project description from your strings' : 'Configure an AI model first (AI section)'"
+                  @click="suggestContext"
+                >
+                  <Loader2 v-if="suggestingContext" class="size-3.5 animate-spin" />
+                  <Sparkles v-else class="size-3.5" />
+                  {{ suggestingContext ? "Suggesting…" : "Suggest" }}
+                </Button>
+              </div>
+              <Textarea
+                id="project-context"
+                v-model="draft.projectContext"
+                :rows="10"
+                class="min-h-[180px] resize-y leading-relaxed"
+                placeholder="What the product is, who uses it, and how key terms should be read. e.g. “Sprout is a houseplant-care app; treat ‘feed’ as giving a plant fertilizer, never as a social-media feed.”"
+              />
+              <p class="text-xs text-muted-foreground">
+                Applied to every language. Use it for product description, domain terms, and overall tone.
+                <span v-if="!aiReady">Set an AI model in the AI section to enable Suggest.</span>
+              </p>
+            </div>
+
+            <div class="grid gap-2">
+              <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Per-language rules</div>
+              <p class="text-xs text-muted-foreground">
+                Extra rules for one language only — register, preferred terminology, grammar conventions.
+                Added on top of the project context for that language's translations.
+              </p>
+              <div v-if="targetLocales.length === 0" class="text-sm text-muted-foreground">
+                Add a target language to set per-language rules.
+              </div>
+              <div v-else class="mt-1 flex flex-col gap-5">
+                <div v-for="loc in targetLocales" :key="loc" class="grid gap-1.5">
+                  <div class="flex items-center justify-between gap-3">
+                    <Label :for="`locale-instruction-${loc}`" class="flex items-center gap-2">
+                      <LanguageLabel :code="loc" show-name :size="14" />
+                    </Label>
+                    <Button
+                      type="button" variant="outline" size="sm" class="shrink-0"
+                      :data-testid="`suggest-locale-${loc}`"
+                      :disabled="!aiReady || suggestingLocales[loc]"
+                      :title="aiReady ? `Draft rules for ${loc}` : 'Configure an AI model first (AI section)'"
+                      @click="suggestLocale(loc)"
+                    >
+                      <Loader2 v-if="suggestingLocales[loc]" class="size-3.5 animate-spin" />
+                      <Sparkles v-else class="size-3.5" />
+                      {{ suggestingLocales[loc] ? "Suggesting…" : "Suggest" }}
+                    </Button>
+                  </div>
+                  <Textarea
+                    :id="`locale-instruction-${loc}`"
+                    :model-value="draft.localeInstructions[loc] ?? ''"
+                    :rows="5"
+                    class="min-h-[110px] resize-y leading-relaxed"
+                    placeholder="No extra rules — translated using the project context above."
+                    @update:model-value="setLocaleInstruction(loc, String($event))"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1519,7 +1658,7 @@ function onSynced(): void {
           </div>
         </div>
 
-        <Button size="sm" :disabled="dirtyCount === 0 || saving" @click="doSave">
+        <Button size="sm" data-testid="save-config" :disabled="dirtyCount === 0 || saving" @click="doSave">
           <Save class="size-4" /> Save changes
         </Button>
       </div>

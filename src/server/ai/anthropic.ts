@@ -139,7 +139,7 @@ export class AnthropicProvider implements BatchCompletionProvider {
         model: this.config.model,
         max_tokens: 8192,
         // Batch entries don't share a live cache window, so cache_control is omitted here.
-        system: [{ type: "text", text: buildSystemPrompt(job.requests.some((r) => r.plural !== undefined)) }],
+        system: [{ type: "text", text: buildSystemPrompt(job.requests) }],
         output_config: { format: { type: "json_schema", schema: BATCH_SCHEMA } },
         messages: [{ role: "user", content: this.buildUserContent(job.requests) }],
       },
@@ -217,7 +217,7 @@ export class AnthropicProvider implements BatchCompletionProvider {
     const res = await this.client.messages.create({
       model: this.config.model,
       max_tokens: 8192,
-      system: [{ type: "text", text: buildSystemPrompt(batch.some((r) => r.plural !== undefined)), cache_control: { type: "ephemeral" } }],
+      system: [{ type: "text", text: buildSystemPrompt(batch), cache_control: { type: "ephemeral" } }],
       output_config: { format: { type: "json_schema", schema: BATCH_SCHEMA } },
       messages: [{ role: "user", content }],
     }, { signal });
