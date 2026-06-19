@@ -14,6 +14,7 @@ glotfile get "auth.*" --locale en,fr
 |---|---|
 | `<key-glob>…` | Keys to include, as positional globs (e.g. `auth.*`). Repeatable. Default: all keys. |
 | `--key <glob>` | Another key glob, merged with the positionals. |
+| `--search <query>` | Scoped/regex text search, ANDed with the globs and `--state`. See [Searching by text](#searching-by-text). |
 | `--locale <list>` | Locales to show, comma-separated. Default: every configured locale, **source included** (so you always have the reference text). |
 | `--state <list>` | Only keys whose shown target locales are in these states: `source`, `missing`, `machine`, `needs-review`, `reviewed`. |
 | `--fields <list>` | Cell fields to project: `value,state` (default), or `all` for the whole key entry (context/notes/tags/placeholders/plural). |
@@ -42,6 +43,29 @@ glotfile get --locale en,de --state missing
 ```
 
 Add `needs-review` to also pull the stale strings a source edit invalidated (`--state missing,needs-review`), and `--format ndjson` to stream a large result line by line.
+
+### Searching by text
+
+Globs match key *names*. `--search` matches the **content** — the same scoped/regex search as the editor's search box — and ANDs with any globs and `--state`:
+
+```bash
+glotfile get --search "value:Sign in"      # keys whose translation contains "Sign in"
+glotfile get --search "context:button"      # keys whose context mentions "button"
+glotfile get --search "key:auth"            # substring on the key name
+glotfile get --search "Sign in"             # no prefix → key + value + context
+glotfile get --search "/^auth\\./"          # regex (wrap in /…/)
+glotfile get --search "value:/sign\\s?in/"  # scoped regex
+```
+
+| Prefix | Searches |
+|---|---|
+| `key:` | Key names |
+| `value:` | Translations — every locale, including plural forms |
+| `context:` | Context notes |
+| `/…/` | Regular expression (combine with a scope) |
+| _(none)_ | Key, value and context together |
+
+Search is case-insensitive; a half-typed regex matches nothing rather than erroring.
 
 ## `glotfile stats`
 

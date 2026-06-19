@@ -26,6 +26,19 @@ describe("runGet", () => {
     expect(runGet(fx(), { keyGlobs: ["auth.login", "home.title"] }).keys).toEqual(["auth.login", "home.title"]);
   });
 
+  it("search filters by scope and regex, composing with key globs", () => {
+    expect(runGet(fx(), { search: "key:logout" }).keys).toEqual(["auth.logout"]);
+    // value: searches translations across locales (here a source value, then a de value).
+    expect(runGet(fx(), { search: "value:Log in" }).keys).toEqual(["auth.login"]);
+    expect(runGet(fx(), { search: "value:Abmelden" }).keys).toEqual(["auth.logout"]);
+    // no prefix searches everything (home.title's source value).
+    expect(runGet(fx(), { search: "Welcome" }).keys).toEqual(["home.title"]);
+    // /…/ regex over the key.
+    expect(runGet(fx(), { search: "/^home/" }).keys).toEqual(["home.title"]);
+    // composes (AND) with key globs.
+    expect(runGet(fx(), { keyGlobs: ["auth.*"], search: "value:Déconnexion" }).keys).toEqual(["auth.logout"]);
+  });
+
   it("projects value+state per shown locale by default, missing cells included", () => {
     const json = runGet(fx(), { keyGlobs: ["auth.login"] }).json;
     expect(json).toEqual({
