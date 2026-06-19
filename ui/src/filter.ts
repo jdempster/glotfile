@@ -45,31 +45,77 @@ function matchesState(state: State, entry: KeyEntry, facet: StateFacet, locale?:
   return Object.values(entry.values).some((v) => v.state === facet);
 }
 
-// A search query starting with "^" is treated as a regular expression anchored
-// at the start of the KEY name (case-insensitive): `^auth\.` finds everything
-// under the `auth.` prefix. The leading "^" is both the trigger and the anchor,
-// matching grep-style intuition; the whole query compiles as a regex, so `$`,
-// alternation, and character classes work too. An invalid/half-typed pattern
-// compiles to null and matches nothing, so the list empties instead of throwing.
-function compileKeyRegex(query: string): RegExp | null {
+// Which part of a key the text query searches.
+export type SearchScope = "all" | "key" | "value" | "context";
+const SCOPES: SearchScope[] = ["key", "value", "context", "all"];
+
+// A compiled, case-insensitive RegExp; an invalid/half-typed pattern returns null
+// so the list empties instead of throwing.
+function compileRegex(pattern: string): RegExp | null {
   try {
-    return new RegExp(query, "i");
+    return new RegExp(pattern, "i");
   } catch {
     return null;
   }
 }
 
+// Every translatable string on a key: scalar values and plural `forms` alike,
+// across all locales.
+function valueText(entry: KeyEntry): string {
+  return Object.values(entry.values)
+    .flatMap((v) => [v.value, ...Object.values(v.forms ?? {})])
+    .filter((s): s is string => !!s)
+    .join(" ");
+}
+
+function haystack(key: string, entry: KeyEntry, scope: SearchScope): string {
+  switch (scope) {
+    case "key": return key;
+    case "value": return valueText(entry);
+    case "context": return entry.context ?? "";
+    case "all": return `${key} ${entry.context ?? ""} ${(entry.tags ?? []).join(" ")} ${valueText(entry)}`;
+  }
+}
+
+export interface ParsedSearch {
+  scope: SearchScope;
+  // "none" → no text constraint; "invalid-regex" → match nothing (half-typed pattern).
+  mode: "none" | "substring" | "regex" | "invalid-regex";
+  needle: string;       // lowercased, for substring
+  regex: RegExp | null; // for regex
+}
+
+// Parse the search box. An optional leading scope prefix (`key:` / `value:` /
+// `context:` / `all:`, case-insensitive) chooses which field to search; the rest
+// is a case-insensitive substring, or — when wrapped in /…/ — a regular expression.
+// No prefix searches everything; an unrecognised prefix is treated literally.
+export function parseSearch(text: string): ParsedSearch {
+  let scope: SearchScope = "all";
+  let rest = text.trim();
+  const lower = rest.toLowerCase();
+  for (const s of SCOPES) {
+    if (lower.startsWith(`${s}:`)) { scope = s; rest = rest.slice(s.length + 1).trim(); break; }
+  }
+  if (rest === "") return { scope, mode: "none", needle: "", regex: null };
+  if (rest.length >= 2 && rest.startsWith("/") && rest.endsWith("/")) {
+    const regex = compileRegex(rest.slice(1, -1));
+    return { scope, mode: regex ? "regex" : "invalid-regex", needle: "", regex };
+  }
+  return { scope, mode: "substring", needle: rest.toLowerCase(), regex: null };
+}
+
+function matchesText(key: string, entry: KeyEntry, q: ParsedSearch): boolean {
+  switch (q.mode) {
+    case "none": return true;
+    case "invalid-regex": return false;
+    case "regex": return q.regex!.test(haystack(key, entry, q.scope));
+    case "substring": return haystack(key, entry, q.scope).toLowerCase().includes(q.needle);
+  }
+}
+
 export function filterKeys(state: State, filter: KeyFilter, issuesByKey?: Map<string, Issue[]>, usedKeys?: Set<string>): string[] {
-  const query = filter.text.trim();
-  // Pick the text-match mode once, not per key:
-  //   "home.title"  → exact whole-key match
-  //   ^auth\.       → regex on the key name
-  //   anything else → case-insensitive substring over key/context/tags/values
-  const exactKey = query.length >= 2 && query.startsWith('"') && query.endsWith('"')
-    ? query.slice(1, -1).toLowerCase()
-    : null;
-  const keyRegex = exactKey === null && query.startsWith("^") ? compileKeyRegex(query) : null;
-  const needle = query.toLowerCase();
+  // Parse the text query once, not per key.
+  const search = filter.text.trim() ? parseSearch(filter.text) : null;
 
   return Object.keys(state.keys).sort().filter((key) => {
     const entry = state.keys[key]!;
@@ -96,20 +142,7 @@ export function filterKeys(state: State, filter: KeyFilter, issuesByKey?: Map<st
       if (!filter.issues.some((c) => checks.has(c))) return false;
     }
 
-    if (query) {
-      // "home.title" → exact whole-key match (jump to a single key).
-      if (exactKey !== null) {
-        if (key.toLowerCase() !== exactKey) return false;
-      // ^auth\. → regex on the key name only; invalid pattern matches nothing.
-      } else if (query.startsWith("^")) {
-        if (!keyRegex || !keyRegex.test(key)) return false;
-      // otherwise → case-insensitive substring over key/context/tags/values.
-      } else {
-        const hay = (key + " " + (entry.context ?? "") + " " + (entry.tags ?? []).join(" ") + " " +
-          Object.values(entry.values).map((v) => v.value).join(" ")).toLowerCase();
-        if (!hay.includes(needle)) return false;
-      }
-    }
+    if (search && !matchesText(key, entry, search)) return false;
     return true;
   });
 }

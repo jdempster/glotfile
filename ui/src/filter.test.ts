@@ -155,62 +155,99 @@ describe("filterKeys — empty source facet", () => {
   });
 });
 
-describe("filterKeys — exact-match (quoted) text", () => {
-  it("quoted text matches only the exactly-named key", () => {
-    expect(filterKeys(state, f({ text: '"a.key"' }))).toEqual(["a.key"]);
+// Source "en"; context on two keys, a plural with translated `forms`, to exercise
+// scoped key/value/context search and regex.
+const scopeState: State = {
+  version: 1,
+  config: { sourceLocale: "en", locales: ["en", "fr"], ...baseConfig },
+  keys: {
+    "auth.signIn": { context: "Primary CTA on the login screen", values: { en: { value: "Sign in", state: "source" }, fr: { value: "Se connecter", state: "reviewed" } } },
+    "cart.items": { plural: { arg: "count" }, values: { en: { forms: { other: "{count} items" }, state: "source" }, fr: { forms: { other: "{count} articles" }, state: "machine" } } },
+    "nav.home": { context: "Top navigation", values: { en: { value: "Home", state: "source" } } },
+  } as State["keys"],
+};
+
+describe("filterKeys — scoped text search", () => {
+  it("no prefix searches everything (key, value, context)", () => {
+    // "items" hits the cart.items key and its source form; nothing else.
+    expect(filterKeys(scopeState, f({ text: "items" }))).toEqual(["cart.items"]);
+    // "screen" only appears in auth.signIn's context.
+    expect(filterKeys(scopeState, f({ text: "screen" }))).toEqual(["auth.signIn"]);
   });
-  it("quoting requires a whole-key match, unlike the bare substring search", () => {
-    // Bare "key" is a substring of all three key names; quoted, "key" matches none.
-    expect(filterKeys(state, f({ text: "key" }))).toEqual(["a.key", "b.key", "c.key"]);
-    expect(filterKeys(state, f({ text: '"key"' }))).toEqual([]);
+
+  it("key: scopes to the key name only", () => {
+    expect(filterKeys(scopeState, f({ text: "key:auth" }))).toEqual(["auth.signIn"]);
+    // "home" is in nav.home's key AND its source value, but key: ignores the value.
+    expect(filterKeys(scopeState, f({ text: "key:home" }))).toEqual(["nav.home"]);
+    // "connecter" is only a value, never a key → key: finds nothing.
+    expect(filterKeys(scopeState, f({ text: "key:connecter" }))).toEqual([]);
   });
-  it("exact match is case-insensitive", () => {
-    expect(filterKeys(state, f({ text: '"A.KEY"' }))).toEqual(["a.key"]);
+
+  it("value: scopes to translation values, including plural forms", () => {
+    expect(filterKeys(scopeState, f({ text: "value:connecter" }))).toEqual(["auth.signIn"]);
+    // plural `forms` are searchable, not just scalar values.
+    expect(filterKeys(scopeState, f({ text: "value:articles" }))).toEqual(["cart.items"]);
+    // a key fragment is not a value → no match.
+    expect(filterKeys(scopeState, f({ text: "value:auth" }))).toEqual([]);
   });
-  it("exact match is scoped to the key name, not values/context", () => {
-    // "Au revoir" is b.key's value; quoted it isn't a key name, so nothing matches.
-    expect(filterKeys(state, f({ text: '"Au revoir"' }))).toEqual([]);
+
+  it("context: scopes to the context note only", () => {
+    expect(filterKeys(scopeState, f({ text: "context:navigation" }))).toEqual(["nav.home"]);
+    expect(filterKeys(scopeState, f({ text: "context:login" }))).toEqual(["auth.signIn"]);
+    // a value is not context.
+    expect(filterKeys(scopeState, f({ text: "context:connecter" }))).toEqual([]);
+  });
+
+  it("scopes are case-insensitive", () => {
+    expect(filterKeys(scopeState, f({ text: "KEY:AUTH" }))).toEqual(["auth.signIn"]);
+    expect(filterKeys(scopeState, f({ text: "value:SIGN" }))).toEqual(["auth.signIn"]);
+  });
+
+  it("an unknown prefix is treated as a literal substring over everything", () => {
+    // "foo:" is not a scope, so this is a plain substring search (matches nothing here).
+    expect(filterKeys(scopeState, f({ text: "foo:bar" }))).toEqual([]);
+  });
+
+  it("an empty term after a scope imposes no text constraint", () => {
+    expect(filterKeys(scopeState, f({ text: "value:" }))).toEqual(["auth.signIn", "cart.items", "nav.home"]);
   });
 });
 
-describe("filterKeys — regex (^) text", () => {
-  it("a leading ^ anchors a prefix match against the key name", () => {
-    expect(filterKeys(state, f({ text: "^b" }))).toEqual(["b.key"]);
-    expect(filterKeys(state, f({ text: "^b\\.key" }))).toEqual(["b.key"]);
+describe("filterKeys — regex search (/…/)", () => {
+  it("/…/ matches as a regex over everything by default, anchorable to the key", () => {
+    expect(filterKeys(scopeState, f({ text: "/^auth\\./" }))).toEqual(["auth.signIn"]);
+    expect(filterKeys(scopeState, f({ text: "/(auth|nav)\\./" }))).toEqual(["auth.signIn", "nav.home"]);
   });
-  it("supports full regex syntax (alternation, char classes)", () => {
-    expect(filterKeys(state, f({ text: "^[ab]\\.key" }))).toEqual(["a.key", "b.key"]);
-    expect(filterKeys(state, f({ text: "^(a|c)\\." }))).toEqual(["a.key", "c.key"]);
+  it("regex composes with a scope prefix", () => {
+    expect(filterKeys(scopeState, f({ text: "key:/^nav/" }))).toEqual(["nav.home"]);
+    expect(filterKeys(scopeState, f({ text: "value:/se connecter/" }))).toEqual(["auth.signIn"]);
   });
-  it("is case-insensitive, like the substring search", () => {
-    expect(filterKeys(state, f({ text: "^A\\.KEY" }))).toEqual(["a.key"]);
-  });
-  it("regex is scoped to the key name, not values/context", () => {
-    // "Au revoir" is b.key's fr value; a ^-anchored query never sees values.
-    expect(filterKeys(state, f({ text: "^Au" }))).toEqual([]);
+  it("regex is case-insensitive", () => {
+    expect(filterKeys(scopeState, f({ text: "key:/^AUTH/" }))).toEqual(["auth.signIn"]);
   });
   it("an invalid/half-typed pattern matches nothing instead of throwing", () => {
-    expect(filterKeys(state, f({ text: "^a(" }))).toEqual([]);
+    expect(filterKeys(scopeState, f({ text: "/auth(/" }))).toEqual([]);
+    expect(filterKeys(scopeState, f({ text: "key:/auth(/" }))).toEqual([]);
   });
 });
 
 describe("regex filter feeds bulk selection", () => {
   // Bulk actions operate on the selection. "Select all" fills it from the
   // filtered rows (filterKeys output), and pruneTo — run on every filter change —
-  // narrows an existing selection to the filtered set. So a ^-regex filter
+  // narrows an existing selection to the filtered set. So a regex filter
   // governs exactly which keys a bulk change touches.
-  it("select-all under a ^-regex selects exactly the matching keys", () => {
+  it("select-all under a key regex selects exactly the matching keys", () => {
     const sel = useSelection();
-    sel.selectAll(filterKeys(state, f({ text: "^[ab]\\.key" })));
+    sel.selectAll(filterKeys(state, f({ text: "key:/^[ab]\\.key/" })));
     expect(sel.keys().sort()).toEqual(["a.key", "b.key"]);
   });
 
-  it("tightening the filter to a ^-regex prunes the selection to the matches", () => {
+  it("tightening the filter to a regex prunes the selection to the matches", () => {
     const sel = useSelection();
     sel.selectAll(filterKeys(state, f()));
     expect(sel.keys().sort()).toEqual(["a.key", "b.key", "c.key"]);
     // Filter changes → EditorView calls pruneTo(filteredKeys).
-    sel.pruneTo(filterKeys(state, f({ text: "^a" })));
+    sel.pruneTo(filterKeys(state, f({ text: "key:/^a/" })));
     expect(sel.keys()).toEqual(["a.key"]);
   });
 });
