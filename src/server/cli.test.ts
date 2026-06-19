@@ -88,6 +88,13 @@ describe("parseArgs", () => {
   it("parses build-context --since", () => {
     expect(parseArgs(["build-context", "--since", "2026-06-01"]).since).toBe("2026-06-01");
   });
+  it("parses suggest-guidance command and --context flag", () => {
+    expect(parseArgs(["suggest-guidance", "--context"]).command).toBe("suggest-guidance");
+    expect(parseArgs(["suggest-guidance", "--context"]).context).toBe(true);
+  });
+  it("parses suggest-guidance --locale", () => {
+    expect(parseArgs(["suggest-guidance", "--locale", "fr"]).locales).toEqual(["fr"]);
+  });
   it("parses the prune command and its flags", () => {
     const a = parseArgs(["prune", "--empty-source", "--write"]);
     expect(a.command).toBe("prune");

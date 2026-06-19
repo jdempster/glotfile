@@ -12,6 +12,8 @@ Every field in the `config` block of `glotfile.json` — the configuration you *
     { "adapter": "flutter-arb", "path": "lib/l10n/app_{locale}.arb" }
   ],
   "format": { "indent": 2, "sortKeys": true, "finalNewline": true },
+  "projectContext": "Acme is a workplace visitor-management system…",
+  "localeInstructions": { "fr": "Use vouvoiement." },
   "spelling": { "customWords": [] },
   "lint": { "rules": {}, "ignore": [], "spelling": { "locales": {} } }
 }
@@ -48,6 +50,24 @@ Controls how `glotfile.json` is written — keeps diffs small. See The State Fil
 | `indent` | number | `2` |
 | `sortKeys` | boolean | `true` |
 | `finalNewline` | boolean | `true` |
+
+## `projectContext` (string, optional)
+
+A project-wide description added to the AI translation system prompt for **every** language — what the product is, how its key terms should be read, and the overall tone to use. The single highest-leverage setting for consistent machine translation across a product. Edit it in Settings → Translation guidance, where a **Suggest** button can draft one from your catalog. See How Translation Works.
+
+## `localeInstructions` (object, optional)
+
+Extra translation rules for **one** language, keyed by locale. Each value is appended to that locale's system prompt, on top of `projectContext` — use it for register (formal vs. informal), preferred terminology, or grammar conventions that apply to just that language.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `[locale]` | string | Extra AI rules for that locale (keyed by canonical lowercase BCP-47 code, e.g. `fr`, `pt-br`). |
+
+```json
+"localeInstructions": {
+  "fr": "Use vouvoiement. Phrase action buttons as infinitives (« Enregistrer l'entrée »)."
+}
+```
 
 ## `spelling` (object, optional)
 

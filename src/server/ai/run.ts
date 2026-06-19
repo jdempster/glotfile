@@ -30,6 +30,10 @@ export function selectRequests(state: State, opts: SelectOptions): TranslationRe
   // wins; otherwise the legacy onlyMissing boolean (keep only "missing").
   const skip = (st: EffectiveState) => (stateSet ? !stateSet.has(st) : !!opts.onlyMissing && st !== "missing");
   const reqs: TranslationRequest[] = [];
+  // Config-driven AI guidance, carried on every request so the prompt builder
+  // can inject it without the providers ever seeing the project Config.
+  const projectContext = state.config.projectContext?.trim() || undefined;
+  const localeInstructionFor = (locale: string) => state.config.localeInstructions?.[locale]?.trim() || undefined;
   let id = 0;
   for (const key of Object.keys(state.keys).sort()) {
     const entry = state.keys[key]!;
@@ -61,6 +65,8 @@ export function selectRequests(state: State, opts: SelectOptions): TranslationRe
           placeholders: extractPlaceholders(other),
           ...(literals.length ? { literals } : {}),
           ...(glossary.length ? { glossary } : {}),
+          ...(projectContext ? { projectContext } : {}),
+          ...(localeInstructionFor(locale) ? { localeInstruction: localeInstructionFor(locale) } : {}),
           plural: { arg: entry.plural.arg, categories: categoriesFor(locale), sourceForms },
         });
       }
@@ -83,6 +89,8 @@ export function selectRequests(state: State, opts: SelectOptions): TranslationRe
         placeholders: extractPlaceholders(source),
         ...(literals.length ? { literals } : {}),
         ...(glossary.length ? { glossary } : {}),
+        ...(projectContext ? { projectContext } : {}),
+        ...(localeInstructionFor(locale) ? { localeInstruction: localeInstructionFor(locale) } : {}),
       });
     }
   }

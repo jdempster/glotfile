@@ -45,7 +45,7 @@ describe("estimateTranslation", () => {
     const one = { ...ai, batchSize: 100 };
     const est = estimateTranslation(s, one, { onlyMissing: true, locales: ["fr"] });
     const reqs = selectRequests(s, { onlyMissing: true, locales: ["fr"] });
-    const expected = estimateTokens(buildSystemPrompt(false)) + estimateTokens(buildBatchPrompt(reqs));
+    const expected = estimateTokens(buildSystemPrompt(reqs)) + estimateTokens(buildBatchPrompt(reqs));
     expect(est.batches).toBe(1);
     expect(est.inputTokens).toBe(expected);
   });

@@ -15,6 +15,15 @@ For each string that needs translating, Glotfile sends the provider:
 
 Strings are sent in batches (the `ai.batchSize` setting, default 25).
 
+### Project context and per-language rules
+
+Two committed config fields shape the system prompt that frames the whole batch:
+
+- **`projectContext`** — a project-wide description (what the product is, how its key terms should be read, the tone to use), added for **every** language. This is the most effective way to keep terminology consistent across a product — e.g. telling the model that "sign in" means physically checking in at a building, not logging into an account.
+- **`localeInstructions`** — extra rules for **one** language (register, preferred terminology, grammar conventions), appended on top of the project context for that language's batch.
+
+Set both in Settings → Translation guidance, or directly in `config` — see the Configuration Reference. Each field has a **Suggest** button (also `glotfile suggest-guidance`) that drafts a starting point from your catalog using the configured AI model — review and edit it before saving. Because they ride in the system prompt rather than per item, they apply uniformly to every string in the run.
+
 ## Validation on the way back
 
 A translation is only written if it passes validation:

@@ -103,7 +103,7 @@ export class OpenAIProvider implements TranslationProvider {
       // via runBatched, so non-strict schema guidance is sufficient.
       response_format: { type: "json_schema", json_schema: { name: "translations", schema: BATCH_SCHEMA, strict: false } },
       messages: [
-        { role: "system", content: buildSystemPrompt(batch.some((r) => r.plural !== undefined)) },
+        { role: "system", content: buildSystemPrompt(batch) },
         { role: "user", content: this.buildUserContent(batch) },
       ],
     }, { signal });

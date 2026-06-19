@@ -102,6 +102,10 @@ export interface Config {
   lint?: LintConfig;
   // On-disk layout; not modeled by the Settings form, carried through saves.
   storage?: "single" | "split";
+  // Project-wide description injected into the AI system prompt for every locale.
+  projectContext?: string;
+  // Per-locale extra AI translation rules, keyed by canonical (lowercase BCP-47) locale.
+  localeInstructions?: Record<string, string>;
 }
 
 export type LintSeverity = "error" | "warn" | "off";

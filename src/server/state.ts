@@ -52,6 +52,11 @@ function normalizeState(state: State): void {
     for (const [k, v] of Object.entries(output.localeMap)) remapped[canonLocale(k)] = v;
     output.localeMap = remapped;
   }
+  if (state.config.localeInstructions) {
+    const remapped: Record<string, string> = {};
+    for (const [k, v] of Object.entries(state.config.localeInstructions)) remapped[canonLocale(k)] = v;
+    state.config.localeInstructions = remapped;
+  }
 }
 
 export function loadState(path: string): State {

@@ -37,6 +37,10 @@ export interface ConfigForm {
   scanInclude: string[];
   scanExclude: string[];
   scanKeep: string[];
+  // config.projectContext — project-wide AI guidance ("" when unset).
+  projectContext: string;
+  // config.localeInstructions — per-locale AI guidance, keyed by locale ({} when unset).
+  localeInstructions: Record<string, string>;
 }
 
 // Number inputs hand us strings; coerce while tolerating "" / NaN with a fallback.
@@ -76,6 +80,8 @@ export function configToForm(config: Config): ConfigForm {
     scanInclude: [...(config.scan?.include ?? [])],
     scanExclude: [...(config.scan?.exclude ?? [])],
     scanKeep: [...(config.scan?.keep ?? [])],
+    projectContext: config.projectContext ?? "",
+    localeInstructions: config.localeInstructions ? structuredClone(config.localeInstructions) : {},
   };
 }
 
@@ -133,6 +139,17 @@ export function formToConfig(form: ConfigForm, original?: Config): Config {
     spelling: { customWords: [...form.customWords] },
     ...(Object.keys(scan).length ? { scan } : {}),
   };
+
+  // AI guidance: persist only when there's content. Trim project context and drop
+  // blank per-locale rules so a Settings save never writes empty noise.
+  const projectContext = form.projectContext.trim();
+  if (projectContext) config.projectContext = projectContext;
+  const localeInstructions = Object.fromEntries(
+    Object.entries(form.localeInstructions)
+      .map(([loc, v]) => [loc, v.trim()] as const)
+      .filter(([, v]) => v !== ""),
+  );
+  if (Object.keys(localeInstructions).length) config.localeInstructions = localeInstructions;
 
   // config.lint: persist only severities that deviate from the built-in defaults,
   // plus ignore globs. lint.spelling (per-locale dictionary ids) isn't modeled by

@@ -26,6 +26,7 @@ import { loadPendingGlossaryBatch, clearPendingGlossaryBatch, type PendingGlossa
 import type { AiConfig } from "./schema.js";
 import { estimateTranslation, estimateContext, estimateGlossarySuggest } from "./ai/estimate.js";
 import { selectGlossarySources, knownTermList, buildGlossarySuggestSystemPrompt, buildGlossarySuggestBatchPrompt, GLOSSARY_SUGGEST_SCHEMA, dedupeTerms, type SuggestedTerm } from "./ai/glossary-suggest.js";
+import { buildProjectContextSystemPrompt, buildProjectContextUserPrompt, PROJECT_CONTEXT_SCHEMA, buildLocaleInstructionSystemPrompt, buildLocaleInstructionUserPrompt, LOCALE_INSTRUCTION_SCHEMA } from "./ai/guidance-suggest.js";
 import { usageCostUsd, resolvePricing } from "./ai/pricing.js";
 import { refreshPrices } from "./ai/price-fetch.js";
 import { loadPriceCache, defaultPriceCachePath, invalidatePriceCache } from "./ai/price-cache.js";
@@ -44,7 +45,7 @@ import { formatText, formatJson, formatSarif, type SarifContext } from "./lint/r
 import type { LintReport } from "./lint/types.js";
 
 export interface ParsedArgs {
-  command: "serve" | "export" | "translate" | "lint" | "check" | "import" | "sync" | "build-context" | "suggest-glossary" | "scan" | "prune" | "split" | "skill" | "batch" | "prices" | "get" | "stats" | "set" | "set-state" | "clear" | "apply" | "help" | "version";
+  command: "serve" | "export" | "translate" | "lint" | "check" | "import" | "sync" | "build-context" | "suggest-glossary" | "suggest-guidance" | "scan" | "prune" | "split" | "skill" | "batch" | "prices" | "get" | "stats" | "set" | "set-state" | "clear" | "apply" | "help" | "version";
   help?: boolean;
   unknownCommand?: string;
   dev?: boolean;
@@ -82,6 +83,8 @@ export interface ParsedArgs {
   all?: boolean;
   limit?: number;
   since?: string;
+  // suggest-guidance-specific
+  context?: boolean;
   // prune-specific
   emptySource?: boolean;
   unused?: boolean;
@@ -98,7 +101,7 @@ export interface ParsedArgs {
   refresh?: boolean;
 }
 
-const COMMANDS = ["serve", "export", "translate", "lint", "check", "import", "sync", "build-context", "suggest-glossary", "scan", "prune", "split", "skill", "batch", "prices", "get", "stats", "set", "set-state", "clear", "apply"] as const;
+const COMMANDS = ["serve", "export", "translate", "lint", "check", "import", "sync", "build-context", "suggest-glossary", "suggest-guidance", "scan", "prune", "split", "skill", "batch", "prices", "get", "stats", "set", "set-state", "clear", "apply"] as const;
 const isCommand = (s: string | undefined): s is ParsedArgs["command"] =>
   s != null && (COMMANDS as readonly string[]).includes(s);
 
@@ -154,6 +157,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (flag === "--include-suppressed") args.includeSuppressed = true;
     else if (flag === "--accept") args.accept = true;
     else if (flag === "--all") args.all = true;
+    else if (flag === "--context") args.context = true;
     else if (flag === "--limit" && next) { args.limit = Number(next); i++; }
     else if (flag === "--since" && next) { args.since = next; i++; }
     else if (flag === "--empty-source") args.emptySource = true;
@@ -347,7 +351,7 @@ async function runTranslate(args: ParsedArgs): Promise<void> {
       kind: "translate",
       summary: `Submitted batch ${pending.batchId} (${pending.total} items)`,
       model: ai.model,
-      system: buildSystemPrompt(toTranslate.some((r) => r.plural !== undefined)),
+      system: buildSystemPrompt(toTranslate),
       items: toTranslate.map((r) => ({ id: r.id, key: r.key, source: r.source, targetLocale: r.targetLocale, context: r.context, glossary: r.glossary, screenshot: state.keys[r.key]?.screenshot })),
     });
     console.log(`Submitted batch ${pending.batchId} — ${pending.total} string(s) at 50% batch pricing.`);
@@ -406,7 +410,7 @@ async function runTranslate(args: ParsedArgs): Promise<void> {
       model: ai.model,
       usage,
       estimatedCostUsd: usageCostUsd(usage, ai),
-      system: buildSystemPrompt(toTranslate.some((r) => r.plural !== undefined)),
+      system: buildSystemPrompt(toTranslate),
       items: toTranslate.map((r) => ({
         id: r.id,
         key: r.key,
@@ -997,6 +1001,62 @@ async function runSuggestGlossary(args: ParsedArgs): Promise<void> {
   for (const s of added) console.log(`  • ${s.term}${s.note ? ` — ${s.note}` : ""}`);
 }
 
+// Suggest translation guidance (config.projectContext / localeInstructions) from
+// the catalog. Prints the suggestion — copy it into the UI or config; --apply
+// writes it straight into config.
+async function runSuggestGuidance(args: ParsedArgs): Promise<void> {
+  const locale = args.locales?.[0];
+  if (!args.context && !locale) {
+    console.error("Specify --context (project description) or --locale <code> (per-language rules).");
+    process.exitCode = 1;
+    return;
+  }
+  const state = loadState(args.statePath);
+  const projectRoot = dirname(resolve(args.statePath));
+  const sources = selectGlossarySources(state, { limit: 200 });
+  if (!sources.length) {
+    console.log("No source strings to learn from yet — add some keys first.");
+    return;
+  }
+  const aiCfg = loadLocalSettings(projectRoot).ai;
+  let provider: TranslationProvider;
+  try {
+    provider = makeProvider(aiCfg);
+  } catch (e) {
+    console.error((e as Error).message);
+    process.exitCode = 1;
+    return;
+  }
+  const known = knownTermList(state);
+  if (args.context) {
+    const raw = await provider.complete({
+      system: buildProjectContextSystemPrompt(),
+      content: [{ type: "text", text: buildProjectContextUserPrompt(sources, known) }],
+      schema: PROJECT_CONTEXT_SCHEMA,
+    });
+    const projectContext = String((raw as { projectContext?: string }).projectContext ?? "").trim();
+    if (args.write) {
+      state.config.projectContext = projectContext;
+      saveState(args.statePath, state);
+      console.log("Saved suggested project context to config.projectContext.");
+    }
+    console.log(projectContext);
+    return;
+  }
+  const raw = await provider.complete({
+    system: buildLocaleInstructionSystemPrompt(),
+    content: [{ type: "text", text: buildLocaleInstructionUserPrompt(locale!, state.config.projectContext ?? "", sources, known) }],
+    schema: LOCALE_INSTRUCTION_SCHEMA,
+  });
+  const instruction = String((raw as { instruction?: string }).instruction ?? "").trim();
+  if (args.write) {
+    state.config.localeInstructions = { ...state.config.localeInstructions, [locale!]: instruction };
+    saveState(args.statePath, state);
+    console.log(`Saved suggested rules to config.localeInstructions["${locale}"].`);
+  }
+  console.log(instruction);
+}
+
 async function runScanCmd(args: ParsedArgs): Promise<void> {
   const state = loadState(args.statePath);
   const projectRoot = dirname(resolve(args.statePath));
@@ -1434,6 +1494,15 @@ const COMMAND_HELP: Record<Exclude<ParsedArgs["command"], "help" | "version">, {
       ["--batch", "Submit via the provider's batch API (50% cost, async; anthropic only)"],
     ],
   },
+  "suggest-guidance": {
+    summary: "AI-suggest translation guidance from the catalog — a project description or per-language rules. Prints it; --write saves it to config.",
+    usage: "glotfile suggest-guidance (--context | --locale <code>) [--write]",
+    options: [
+      ["--context", "Suggest config.projectContext (a project-wide description)"],
+      ["--locale <code>", "Suggest config.localeInstructions[<code>] (rules for one language)"],
+      ["--write", "Save the suggestion into config instead of only printing it"],
+    ],
+  },
   scan: {
     summary: "Index code references to keys (writes .glotfile/usage.json).",
     usage: "glotfile scan",
@@ -1596,6 +1665,7 @@ export async function main(argv: string[]): Promise<void> {
   if (args.command === "sync") return runSyncCmd(args);
   if (args.command === "build-context") return runBuildContext(args);
   if (args.command === "suggest-glossary") return runSuggestGlossary(args);
+  if (args.command === "suggest-guidance") return runSuggestGuidance(args);
   if (args.command === "scan") return runScanCmd(args);
   if (args.command === "prune") return runPrune(args);
   if (args.command === "split") return runSplit(args);

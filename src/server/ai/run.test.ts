@@ -73,6 +73,40 @@ describe("selectRequests", () => {
     expect(reqs.find((r) => r.key === "tpl")!.literals).toEqual(["'{{visitor}}'", "'{{site}}'"]);
     expect(reqs.find((r) => r.key === "plain")!.literals).toBeUndefined();
   });
+
+  it("stamps the project context onto every request when configured", () => {
+    const s = defaultState();
+    s.config.locales = ["en", "fr", "de"];
+    s.config.projectContext = "Sign In App is a visitor management system.";
+    createKey(s, "k1", "Sign in");
+    const reqs = selectRequests(s, { onlyMissing: true });
+    expect(reqs.length).toBeGreaterThan(0);
+    expect(reqs.every((r) => r.projectContext === "Sign In App is a visitor management system.")).toBe(true);
+  });
+
+  it("omits the project context field when none is configured", () => {
+    const reqs = selectRequests(fixture(), { onlyMissing: true });
+    expect(reqs.every((r) => r.projectContext === undefined)).toBe(true);
+  });
+
+  it("stamps the matching per-locale instruction onto each request, by target locale", () => {
+    const s = defaultState();
+    s.config.locales = ["en", "fr", "de"];
+    s.config.localeInstructions = { fr: "Use vouvoiement.", de: "Use Sie." };
+    createKey(s, "k1", "Sign in");
+    const reqs = selectRequests(s, {});
+    expect(reqs.find((r) => r.targetLocale === "fr")!.localeInstruction).toBe("Use vouvoiement.");
+    expect(reqs.find((r) => r.targetLocale === "de")!.localeInstruction).toBe("Use Sie.");
+  });
+
+  it("leaves localeInstruction undefined for a locale with no configured rule", () => {
+    const s = defaultState();
+    s.config.locales = ["en", "fr", "de"];
+    s.config.localeInstructions = { fr: "Use vouvoiement." };
+    createKey(s, "k1", "Sign in");
+    const reqs = selectRequests(s, {});
+    expect(reqs.find((r) => r.targetLocale === "de")!.localeInstruction).toBeUndefined();
+  });
 });
 
 describe("applyResults", () => {

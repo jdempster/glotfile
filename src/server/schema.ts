@@ -155,6 +155,12 @@ export interface Config {
   // On-disk layout. "split" persists the catalog as a glotfile/ directory of
   // per-locale files; absent/"single" keeps the monolithic glotfile.json.
   storage?: "single" | "split";
+  // Project-wide description injected into the AI system prompt for every
+  // locale — what the product is and how its terminology should be read.
+  projectContext?: string;
+  // Per-locale extra translation rules, keyed by canonical (lowercase BCP-47)
+  // locale; each value is appended to that locale's AI system prompt.
+  localeInstructions?: Record<string, string>;
 }
 export interface GlossaryEntry {
   term: string;
@@ -263,6 +269,15 @@ export function validate(raw: unknown): State {
     const sp = config.spelling;
     if (!isObject(sp) || !Array.isArray(sp.customWords) || !sp.customWords.every((w) => typeof w === "string")) {
       fail("config.spelling.customWords must be an array of strings");
+    }
+  }
+  if (config.projectContext !== undefined && typeof config.projectContext !== "string") {
+    fail("config.projectContext must be a string");
+  }
+  if (config.localeInstructions !== undefined) {
+    if (!isObject(config.localeInstructions)) fail("config.localeInstructions must be an object");
+    for (const [loc, v] of Object.entries(config.localeInstructions)) {
+      if (typeof v !== "string") fail(`config.localeInstructions["${loc}"] must be a string`);
     }
   }
 

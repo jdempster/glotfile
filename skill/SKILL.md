@@ -59,6 +59,11 @@ state file's `config` block.
 exist and where exports land. Match the project; don't introduce a new locale or adapter
 unless asked.
 
+If `config.projectContext` or `config.localeInstructions` are set, they steer AI translation
+(a project-wide description and per-locale rules, both folded into the model's system prompt).
+Read and respect them before translating — they hold the project's terminology and register
+decisions. See `references/schema.md`.
+
 ## Task → tool map
 
 | You want to… | Do this |

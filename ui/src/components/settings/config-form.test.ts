@@ -75,6 +75,36 @@ describe("config-form", () => {
     expect(formToConfig(configToForm(config))).not.toHaveProperty("exportLocales");
   });
 
+  it("round-trips projectContext and localeInstructions", () => {
+    const guided: Config = {
+      ...config,
+      projectContext: "Sign In App is a visitor management system.",
+      localeInstructions: { fr: "Use vouvoiement.", de: "Use Sie." },
+    };
+    expect(formToConfig(configToForm(guided))).toEqual(guided);
+  });
+
+  it("reads projectContext and localeInstructions into the form", () => {
+    const form = configToForm({ ...config, projectContext: "Hello", localeInstructions: { fr: "Tu" } });
+    expect(form.projectContext).toBe("Hello");
+    expect(form.localeInstructions).toEqual({ fr: "Tu" });
+  });
+
+  it("omits projectContext and localeInstructions when blank, and drops empty per-locale entries", () => {
+    expect(configToForm(config).projectContext).toBe("");
+    expect(configToForm(config).localeInstructions).toEqual({});
+    const out = formToConfig(configToForm(config));
+    expect(out).not.toHaveProperty("projectContext");
+    expect(out).not.toHaveProperty("localeInstructions");
+    // a whitespace-only project context and blank per-locale rule are dropped, not persisted
+    const form = configToForm(config);
+    form.projectContext = "   ";
+    form.localeInstructions = { fr: "  ", de: "Use Sie." };
+    const persisted = formToConfig(form);
+    expect(persisted).not.toHaveProperty("projectContext");
+    expect(persisted.localeInstructions).toEqual({ de: "Use Sie." });
+  });
+
   it("round-trips a config.scan block", () => {
     const scanned: Config = {
       ...config,

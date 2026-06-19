@@ -103,7 +103,7 @@ export class ClaudeCodeProvider implements TranslationProvider {
     const prompt = buildBatchPrompt(batch);
     let result: string;
     try {
-      result = await this.spawnFn(prompt, buildSystemPrompt(batch.some((r) => r.plural !== undefined)), this.config.model);
+      result = await this.spawnFn(prompt, buildSystemPrompt(batch), this.config.model);
     } catch (err) {
       if (signal?.aborted) return [];
       throw err;
