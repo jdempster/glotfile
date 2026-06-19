@@ -16,7 +16,7 @@ function setup(opts: { chatTurns?: ChatEvent[][]; chat?: boolean } = {}) {
   saveState(file, s);
 
   let i = 0;
-  const turns = opts.chatTurns ?? [[{ type: "text", delta: "Hi! I can help set up Sprout." }, { type: "turn_end", stopReason: "end_turn" }]];
+  const turns = opts.chatTurns ?? [[{ type: "text", delta: "Hi! I can help set up Sprout." }, { type: "turn_end", stopReason: "end_turn", content: [{ type: "text", text: "Hi! I can help set up Sprout." }] }]];
   const provider: Record<string, unknown> = {
     supportsVision: () => false,
     translate: async () => [],
@@ -25,7 +25,7 @@ function setup(opts: { chatTurns?: ChatEvent[][]; chat?: boolean } = {}) {
   // Omit chat() entirely to simulate a non-chat provider.
   if (opts.chat !== false) {
     provider.chat = async function* () {
-      const t = turns[i++] ?? [{ type: "turn_end", stopReason: "end_turn" }];
+      const t = turns[i++] ?? [{ type: "turn_end", stopReason: "end_turn", content: [] }];
       for (const e of t) yield e;
     };
   }
@@ -81,8 +81,8 @@ describe("chat endpoints", () => {
   it("a tool turn runs the tool and feeds the result back", async () => {
     const { app } = setup({
       chatTurns: [
-        [{ type: "tool_use", id: "t1", name: "overview", input: {} }, { type: "turn_end", stopReason: "tool_use" }],
-        [{ type: "text", delta: "You have 1 key." }, { type: "turn_end", stopReason: "end_turn" }],
+        [{ type: "turn_end", stopReason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "overview", input: {} }] }],
+        [{ type: "text", delta: "You have 1 key." }, { type: "turn_end", stopReason: "end_turn", content: [{ type: "text", text: "You have 1 key." }] }],
       ],
     });
     const events = await collectSSE(await post(app, "/chat/stream", { message: "how many keys?" }));

@@ -7,7 +7,10 @@ export interface ChatTurnDeps {
   provider: ChatProvider;
   tools: ChatTool[];
   ctx: ToolContext;
+  // The stable, cacheable system prompt (persona + rules).
   system: string;
+  // The volatile per-turn project snapshot, sent after the cache breakpoint.
+  context?: string;
   // Emit a progress event to the caller (forwarded over SSE to the UI).
   onEvent(event: ChatStreamEvent): void;
   // Resolve whether a confirm-gated tool may run. The caller (API) wires this to
@@ -34,23 +37,28 @@ export async function runChatTurn(history: ChatMessage[], userText: string, deps
     for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
       if (deps.signal?.aborted) return messages;
 
-      // --- one model turn: collect assistant content in arrival order ---
-      const assistantContent: ChatContentBlock[] = [];
-      for await (const ev of deps.provider.chat(messages, toolDefs, deps.system, deps.signal)) {
+      // --- one model turn ---
+      // text events stream live to the UI; turn_end carries the authoritative
+      // assistant content (thinking + text + tool_use) to persist and act on.
+      let assistantContent: ChatContentBlock[] = [];
+      let stopReason = "end_turn";
+      for await (const ev of deps.provider.chat(messages, toolDefs, deps.system, deps.signal, deps.context)) {
         if (ev.type === "text") {
-          const last = assistantContent[assistantContent.length - 1];
-          if (last && last.type === "text") last.text += ev.delta;
-          else assistantContent.push({ type: "text", text: ev.delta });
-          deps.onEvent({ type: "text", delta: ev.delta });
-        } else if (ev.type === "tool_use") {
-          assistantContent.push({ type: "tool_use", id: ev.id, name: ev.name, input: ev.input });
+          if (ev.delta) deps.onEvent({ type: "text", delta: ev.delta });
+        } else if (ev.type === "turn_end") {
+          assistantContent = ev.content;
+          stopReason = ev.stopReason;
         }
-        // turn_end falls through and ends the for-await loop.
       }
       messages.push({ role: "assistant", content: assistantContent });
 
       const toolUses = assistantContent.filter((b): b is Extract<ChatContentBlock, { type: "tool_use" }> => b.type === "tool_use");
       if (toolUses.length === 0) {
+        // A safety refusal returns no text and no tools — surface a line so the
+        // turn doesn't render as an empty bubble.
+        if (stopReason === "refusal" && !assistantContent.some((b) => b.type === "text" && b.text.trim())) {
+          deps.onEvent({ type: "text", delta: "I'm sorry — I can't help with that request." });
+        }
         deps.onEvent({ type: "done" });
         return messages;
       }

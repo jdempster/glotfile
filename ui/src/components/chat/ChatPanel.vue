@@ -27,6 +27,7 @@ watch(draft, () => nextTick(autosize));
 // A few starter prompts surfaced when the conversation is empty — the entry
 // point to the setup interview.
 const starters = [
+  "Take a look at my project and tell me where to start.",
   "Help me set up this project's translation guidance.",
   "What does this app do? Read the codebase and draft a project context.",
   "Suggest glossary terms from my source strings.",
@@ -144,9 +145,17 @@ onMounted(() => {
         </div>
       </div>
 
-      <div v-else class="flex flex-col gap-3">
-        <ChatMessage v-for="(m, i) in messages" :key="i" :message="m" />
-        <div v-if="thinking" data-thinking class="flex justify-start">
+      <div v-else class="flex flex-col">
+        <!-- Spacing groups by response: tight between consecutive assistant turns
+             (so a run of tool calls reads as one activity log), roomier only at
+             user/response boundaries. -->
+        <ChatMessage
+          v-for="(m, i) in messages"
+          :key="i"
+          :message="m"
+          :class="i === 0 ? '' : (m.role === 'user' || messages[i - 1].role === 'user' ? 'mt-3' : 'mt-1.5')"
+        />
+        <div v-if="thinking" data-thinking class="mt-2 flex justify-start">
           <div class="flex items-center gap-1 rounded-lg border border-border bg-muted px-3 py-3" aria-label="Lingo is thinking">
             <span class="size-1.5 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.3s]" />
             <span class="size-1.5 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.15s]" />
@@ -164,7 +173,7 @@ onMounted(() => {
           v-model="draft"
           rows="1"
           placeholder="Message the assistant…"
-          class="block max-h-40 w-full flex-1 resize-none overflow-y-auto rounded-md border bg-background px-3 py-2 text-sm leading-5 outline-none focus:ring-2 focus:ring-ring"
+          class="block max-h-40 w-full flex-1 resize-none overflow-y-auto rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-5 shadow-sm transition-colors outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
           @input="autosize"
           @keydown="onKeydown"
           @focus="inputFocused = true"

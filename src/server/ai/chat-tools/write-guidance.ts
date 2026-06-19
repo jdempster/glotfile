@@ -9,6 +9,7 @@ import type { ChatTool, ToolContext } from "../chat-types.js";
 const setProjectContext: ChatTool = {
   def: {
     name: "set_project_context",
+    strict: true,
     description: "Set the project-wide context note injected into the translator's system prompt for EVERY language — what the product is, who uses it, how domain terms should be read, and the overall tone. Pass empty text to clear it. This applies globally; use set_locale_instruction for per-language rules.",
     schema: {
       type: "object",
@@ -30,6 +31,7 @@ const setProjectContext: ChatTool = {
 const setLocaleInstruction: ChatTool = {
   def: {
     name: "set_locale_instruction",
+    strict: true,
     description: "Set per-language translation rules appended to the translator's system prompt for ONE target language only (e.g. formal vs informal address, preferred terms, grammar conventions). Pass empty text to remove that language's rules.",
     schema: {
       type: "object",

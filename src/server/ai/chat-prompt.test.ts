@@ -25,11 +25,16 @@ describe("chat system prompt", () => {
     expect(projectSnapshot(s)).toContain("Project context: NOT set");
   });
 
-  it("system prompt explains the role, propose-and-wait, the interview, and embeds the snapshot", () => {
-    const prompt = buildChatSystemPrompt(sproutState());
+  it("system prompt explains the role, propose-and-wait, and the interview", () => {
+    const prompt = buildChatSystemPrompt();
     expect(prompt).toContain("Lingo");
     expect(prompt).toContain("PROPOSE, then WAIT");
     expect(prompt.toLowerCase()).toContain("one question");
-    expect(prompt).toContain("Current project snapshot:");
+  });
+
+  it("the system prompt is static — the volatile snapshot is delivered separately", () => {
+    // Keeping the snapshot OUT of the system prompt is what lets the prompt cache
+    // stay warm across turns, so guard against it creeping back in.
+    expect(buildChatSystemPrompt()).not.toContain("Current project snapshot:");
   });
 });

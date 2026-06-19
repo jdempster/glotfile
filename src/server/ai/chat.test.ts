@@ -24,7 +24,7 @@ function scriptedProvider(turns: ChatEvent[][]): ChatProvider {
     translate: async () => [],
     complete: async () => ({}),
     async *chat() {
-      const t = turns[i++] ?? [{ type: "turn_end", stopReason: "end_turn" }];
+      const t = turns[i++] ?? [{ type: "turn_end", stopReason: "end_turn", content: [] }];
       for (const e of t) yield e;
     },
   } as unknown as ChatProvider;
@@ -36,8 +36,8 @@ const ctxFor = (provider: ChatProvider, state: State): ToolContext =>
 describe("runChatTurn", () => {
   it("runs a tool, feeds the result back, and returns the full turn history", async () => {
     const provider = scriptedProvider([
-      [{ type: "tool_use", id: "t1", name: "overview", input: {} }, { type: "turn_end", stopReason: "tool_use" }],
-      [{ type: "text", delta: "Sprout has 2 keys." }, { type: "turn_end", stopReason: "end_turn" }],
+      [{ type: "turn_end", stopReason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "overview", input: {} }] }],
+      [{ type: "text", delta: "Sprout has 2 keys." }, { type: "turn_end", stopReason: "end_turn", content: [{ type: "text", text: "Sprout has 2 keys." }] }],
     ]);
     const state = sproutState();
     const events: ChatStreamEvent[] = [];
@@ -68,8 +68,8 @@ describe("runChatTurn", () => {
       run: async () => { ran = true; return { ok: true }; },
     };
     const provider = scriptedProvider([
-      [{ type: "tool_use", id: "t1", name: "danger", input: {} }, { type: "turn_end", stopReason: "tool_use" }],
-      [{ type: "text", delta: "Okay, skipped." }, { type: "turn_end", stopReason: "end_turn" }],
+      [{ type: "turn_end", stopReason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "danger", input: {} }] }],
+      [{ type: "text", delta: "Okay, skipped." }, { type: "turn_end", stopReason: "end_turn", content: [{ type: "text", text: "Okay, skipped." }] }],
     ]);
     const state = sproutState();
     const events: ChatStreamEvent[] = [];
@@ -94,8 +94,8 @@ describe("runChatTurn", () => {
       run: async () => { ran = true; return { ok: true }; },
     };
     const provider = scriptedProvider([
-      [{ type: "tool_use", id: "t1", name: "danger", input: {} }, { type: "turn_end", stopReason: "tool_use" }],
-      [{ type: "text", delta: "Done." }, { type: "turn_end", stopReason: "end_turn" }],
+      [{ type: "turn_end", stopReason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "danger", input: {} }] }],
+      [{ type: "text", delta: "Done." }, { type: "turn_end", stopReason: "end_turn", content: [{ type: "text", text: "Done." }] }],
     ]);
     const state = sproutState();
     const events: ChatStreamEvent[] = [];
@@ -109,8 +109,8 @@ describe("runChatTurn", () => {
 
   it("an unknown tool yields an error result rather than throwing", async () => {
     const provider = scriptedProvider([
-      [{ type: "tool_use", id: "t1", name: "nope", input: {} }, { type: "turn_end", stopReason: "tool_use" }],
-      [{ type: "text", delta: "Sorry." }, { type: "turn_end", stopReason: "end_turn" }],
+      [{ type: "turn_end", stopReason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "nope", input: {} }] }],
+      [{ type: "text", delta: "Sorry." }, { type: "turn_end", stopReason: "end_turn", content: [{ type: "text", text: "Sorry." }] }],
     ]);
     const state = sproutState();
     const history = await runChatTurn([], "x", {

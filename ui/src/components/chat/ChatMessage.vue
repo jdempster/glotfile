@@ -31,9 +31,16 @@ const html = computed(() =>
   props.message.text ? purifier.sanitize(marked.parse(props.message.text, { async: false, renderer }) as string) : "",
 );
 
+// Only render the message bubble when there's something to say. Turns that only
+// call tools (no narration) shouldn't leave an empty bubble behind.
+const hasBody = computed(() => !!props.message.text || !!props.message.error);
+
 // Per-tool expand state (show the raw result/input).
 const expanded = ref<Record<string, boolean>>({});
 const toggle = (id: string) => { expanded.value[id] = !expanded.value[id]; };
+
+// A row has something to reveal — and so is clickable — once it's resolved.
+const expandable = (tool: UiToolCall) => tool.status === "done" || tool.status === "error";
 
 const iconFor = (name: string) => {
   if (name === "grep_codebase" || name === "search_keys") return Search;
@@ -51,56 +58,60 @@ function detail(tool: UiToolCall): string {
 </script>
 
 <template>
-  <div :class="message.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
+  <div :class="message.role === 'user' ? 'flex justify-end' : 'flex flex-col gap-1.5'">
+    <!-- Tool activity (assistant): quiet rows, deliberately NOT wrapped in a
+         bubble — they read as a subtle activity log, not a stack of cards. -->
+    <div v-if="message.tools.length" class="flex flex-col gap-0.5 pl-2 text-xs text-muted-foreground">
+      <div v-for="tool in message.tools" :key="tool.id">
+        <component
+          :is="expandable(tool) ? 'button' : 'div'"
+          :type="expandable(tool) ? 'button' : undefined"
+          class="flex w-full items-center gap-1.5 py-px text-left"
+          :class="expandable(tool) ? 'hover:text-foreground' : ''"
+          :aria-expanded="expandable(tool) ? expanded[tool.id] : undefined"
+          @click="expandable(tool) && toggle(tool.id)"
+        >
+          <Loader2 v-if="tool.status === 'running'" class="size-3.5 shrink-0 animate-spin" />
+          <Check v-else-if="tool.status === 'done'" class="size-3.5 shrink-0 text-emerald-500" />
+          <AlertTriangle v-else-if="tool.status === 'error'" class="size-3.5 shrink-0 text-destructive" />
+          <component :is="iconFor(tool.name)" v-else class="size-3.5 shrink-0" />
+          <span class="truncate">{{ tool.humanSummary || tool.name }}</span>
+          <span v-if="tool.progress" class="opacity-70">· {{ tool.progress.done }}/{{ tool.progress.total }}</span>
+          <ChevronRight
+            v-if="expandable(tool)"
+            :class="['ml-auto size-3.5 shrink-0 transition-transform', expanded[tool.id] ? 'rotate-90' : '']"
+          />
+        </component>
+
+        <!-- Confirm card for a gated tool awaiting approval -->
+        <div v-if="tool.status === 'pending-confirm'" class="mt-1.5 flex flex-col gap-2">
+          <pre class="overflow-x-auto rounded bg-muted p-1.5 text-[11px] text-foreground">{{ JSON.stringify(tool.input, null, 2) }}</pre>
+          <div class="flex gap-2">
+            <Button size="sm" class="h-7 gap-1" @click="respondConfirm(tool.id, true)"><Check class="size-3.5" />Apply</Button>
+            <Button size="sm" variant="outline" class="h-7 gap-1" @click="respondConfirm(tool.id, false)"><X class="size-3.5" />Skip</Button>
+          </div>
+        </div>
+
+        <span v-else-if="tool.status === 'declined'" class="block opacity-70">Skipped.</span>
+
+        <pre v-if="expanded[tool.id]" class="mt-1 max-h-60 overflow-auto rounded bg-muted p-1.5 text-[11px] leading-snug text-foreground">{{ detail(tool) }}</pre>
+      </div>
+    </div>
+
+    <!-- Message body — only when there's text or an error, so tool-only turns
+         don't leave an empty bubble behind. -->
     <div
+      v-if="hasBody"
       :class="[
-        'max-w-[44rem] rounded-lg px-3 py-2 text-sm',
-        message.role === 'user' ? 'bg-primary text-primary-foreground' : 'w-full border border-border bg-muted',
+        'rounded-lg px-3 py-2 text-sm',
+        message.role === 'user'
+          ? 'max-w-[44rem] border border-primary-border bg-primary-soft text-foreground'
+          : 'w-full border border-border bg-muted',
       ]"
     >
-      <!-- Tool action rows (assistant only) -->
-      <div v-if="message.tools.length" class="mb-2 flex flex-col gap-1">
-        <div
-          v-for="tool in message.tools"
-          :key="tool.id"
-          class="rounded-md border bg-background/60 px-2 py-1.5 text-xs"
-        >
-          <div class="flex items-center gap-1.5">
-            <Loader2 v-if="tool.status === 'running'" class="size-3.5 shrink-0 animate-spin text-muted-foreground" />
-            <Check v-else-if="tool.status === 'done'" class="size-3.5 shrink-0 text-emerald-500" />
-            <AlertTriangle v-else-if="tool.status === 'error'" class="size-3.5 shrink-0 text-destructive" />
-            <component :is="iconFor(tool.name)" v-else class="size-3.5 shrink-0 text-muted-foreground" />
-            <span class="font-medium">{{ tool.humanSummary || tool.name }}</span>
-            <span v-if="tool.progress" class="text-muted-foreground">· {{ tool.progress.done }}/{{ tool.progress.total }}</span>
-            <button
-              v-if="tool.status === 'done' || tool.status === 'error'"
-              type="button"
-              class="ml-auto flex items-center gap-0.5 text-muted-foreground hover:text-foreground"
-              @click="toggle(tool.id)"
-            >
-              <ChevronRight :class="['size-3 transition-transform', expanded[tool.id] ? 'rotate-90' : '']" />
-            </button>
-          </div>
-
-          <!-- Confirm card for a gated tool awaiting approval -->
-          <div v-if="tool.status === 'pending-confirm'" class="mt-2 flex flex-col gap-2">
-            <pre class="overflow-x-auto rounded bg-muted/60 p-1.5 text-[11px]">{{ JSON.stringify(tool.input, null, 2) }}</pre>
-            <div class="flex gap-2">
-              <Button size="sm" class="h-7 gap-1" @click="respondConfirm(tool.id, true)"><Check class="size-3.5" />Apply</Button>
-              <Button size="sm" variant="outline" class="h-7 gap-1" @click="respondConfirm(tool.id, false)"><X class="size-3.5" />Skip</Button>
-            </div>
-          </div>
-
-          <span v-else-if="tool.status === 'declined'" class="mt-1 block text-muted-foreground">Skipped.</span>
-
-          <pre v-if="expanded[tool.id]" class="mt-1.5 max-h-60 overflow-auto rounded bg-muted/60 p-1.5 text-[11px] leading-snug">{{ detail(tool) }}</pre>
-        </div>
-      </div>
-
-      <!-- Rendered assistant markdown / plain user text -->
       <div
         v-if="message.role === 'assistant' && html"
-        class="prose prose-sm dark:prose-invert max-w-none break-words"
+        class="prose prose-sm dark:prose-invert max-w-none break-words prose-hr:my-3 prose-hr:border-border"
         v-html="html"
       />
       <div v-else-if="message.text" class="whitespace-pre-wrap break-words">{{ message.text }}</div>

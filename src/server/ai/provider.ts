@@ -149,7 +149,10 @@ export function supportsBatchComplete(p: TranslationProvider): p is BatchComplet
 // (ai/chat.ts) executes the tools and calls chat() again with the appended
 // history. Anthropic implements this today; other providers may later.
 export interface ChatProvider extends TranslationProvider {
-  chat(messages: ChatMessage[], tools: ToolDef[], system: string, signal?: AbortSignal): AsyncIterable<ChatEvent>;
+  // `system` is the STABLE prompt (cached across the conversation); `context` is
+  // the volatile per-turn project snapshot, sent after the cache breakpoint so it
+  // never invalidates the cached system+tools prefix.
+  chat(messages: ChatMessage[], tools: ToolDef[], system: string, signal?: AbortSignal, context?: string): AsyncIterable<ChatEvent>;
 }
 
 export function supportsChat(p: TranslationProvider): p is ChatProvider {

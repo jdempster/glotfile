@@ -34,7 +34,7 @@ import { selectRequests, applyResults, attachScreenshotsForProvider, runLocalePa
 import { buildSystemPrompt, supportsBatchTranslate, supportsBatchComplete, supportsChat, type TranslationProvider, type TranslationRequest } from "./ai/provider.js";
 import { runChatTurn } from "./ai/chat.js";
 import { buildToolRegistry } from "./ai/chat-tools/index.js";
-import { buildChatSystemPrompt } from "./ai/chat-prompt.js";
+import { buildChatSystemPrompt, projectSnapshot } from "./ai/chat-prompt.js";
 import { loadChat, saveChat, clearChat } from "./chats.js";
 import type { ToolContext } from "./ai/chat-types.js";
 import { explainProviderError } from "./ai/explain-error.js";
@@ -1679,7 +1679,8 @@ export function createApi(deps: ApiDeps): Hono {
           provider,
           tools: buildToolRegistry(),
           ctx,
-          system: buildChatSystemPrompt(load()),
+          system: buildChatSystemPrompt(),
+          context: projectSnapshot(load()),
           onEvent: (e) => { void stream.writeSSE({ event: e.type, data: JSON.stringify(e) }); },
           confirm: (req) => new Promise<boolean>((resolve) => {
             turnConfirmIds.add(req.toolUseId);

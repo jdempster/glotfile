@@ -27,10 +27,24 @@ interface BatchEntry {
   };
 }
 
+// One assistant content block as returned by the Messages API (the subset we map).
+interface ApiBlock { type: string; text?: string; id?: string; name?: string; input?: unknown; thinking?: string; signature?: string; data?: string }
+interface ApiMessage { content: ApiBlock[]; usage?: ApiUsage; stop_reason?: string }
+// A streamed turn: async-iterable raw events for live text, plus the assembled
+// final message (thinking blocks carry their signature here).
+type ChatStreamHandle = AsyncIterable<{ type: string; delta?: { type: string; text?: string } }> & { finalMessage(): Promise<ApiMessage> };
+
+// Models that support adaptive thinking + the effort knob (Opus 4.6+, Sonnet 4.6,
+// Fable 5 / Mythos 5). Older models 400 on those params, so we omit them there.
+function supportsAdaptiveThinking(model: string): boolean {
+  return /opus-4-[678]|sonnet-4-6|fable-5|mythos-5/i.test(model);
+}
+
 // Minimal shape we use from the SDK — lets tests inject a fake.
 interface MessagesClient {
   messages: {
     create(args: unknown, opts?: { signal?: AbortSignal }): Promise<{ content: Array<{ type: string; text?: string; id?: string; name?: string; input?: unknown }>; usage?: ApiUsage; stop_reason?: string }>;
+    stream(args: unknown, opts?: { signal?: AbortSignal }): ChatStreamHandle;
     batches?: {
       create(args: unknown): Promise<{ id: string }>;
       retrieve(id: string): Promise<{ processing_status: string; request_counts: BatchRunStatus["counts"] }>;
@@ -125,37 +139,61 @@ export class AnthropicProvider implements BatchCompletionProvider, ChatProvider 
   }
 
   // Map our provider-agnostic chat blocks to the Messages API content shape.
-  private toApiContent(blocks: ChatContentBlock[]): unknown[] {
+  // Thinking blocks round-trip verbatim (signature included) — required when
+  // replaying a thought tool-use turn.
+  private toApiContent(blocks: ChatContentBlock[]): Record<string, unknown>[] {
     return blocks.map((b) => {
       if (b.type === "text") return { type: "text", text: b.text };
+      if (b.type === "thinking") return { type: "thinking", thinking: b.thinking, signature: b.signature };
+      if (b.type === "redacted_thinking") return { type: "redacted_thinking", data: b.data };
       if (b.type === "tool_use") return { type: "tool_use", id: b.id, name: b.name, input: b.input };
       return { type: "tool_result", tool_use_id: b.toolUseId, content: b.content, is_error: b.isError ?? false };
     });
   }
 
-  // One conversational turn. The system prompt + tools are stable across a
-  // conversation, so they're cache-flagged. Yields the assistant's text and any
-  // tool_use requests, then turn_end; the orchestrator runs the tools and calls
-  // chat() again with the appended history.
-  async *chat(messages: ChatMessage[], tools: ToolDef[], system: string, signal?: AbortSignal): AsyncGenerator<ChatEvent> {
-    const res = await this.client.messages.create({
+  // Map an API content block back to our provider-agnostic shape.
+  private fromApiBlock(b: ApiBlock): ChatContentBlock {
+    if (b.type === "thinking") return { type: "thinking", thinking: b.thinking ?? "", signature: b.signature ?? "" };
+    if (b.type === "redacted_thinking") return { type: "redacted_thinking", data: b.data ?? "" };
+    if (b.type === "tool_use") return { type: "tool_use", id: b.id ?? "", name: b.name ?? "", input: b.input };
+    return { type: "text", text: b.text ?? "" };
+  }
+
+  // One conversational turn, streamed. The stable system prompt + tools are
+  // cache-flagged (a breakpoint on the stable block also caches the tools that
+  // render before it); the volatile project snapshot rides in a second, uncached
+  // system block so it never busts that prefix. A breakpoint on the last message
+  // caches the growing conversation. We stream text deltas for live display, then
+  // emit turn_end with the fully-assembled content (thinking + text + tool_use).
+  async *chat(messages: ChatMessage[], tools: ToolDef[], system: string, signal?: AbortSignal, context?: string): AsyncGenerator<ChatEvent> {
+    const adaptive = supportsAdaptiveThinking(this.config.model);
+    const apiMessages = messages.map((m) => ({ role: m.role, content: this.toApiContent(m.content) }));
+    const lastMsg = apiMessages[apiMessages.length - 1];
+    const lastBlock = lastMsg?.content[lastMsg.content.length - 1];
+    if (lastBlock) lastBlock.cache_control = { type: "ephemeral" };
+
+    const stream = this.client.messages.stream({
       model: this.config.model,
-      max_tokens: 4096,
-      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+      max_tokens: 16000,
+      ...(adaptive ? { thinking: { type: "adaptive" }, output_config: { effort: "medium" } } : {}),
+      system: [
+        { type: "text", text: system, cache_control: { type: "ephemeral" } },
+        ...(context ? [{ type: "text", text: context }] : []),
+      ],
       ...(tools.length
-        ? { tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.schema })) }
+        ? { tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.schema, ...(t.strict ? { strict: true } : {}) })) }
         : {}),
-      messages: messages.map((m) => ({ role: m.role, content: this.toApiContent(m.content) })),
+      messages: apiMessages,
     }, { signal });
-    this.recordUsage(res.usage);
-    for (const block of res.content) {
-      if (block.type === "text") {
-        if (block.text) yield { type: "text", delta: block.text };
-      } else if (block.type === "tool_use") {
-        yield { type: "tool_use", id: block.id ?? "", name: block.name ?? "", input: block.input };
+
+    for await (const ev of stream) {
+      if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta" && ev.delta.text) {
+        yield { type: "text", delta: ev.delta.text };
       }
     }
-    yield { type: "turn_end", stopReason: res.stop_reason ?? "end_turn" };
+    const final = await stream.finalMessage();
+    this.recordUsage(final.usage);
+    yield { type: "turn_end", stopReason: final.stop_reason ?? "end_turn", content: final.content.map((b) => this.fromApiBlock(b)) };
   }
 
   private batchesClient() {
