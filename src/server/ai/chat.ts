@@ -37,6 +37,10 @@ export async function runChatTurn(history: ChatMessage[], userText: string, deps
     for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
       if (deps.signal?.aborted) return messages;
 
+      // Each iteration persists exactly one assistant message, so signal a new
+      // bubble per turn — keeps the live view in step with the reloaded transcript.
+      deps.onEvent({ type: "turn-start" });
+
       // --- one model turn ---
       // text events stream live to the UI; turn_end carries the authoritative
       // assistant content (thinking + text + tool_use) to persist and act on.

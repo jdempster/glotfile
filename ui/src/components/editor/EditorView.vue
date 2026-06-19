@@ -8,6 +8,7 @@ import { filterFromUrl, filterToUrl, type SortMode, type ViewMode } from "@/filt
 import { getHashSearch, setHashSearch } from "@/router.js";
 import { fetchState, fetchChecks, usedKeys } from "@/api.js";
 import { onExternalChange } from "@/liveReload";
+import { activeKey } from "@/chat";
 import { pendingFilter, pendingKey } from "@/drilldown.js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -188,7 +189,10 @@ if (pendingFilter.value) {
   pendingFilter.value = null;
 }
 
-const selectedKey = ref<string | null>(null);
+// Shared with the chat store so Lingo knows which key is open ("this key").
+const selectedKey = activeKey;
+// Stale once we leave the editor — don't let the chat keep pointing at it.
+onUnmounted(() => { activeKey.value = null; });
 
 // Banner refs so a just-submitted batch shows up immediately instead of
 // waiting for the banners' 30s poll.

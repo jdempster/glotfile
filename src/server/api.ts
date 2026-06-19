@@ -1674,13 +1674,23 @@ export function createApi(deps: ApiDeps): Hono {
       const transcript = loadChat(projectRoot);
       const ctx: ToolContext = { projectRoot, statePath: deps.statePath, load, persist, provider, signal };
       const turnConfirmIds = new Set<string>();
+      // Volatile per-turn context: the project snapshot, plus the key the user has
+      // open in the editor (so "this key"/"this string" resolves to it).
+      const st = load();
+      const selKey = typeof body.selectedKey === "string" && st.keys[body.selectedKey] ? body.selectedKey : "";
+      let context = projectSnapshot(st);
+      if (selKey) {
+        const lv = st.keys[selKey]!.values[st.config.sourceLocale];
+        const src = (lv?.value ?? lv?.forms?.other ?? "").trim().slice(0, 200);
+        context += `\n\nThe user currently has this key OPEN in the editor: ${selKey}${src ? ` — "${src}"` : ""}. When they say "this key", "this string", or "the selected key", they mean ${selKey}.`;
+      }
       try {
         const updated = await runChatTurn(transcript.messages, message, {
           provider,
           tools: buildToolRegistry(),
           ctx,
           system: buildChatSystemPrompt(),
-          context: projectSnapshot(load()),
+          context,
           onEvent: (e) => { void stream.writeSSE({ event: e.type, data: JSON.stringify(e) }); },
           confirm: (req) => new Promise<boolean>((resolve) => {
             turnConfirmIds.add(req.toolUseId);

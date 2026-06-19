@@ -16,6 +16,17 @@ describe("applyEvent (chat stream reducer)", () => {
     expect(msgs[1]!.text).toBe("Hello there.");
   });
 
+  it("turn-start opens a fresh bubble so consecutive turns don't merge", () => {
+    const msgs = withUser("hi");
+    applyEvent(msgs, { type: "turn-start" });
+    applyEvent(msgs, { type: "text", delta: "Let me look." });
+    applyEvent(msgs, { type: "turn-start" });
+    applyEvent(msgs, { type: "text", delta: "Here's the answer." });
+    expect(msgs).toHaveLength(3); // user + two separate assistant turns
+    expect(msgs[1]!.text).toBe("Let me look.");
+    expect(msgs[2]!.text).toBe("Here's the answer.");
+  });
+
   it("adds a tool row on tool-start and resolves it on tool-end", () => {
     const msgs = withUser("how many keys?");
     applyEvent(msgs, { type: "tool-start", id: "t1", name: "overview", humanSummary: "project overview" });

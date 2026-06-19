@@ -56,7 +56,7 @@ function onPointerDown(e: PointerEvent) {
   <div class="relative w-0 shrink-0">
     <div
       :class="cn(
-        'absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize transition-colors hover:bg-primary/20',
+        'absolute inset-y-0 -left-1 z-[25] w-2 cursor-col-resize transition-colors hover:bg-primary/20',
         dragging && 'bg-primary/30',
       )"
       role="separator"

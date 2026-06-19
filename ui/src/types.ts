@@ -191,6 +191,7 @@ export interface ChatTranscript {
   cumulativeUsage: { inputTokens: number; outputTokens: number; cacheCreationInputTokens: number; cacheReadInputTokens: number };
 }
 export type ChatStreamEvent =
+  | { type: "turn-start" }
   | { type: "text"; delta: string }
   | { type: "tool-start"; id: string; name: string; humanSummary: string }
   | { type: "tool-end"; id: string; result?: unknown; error?: string }

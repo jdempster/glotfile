@@ -68,6 +68,9 @@ export interface ChatTool {
 // these over SSE so the UI can render streaming text, tool action rows, and the
 // confirm prompt for gated tools.
 export type ChatStreamEvent =
+  // Start of an agentic turn — the UI opens a fresh assistant bubble so each turn
+  // renders separately, matching how the reloaded transcript splits per turn.
+  | { type: "turn-start" }
   | { type: "text"; delta: string }
   | { type: "tool-start"; id: string; name: string; humanSummary: string }
   | { type: "tool-end"; id: string; result?: unknown; error?: string }

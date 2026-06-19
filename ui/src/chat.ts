@@ -45,6 +45,13 @@ function upsertTool(msg: UiMessage, id: string, patch: Partial<UiToolCall> & { n
 
 // Fold one streamed event into the message list, mutating in place.
 export function applyEvent(messages: UiMessage[], event: ChatStreamEvent): void {
+  // A turn boundary starts a fresh assistant bubble so each agentic turn renders
+  // on its own — without this the live view merges every turn into one bubble,
+  // diverging from the per-turn split the transcript shows on reload.
+  if (event.type === "turn-start") {
+    messages.push({ role: "assistant", text: "", tools: [] });
+    return;
+  }
   const msg = currentAssistant(messages);
   switch (event.type) {
     case "text":
@@ -115,6 +122,9 @@ export function focusInput(): void { focusNonce.value++; }
 // Whether the composer input currently holds focus — lets Cmd/Ctrl+J hide the
 // panel when you're already typing in it.
 export const inputFocused = ref(false);
+// The key currently open in the editor's detail panel (null when none / not on
+// the editor). Sent with each turn so Lingo can resolve "this key"/"this string".
+export const activeKey = ref<string | null>(null);
 let controller: AbortController | null = null;
 
 // Refresh chat availability from the effective AI provider (resolves the active
@@ -147,7 +157,7 @@ export async function send(text: string): Promise<void> {
   isSending.value = true;
   controller = new AbortController();
   try {
-    for await (const event of chatStream(trimmed, controller.signal)) {
+    for await (const event of chatStream(trimmed, controller.signal, activeKey.value)) {
       applyEvent(messages.value, event);
     }
   } catch (e) {
