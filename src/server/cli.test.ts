@@ -172,6 +172,11 @@ describe("parseArgs", () => {
     expect(a.format).toBe("ndjson");
   });
 
+  it("parses get --search query (scoped/regex search)", () => {
+    expect(parseArgs(["get", "--search", "value:Sign in"]).search).toBe("value:Sign in");
+    expect(parseArgs(["get", "--search", "/^auth\\./"]).search).toBe("/^auth\\./");
+  });
+
   it("parses set positionals, --value, --create", () => {
     const a = parseArgs(["set", "auth.login", "Sign in", "--locale", "fr", "--state", "machine", "--create"]);
     expect(a.command).toBe("set");
@@ -466,6 +471,17 @@ describe("agent commands (get/set/set-state/clear/stats)", () => {
     const log = captureLog();
     await main(["get", "a.*", "--keys-only", "--file", file]);
     expect(log.mock.calls.flat()).toEqual(["a.one", "a.two"]);
+  });
+
+  it("get --search value: finds keys by their translation text", async () => {
+    const file = tmpState((s) => {
+      createKey(s, "auth.login", "Log in");
+      s.keys["auth.login"]!.values.fr = { value: "Connexion", state: "reviewed" };
+      createKey(s, "home.title", "Welcome");
+    });
+    const log = captureLog();
+    await main(["get", "--search", "value:Connexion", "--keys-only", "--file", file]);
+    expect(log.mock.calls.flat()).toEqual(["auth.login"]);
   });
 
   it("set (source) updates the value and flips reviewed targets to needs-review", async () => {

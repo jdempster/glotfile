@@ -5,6 +5,7 @@ import {
 } from "./state.js";
 import { cellState, type EffectiveState } from "./cell-state.js";
 import { globToRegExp } from "./glob.js";
+import { parseSearch, keyMatchesSearch } from "./search.js";
 
 // ---------------------------------------------------------------------------
 // get — surgical, filtered extraction so an agent never has to load the whole
@@ -22,6 +23,9 @@ export interface GetOptions {
   states?: EffectiveState[];
   // Cell projection. Default ["value", "state"]. "all" => the full key entry.
   fields?: string[];
+  // Scoped/regex text search over key/value/context (see parseSearch); ANDed with
+  // keyGlobs and states. E.g. "value:Sign in", "key:auth", "context:button", "/^auth\\./".
+  search?: string;
 }
 
 interface GetCell {
@@ -54,6 +58,7 @@ export function runGet(state: State, opts: GetOptions): GetOutput {
   const shown = (opts.locales?.length ? opts.locales : state.config.locales).map(canonLocale);
   const targetsShown = shown.filter((l) => l !== sourceLocale);
   const res = opts.keyGlobs?.length ? opts.keyGlobs.map(globToRegExp) : null;
+  const search = opts.search?.trim() ? parseSearch(opts.search) : null;
   const stateSet = opts.states?.length ? new Set(opts.states) : null;
   const fields = opts.fields?.length ? opts.fields : ["value", "state"];
   const fullEntry = fields.includes("all");
@@ -65,6 +70,7 @@ export function runGet(state: State, opts: GetOptions): GetOutput {
   for (const key of Object.keys(state.keys).sort()) {
     if (res && !res.some((re) => re.test(key))) continue;
     const entry = state.keys[key]!;
+    if (search && !keyMatchesSearch(key, entry, search)) continue;
     // State selector gates on the shown *target* locales only.
     if (stateSet && !targetsShown.some((l) => stateSet.has(cellState(entry, l, sourceLocale)))) continue;
     keys.push(key);

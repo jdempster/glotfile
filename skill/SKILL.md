@@ -37,7 +37,7 @@ It can hold thousands of keys across many locales and is re-serialized determini
 so loading it wastes context and hand-edits are slow and easy to corrupt. Instead drive it
 with the CLI:
 
-- **Read / extract** with `glotfile get` (filter by key glob, `--locale`, `--state`),
+- **Read / extract** with `glotfile get` (filter by key glob, `--search`, `--locale`, `--state`),
   `glotfile get --keys-only`, and `glotfile stats` (per-locale progress). All emit JSON.
 - **Write** with `glotfile set` (source or `--locale` target), `glotfile set-state`,
   `glotfile clear`, or `glotfile apply` (a JSON batch of edits applied in one atomic write).
@@ -70,6 +70,7 @@ decisions. See `references/schema.md`.
 | --- | --- |
 | Size up the catalog / what's left | `glotfile stats` (per-locale translated/reviewed/missing counts). |
 | Extract specific values | `glotfile get [<key-glob>…] [--locale <list>] [--state <list>]` — JSON out; the way to read a large catalog. `--keys-only` for just names. |
+| Find keys by their text (not name) | `glotfile get --search "<query>"` — `key:`, `value:`, `context:` scopes, `/regex/`, or no prefix for all three. E.g. `--search "value:Sign in"`, `--search "context:button"`, `--search "/^auth\\./"`. ANDs with globs/`--state`. See `references/cli-reference.md`. |
 | Add a new string | `glotfile set <key> "<source text>" --create`, then `glotfile translate` + `glotfile export`. (Angular: add it in code, not here.) See `references/workflows.md`. |
 | Edit an existing source string | `glotfile set <key> "<new text>"` — flips downstream translations to `needs-review`. Then `glotfile translate --state needs-review` re-translates just those. See `references/workflows.md`. |
 | Set or fix one translation | `glotfile set <key> "<text>" --locale <code>` (lands `reviewed`; `--state` to override). |

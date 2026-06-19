@@ -58,6 +58,8 @@ export interface ParsedArgs {
   positionals?: string[];
   states?: string[];
   fields?: string[];
+  // get: scoped/regex text search (key:/value:/context:/all:, /regex/).
+  search?: string;
   keysOnly?: boolean;
   value?: string;
   create?: boolean;
@@ -170,6 +172,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (flag === "--refresh") args.refresh = true;
     else if (flag === "--state" && next) { args.states = next.split(","); i++; }
     else if (flag === "--fields" && next) { args.fields = next.split(","); i++; }
+    else if (flag === "--search" && next) { args.search = next; i++; }
     else if (flag === "--keys-only") args.keysOnly = true;
     else if (flag === "--value" && next) { args.value = next; i++; }
     else if (flag === "--create") args.create = true;
@@ -1180,6 +1183,7 @@ function runGetCmd(args: ParsedArgs): void {
     locales: args.locales,
     states: parseStates(args, true),
     fields: args.fields,
+    search: args.search,
   });
   if (args.keysOnly) {
     for (const k of out.keys) console.log(k);
@@ -1548,10 +1552,11 @@ const COMMAND_HELP: Record<Exclude<ParsedArgs["command"], "help" | "version">, {
   },
   get: {
     summary: "Extract values from the catalog (filtered) without loading the whole file. Prints JSON.",
-    usage: "glotfile get [<key-glob>…] [--key <glob>] [--locale <list>] [--state <list>] [--fields <list>] [--keys-only] [--format json|ndjson]",
+    usage: "glotfile get [<key-glob>…] [--key <glob>] [--search <query>] [--locale <list>] [--state <list>] [--fields <list>] [--keys-only] [--format json|ndjson]",
     options: [
       ["<key-glob>…", "Key globs to include (e.g. auth.*); positional, repeatable. Default: all keys"],
       ["--key <glob>", "Additional key glob (merged with positionals)"],
+      ["--search <query>", "Scoped/regex text search (ANDed with globs): key:auth, value:Sign in, context:button, /^auth\\./, or value:/sign\\s?in/. No prefix searches key+value+context"],
       ["--locale <list>", "Locales to show (default: all configured locales, source included)"],
       ["--state <list>", "Only keys whose shown target locales are in these states: source|missing|machine|needs-review|reviewed"],
       ["--fields <list>", "Cell fields to project: value,state (default value,state); 'all' = the full key entry"],

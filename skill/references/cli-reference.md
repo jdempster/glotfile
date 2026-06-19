@@ -46,10 +46,18 @@ Adapter names: `flutter-arb`, `laravel-php`, `i18next-json`, `vue-i18n-json`,
 Requires a configured AI provider + API key in per-machine local settings.
 
 ## get
-`glotfile get [<key-glob>…] [--key <glob>] [--locale <list>] [--state <list>] [--fields <list>] [--keys-only] [--format json|ndjson]`
+`glotfile get [<key-glob>…] [--key <glob>] [--search <query>] [--locale <list>] [--state <list>] [--fields <list>] [--keys-only] [--format json|ndjson]`
 — extract values from the catalog **without loading the whole file**. Prints JSON to stdout.
 This is how you read a large catalog.
 - Positional `<key-glob>` args (and/or `--key`) select keys (e.g. `auth.*`); default: all keys.
+- `--search <query>` — scoped/regex text search, **ANDed** with the globs/state. This is how you
+  find keys by their text, not just their name:
+  - `--search "key:auth"` — substring over the **key name** only.
+  - `--search "value:Sign in"` — substring over **translations** (every locale, including plural forms).
+  - `--search "context:button"` — substring over the **context** note.
+  - `--search "Sign in"` — no prefix searches **key + value + context** together.
+  - `--search "/^auth\\./"` — a **regular expression** (wrap in `/…/`); combine with a scope, e.g.
+    `--search "value:/sign\\s?in/"`. Case-insensitive; an invalid pattern matches nothing.
 - `--locale <list>` — locales to show (default: every configured locale, **source included**
   so you always have the reference text).
 - `--state <list>` — show only keys whose shown target locales are in these effective states:
