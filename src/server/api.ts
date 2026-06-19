@@ -796,7 +796,7 @@ export function createApi(deps: ApiDeps): Hono {
     const pending = s.glossarySuggestions.filter((x) => x.status === "pending");
     return c.json(pending.map((x) => ({
       ...x,
-      occurrences: sourceKeysForTerm(s, x.term, { caseSensitive: x.caseSensitive, wholeWord: x.wholeWord }).length,
+      occurrences: sourceKeysForTerm(s, x.term).length,
     })));
   });
 

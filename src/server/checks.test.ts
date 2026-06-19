@@ -102,12 +102,19 @@ describe("runChecks (cheap checks)", () => {
     expect(runChecks(stateWith({})).spellPending).toBe(false);
   });
 
-  it("respects caseSensitive on a do-not-translate term", () => {
-    const s = stateWith(
+  it("flags a dropped do-not-translate term, but accepts a case variant", () => {
+    // Matching and enforcement are case-insensitive: a lowercased brand counts as kept.
+    const kept = stateWith(
       { brand: { values: { en: { value: "Open API docs", state: "source" }, fr: { value: "Ouvrir api docs", state: "reviewed" } } } },
-      [{ term: "API", doNotTranslate: true, caseSensitive: true }],
+      [{ term: "API", doNotTranslate: true }],
     );
-    const g = runChecks(s).issues.filter((i) => i.check === "glossary");
+    expect(runChecks(kept).issues.filter((i) => i.check === "glossary")).toHaveLength(0);
+
+    const dropped = stateWith(
+      { brand: { values: { en: { value: "Open API docs", state: "source" }, fr: { value: "Ouvrir la doc", state: "reviewed" } } } },
+      [{ term: "API", doNotTranslate: true }],
+    );
+    const g = runChecks(dropped).issues.filter((i) => i.check === "glossary");
     expect(g).toHaveLength(1);
     expect(g[0]).toMatchObject({ key: "brand", locale: "fr" });
   });

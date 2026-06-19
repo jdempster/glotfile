@@ -18,17 +18,10 @@ vi.mock("@/api.js", () => ({
 
 import { putGlossaryEntry } from "@/api.js";
 
-const entry: GlossaryEntry = {
-  term: "Sign in",
-  doNotTranslate: true,
-  notes: "Auth CTA",
-  translations: { fr: "Se connecter" },
-};
-
 // The Dialog content is teleported via reka-ui's portal, so it lands in document.body
-// (outside the wrapper) and only after a tick.
-function inputs() {
-  return Array.from(document.querySelectorAll("input")).map((el) => new DOMWrapper(el));
+// (outside the wrapper) and only after a tick. Target fields by their stable ids.
+function byId(id: string) {
+  return new DOMWrapper(document.getElementById(id) as HTMLElement);
 }
 function buttonByText(text: string) {
   const el = Array.from(document.querySelectorAll("button")).find((b) => b.textContent?.trim() === text);
@@ -42,44 +35,61 @@ describe("GlossaryEntryDialog", () => {
   });
 
   it("renders the pre-filled entry when editing", async () => {
+    const entry: GlossaryEntry = { term: "feed", notes: "fertilize", translations: { fr: "nourrir" } };
     mountDialog({ open: true, entry, targetLocales: ["fr", "de"] });
     await nextTick();
 
-    const termInput = inputs()[0]!.element as HTMLInputElement;
-    expect(termInput.value).toBe("Sign in");
+    const termInput = byId("glossary-term").element as HTMLInputElement;
+    expect(termInput.value).toBe("feed");
     expect(termInput.disabled).toBe(true);
     expect(document.body.textContent).toContain("Edit term");
+    // The pinned fr translation renders as an editable row; unpinned de does not.
+    expect((byId("glossary-tr-fr").element as HTMLInputElement).value).toBe("nourrir");
+    expect(document.getElementById("glossary-tr-de")).toBeNull();
   });
 
-  it("saves only non-empty translations and omits false flags", async () => {
-    const w = mountDialog({ open: true, entry: null, targetLocales: ["fr", "de"] });
+  it("adds aliases (enter- and comma-committed) and saves them", async () => {
+    const w = mountDialog({ open: true, entry: null, targetLocales: ["fr"] });
     await nextTick();
 
-    const fields = inputs();
-    // fields[0] = term, fields[1] = fr forced translation, fields[2] = de forced translation.
-    await fields[0]!.setValue("Logout");
-    await fields[1]!.setValue("Se déconnecter");
-    await fields[2]!.setValue("");
+    await byId("glossary-term").setValue("feed");
+    const alias = byId("glossary-aliases");
+    await alias.setValue("feeding");
+    await alias.trigger("keydown.enter");
+    await alias.setValue("feeds, fed");
+    await alias.trigger("blur");
 
     await buttonByText("Add term").trigger("click");
     await flushPromises();
 
     expect(putGlossaryEntry).toHaveBeenCalledTimes(1);
-    expect(putGlossaryEntry).toHaveBeenCalledWith({
-      term: "Logout",
-      translations: { fr: "Se déconnecter" },
-    });
+    expect(putGlossaryEntry).toHaveBeenCalledWith({ term: "feed", aliases: ["feeding", "feeds", "fed"] });
     expect(w.emitted("saved")).toBeTruthy();
   });
 
-  it("preserves the wholeWord opt-out (false) when editing", async () => {
-    const wwEntry: GlossaryEntry = { term: "Pro", wholeWord: false };
-    mountDialog({ open: true, entry: wwEntry, targetLocales: [] });
+  it("saves edited pinned translations and omits the empty ones", async () => {
+    mountDialog({ open: true, entry: { term: "feed", translations: { fr: "x", de: "y" } }, targetLocales: ["fr", "de"] });
     await nextTick();
+
+    await byId("glossary-tr-fr").setValue("nourrir");
+    await byId("glossary-tr-de").setValue("");
 
     await buttonByText("Save").trigger("click");
     await flushPromises();
 
-    expect(putGlossaryEntry).toHaveBeenCalledWith({ term: "Pro", wholeWord: false });
+    expect(putGlossaryEntry).toHaveBeenCalledWith({ term: "feed", translations: { fr: "nourrir" } });
+  });
+
+  it("hides and omits pinned translations for a do-not-translate term", async () => {
+    mountDialog({ open: true, entry: { term: "Sprout", doNotTranslate: true, translations: { fr: "x" } }, targetLocales: ["fr"] });
+    await nextTick();
+
+    // The pinned-translations section is hidden when do-not-translate is on.
+    expect(document.getElementById("glossary-tr-fr")).toBeNull();
+
+    await buttonByText("Save").trigger("click");
+    await flushPromises();
+
+    expect(putGlossaryEntry).toHaveBeenCalledWith({ term: "Sprout", doNotTranslate: true });
   });
 });

@@ -201,7 +201,7 @@ describe("glossaryViolationRule", () => {
     const c = ctx({ glossary: [{ term: "sign in", translations: { fr: "se connecter" } }] });
     expect(glossaryViolationRule.run(s, c)).toEqual([]);
   });
-  it("matches a do-not-translate term case-insensitively when caseSensitive is unset", () => {
+  it("matches a do-not-translate term case-insensitively", () => {
     const s = state({ "a": { values: {
       en: { value: "Send to a webhook endpoint", state: "source" },
       fi: { value: "Lähetä webhook-päätepisteeseen", state: "reviewed" },
@@ -209,7 +209,7 @@ describe("glossaryViolationRule", () => {
     const c = ctx({ targetLocales: ["fi"], glossary: [{ term: "Webhook", doNotTranslate: true }] });
     expect(glossaryViolationRule.run(s, c)).toEqual([]);
   });
-  it("matches a forced translation case-insensitively when caseSensitive is unset", () => {
+  it("matches a forced translation case-insensitively", () => {
     const s = state({ "a": { values: {
       en: { value: "sign in", state: "source" },
       fr: { value: "Se connecter au portail", state: "reviewed" },
@@ -217,14 +217,22 @@ describe("glossaryViolationRule", () => {
     const c = ctx({ glossary: [{ term: "sign in", translations: { fr: "se connecter" } }] });
     expect(glossaryViolationRule.run(s, c)).toEqual([]);
   });
-  it("still flags a case mismatch when the entry is caseSensitive", () => {
+  it("no longer flags a case-only difference (matching is case-insensitive)", () => {
     const s = state({ "a": { values: {
       en: { value: "Open the Kiosk", state: "source" },
       fr: { value: "Ouvrir le kiosk", state: "reviewed" },
     } } });
-    const c = ctx({ glossary: [{ term: "Kiosk", doNotTranslate: true, caseSensitive: true }] });
+    const c = ctx({ glossary: [{ term: "Kiosk", doNotTranslate: true }] });
+    expect(glossaryViolationRule.run(s, c)).toEqual([]);
+  });
+  it("flags a do-not-translate term governed via an alias when dropped", () => {
+    const s = state({ "a": { values: {
+      en: { value: "Manage Webhooks", state: "source" },
+      de: { value: "Haken verwalten", state: "reviewed" },
+    } } });
+    const c = ctx({ targetLocales: ["de"], glossary: [{ term: "Webhook", aliases: ["Webhooks"], doNotTranslate: true }] });
     expect(glossaryViolationRule.run(s, c)).toEqual([
-      { ruleId: "glossary-violation", key: "a", locale: "fr", message: 'do-not-translate term "Kiosk" is missing or altered' },
+      { ruleId: "glossary-violation", key: "a", locale: "de", message: 'do-not-translate term "Webhook" is missing or altered' },
     ]);
   });
 });

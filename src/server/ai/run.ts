@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve, extname } from "node:path";
 import type { State } from "../schema.js";
 import type { TranslationProvider, TranslationRequest, TranslationResult } from "./provider.js";
-import { relevantGlossary } from "../glossary.js";
+import { matchGlossary, matchGlossaryForms, glossaryHints } from "../glossary.js";
 import { extractPlaceholders, quotedLiterals } from "../placeholders.js";
 import { categoriesFor } from "../plurals.js";
 import { applyMachineTranslation, applyMachineTranslationForms } from "../state.js";
@@ -43,17 +43,22 @@ export function selectRequests(state: State, opts: SelectOptions): TranslationRe
     const sourceLv = entry.values[state.config.sourceLocale];
     if (entry.plural) {
       const sourceForms = sourceLv?.forms;
-      // The "other" form is the representative source string for glossary
-      // scanning and per-form placeholder validation.
+      // The "other" form is the representative source string for per-form
+      // placeholder validation; glossary relevance scans EVERY form so a term
+      // appearing only in (say) the `one` form still constrains the result.
       const other = sourceForms?.other;
       if (!sourceForms || !other) continue;
+      const matches = matchGlossaryForms(
+        Object.values(sourceForms).filter((f): f is string => !!f),
+        state.glossary,
+      );
+      const literals = quotedLiterals(other);
       for (const locale of targets) {
         // A plural target is "missing" when it lacks any required category for
         // that locale (an empty form counts as missing) — so converting a
         // scalar (which seeds only `other`) still leaves the rest translatable.
         if (skip(cellState(entry, locale, state.config.sourceLocale))) continue;
-        const glossary = relevantGlossary(other, locale, state.glossary);
-        const literals = quotedLiterals(other);
+        const glossary = glossaryHints(matches, locale);
         reqs.push({
           id: String(id++),
           key,
@@ -74,10 +79,12 @@ export function selectRequests(state: State, opts: SelectOptions): TranslationRe
     }
     const source = sourceLv?.value;
     if (!source) continue;
+    // Glossary relevance is locale-independent — match once, shape per locale.
+    const matches = matchGlossary(source, state.glossary);
+    const literals = quotedLiterals(source);
     for (const locale of targets) {
       if (skip(cellState(entry, locale, state.config.sourceLocale))) continue;
-      const glossary = relevantGlossary(source, locale, state.glossary);
-      const literals = quotedLiterals(source);
+      const glossary = glossaryHints(matches, locale);
       reqs.push({
         id: String(id++),
         key,

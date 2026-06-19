@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from "vue";
+import { reactive, ref, computed, watch } from "vue";
+import { X } from "lucide-vue-next";
 import { putGlossaryEntry } from "@/api.js";
 import { toast } from "@/components/ui/toast";
 import type { GlossaryEntry } from "@/types.js";
@@ -23,7 +24,7 @@ const props = defineProps<{
   entry: GlossaryEntry | null;
   // Prefill the form for a NEW entry, e.g. accepting an AI suggestion; unlike `entry`, stays in ADD mode.
   prefill?: GlossaryEntry | null;
-  // Target locales (config.locales minus sourceLocale) to offer forced translations for.
+  // Target locales (config.locales minus sourceLocale) available to pin translations for.
   targetLocales: string[];
 }>();
 const open = defineModel<boolean>("open", { required: true });
@@ -31,18 +32,26 @@ const emit = defineEmits<{ (e: "saved"): void }>();
 
 const form = reactive({
   term: "",
+  aliases: [] as string[],
   doNotTranslate: false,
-  caseSensitive: false,
-  // Whole-word matching is the default; a term is a word, not a substring.
-  wholeWord: true,
   notes: "",
+  // Only locales the user has chosen to pin appear here — not every target.
   translations: {} as Record<string, string>,
 });
 
+const aliasDraft = ref("");
+const pinPicker = ref("");
 const saving = ref(false);
 const error = ref("");
-
 const isEditing = ref(false);
+
+// Target locales not yet pinned — offered in the "pin a translation" picker.
+const unpinnedLocales = computed(() =>
+  props.targetLocales.filter((l) => !(l in form.translations)),
+);
+const pinnedLocales = computed(() =>
+  props.targetLocales.filter((l) => l in form.translations),
+);
 
 // Reset the form from the incoming entry whenever the dialog opens.
 watch(
@@ -52,39 +61,68 @@ watch(
     const e = props.entry ?? props.prefill ?? null;
     isEditing.value = props.entry !== null;
     form.term = e?.term ?? "";
+    form.aliases = [...(e?.aliases ?? [])];
     form.doNotTranslate = e?.doNotTranslate ?? false;
-    form.caseSensitive = e?.caseSensitive ?? false;
-    form.wholeWord = e?.wholeWord ?? true;
     form.notes = e?.notes ?? "";
     form.translations = {};
-    for (const loc of props.targetLocales) {
-      form.translations[loc] = e?.translations?.[loc] ?? "";
+    for (const [loc, value] of Object.entries(e?.translations ?? {})) {
+      if (props.targetLocales.includes(loc)) form.translations[loc] = value;
     }
+    aliasDraft.value = "";
+    pinPicker.value = "";
     error.value = "";
   },
   { immediate: true },
 );
 
+function commitAlias() {
+  for (const part of aliasDraft.value.split(",")) {
+    const a = part.trim();
+    if (a && a !== form.term && !form.aliases.includes(a)) form.aliases.push(a);
+  }
+  aliasDraft.value = "";
+}
+
+function removeAlias(a: string) {
+  form.aliases = form.aliases.filter((x) => x !== a);
+}
+
+function aliasBackspace() {
+  if (aliasDraft.value === "" && form.aliases.length) form.aliases.pop();
+}
+
+function pinLocale(loc: string) {
+  if (!loc) return;
+  form.translations[loc] = "";
+  pinPicker.value = "";
+}
+
+function unpinLocale(loc: string) {
+  delete form.translations[loc];
+}
+
 async function submit() {
+  commitAlias();
   const term = form.term.trim();
   if (!term) {
     error.value = "Term is required.";
     return;
   }
 
-  const translations: Record<string, string> = {};
-  for (const [loc, value] of Object.entries(form.translations)) {
-    const trimmed = value.trim();
-    if (trimmed) translations[loc] = trimmed;
-  }
-
   const entry: GlossaryEntry = { term };
+  const aliases = form.aliases.map((a) => a.trim()).filter((a) => a && a !== term);
+  if (aliases.length) entry.aliases = aliases;
   if (form.doNotTranslate) entry.doNotTranslate = true;
-  if (form.caseSensitive) entry.caseSensitive = true;
-  // Whole-word is the default, so only the opt-out needs persisting.
-  if (!form.wholeWord) entry.wholeWord = false;
   if (form.notes.trim()) entry.notes = form.notes.trim();
-  if (Object.keys(translations).length > 0) entry.translations = translations;
+  // Do-not-translate terms never carry pinned translations.
+  if (!form.doNotTranslate) {
+    const translations: Record<string, string> = {};
+    for (const [loc, value] of Object.entries(form.translations)) {
+      const trimmed = value.trim();
+      if (trimmed) translations[loc] = trimmed;
+    }
+    if (Object.keys(translations).length > 0) entry.translations = translations;
+  }
 
   saving.value = true;
   error.value = "";
@@ -107,18 +145,18 @@ async function submit() {
       <DialogHeader>
         <DialogTitle>{{ isEditing ? "Edit term" : "Add term" }}</DialogTitle>
         <DialogDescription>
-          Guide AI translations with do-not-translate terms and forced translations.
+          Teach the AI a term so it translates the same way across every key.
         </DialogDescription>
       </DialogHeader>
 
-      <div class="grid gap-4">
+      <div class="grid gap-5">
         <div class="grid gap-1.5">
           <Label for="glossary-term">Term</Label>
           <Input
             id="glossary-term"
             v-model="form.term"
             class="font-mono"
-            placeholder="Sign in"
+            placeholder="feed"
             :disabled="isEditing"
             @keydown.enter.prevent="submit"
           />
@@ -127,56 +165,94 @@ async function submit() {
           </p>
         </div>
 
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between gap-4 rounded-lg border p-3">
           <div>
-            <Label for="glossary-dnt">Do not translate</Label>
-            <p class="text-xs text-muted-foreground">Keep this term verbatim in every language.</p>
+            <Label for="glossary-dnt">Don't translate</Label>
+            <p class="text-xs text-muted-foreground">Keep this term verbatim in every language — brand and product names.</p>
           </div>
           <Switch id="glossary-dnt" v-model="form.doNotTranslate" />
         </div>
 
-        <div class="flex items-center justify-between">
-          <div>
-            <Label for="glossary-cs">Case sensitive</Label>
-            <p class="text-xs text-muted-foreground">Only match the exact casing.</p>
-          </div>
-          <Switch id="glossary-cs" v-model="form.caseSensitive" />
-        </div>
-
-        <div class="flex items-center justify-between">
-          <div>
-            <Label for="glossary-ww">Whole word</Label>
-            <p class="text-xs text-muted-foreground">
-              Apply this term only as a standalone word (e.g. "Pro" won't match "Process"). Turn off
-              to also match inside larger words.
-            </p>
-          </div>
-          <Switch id="glossary-ww" v-model="form.wholeWord" />
-        </div>
-
         <div class="grid gap-1.5">
-          <Label for="glossary-notes">Notes</Label>
+          <Label for="glossary-notes">Meaning &amp; usage</Label>
           <Textarea
             id="glossary-notes"
             v-model="form.notes"
-            rows="5"
-            class="min-h-24 resize-y"
-            placeholder="Optional guidance for translators."
+            rows="3"
+            class="min-h-20 resize-y"
+            placeholder="What does this term mean? e.g. “feed = give a plant fertilizer, never a social-media feed.”"
           />
+          <p class="text-xs text-muted-foreground">
+            The single biggest quality lever — it tells the AI which sense of a word you mean.
+          </p>
         </div>
 
-        <div v-if="targetLocales.length > 0" class="grid gap-2 border-t pt-3">
-          <p class="text-sm font-medium">Forced translations</p>
-          <div v-for="loc in targetLocales" :key="loc" class="grid gap-1.5">
-            <Label :for="`glossary-tr-${loc}`" class="text-xs text-muted-foreground">
-              <LanguageLabel :code="loc" show-name :show-code="false" :size="12" />
-            </Label>
-            <Input
-              :id="`glossary-tr-${loc}`"
-              v-model="form.translations[loc]"
-              :placeholder="`Forced translation for ${loc}`"
+        <div class="grid gap-1.5">
+          <Label for="glossary-aliases">Also matches</Label>
+          <div
+            class="flex flex-wrap items-center gap-1.5 rounded-md border border-input bg-transparent px-2 py-1.5 text-sm focus-within:ring-1 focus-within:ring-ring"
+          >
+            <span
+              v-for="a in form.aliases"
+              :key="a"
+              class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-xs"
+            >
+              {{ a }}
+              <button type="button" class="text-muted-foreground hover:text-foreground" :aria-label="`Remove ${a}`" @click="removeAlias(a)">
+                <X class="size-3" />
+              </button>
+            </span>
+            <input
+              id="glossary-aliases"
+              v-model="aliasDraft"
+              class="min-w-24 flex-1 bg-transparent font-mono outline-none placeholder:text-muted-foreground"
+              :placeholder="form.aliases.length ? '' : 'feeding, feeds, fed'"
+              @keydown.enter.prevent="commitAlias"
+              @keydown="(e: KeyboardEvent) => { if (e.key === ',') { e.preventDefault(); commitAlias(); } }"
+              @keydown.backspace="aliasBackspace"
+              @blur="commitAlias"
             />
           </div>
+          <p class="text-xs text-muted-foreground">
+            Other forms of the same word — inflections and plurals. Matching is whole-word, so add the variants you want governed too.
+          </p>
+        </div>
+
+        <div v-if="!form.doNotTranslate" class="grid gap-2 border-t pt-4">
+          <div>
+            <p class="text-sm font-medium">Pinned translations</p>
+            <p class="text-xs text-muted-foreground">
+              Optional. Lingo can fill these for you — pin one to force exact wording in a language.
+            </p>
+          </div>
+
+          <div v-for="loc in pinnedLocales" :key="loc" class="grid gap-1.5">
+            <div class="flex items-center justify-between">
+              <Label :for="`glossary-tr-${loc}`" class="text-xs text-muted-foreground">
+                <LanguageLabel :code="loc" show-name :show-code="false" :size="12" />
+              </Label>
+              <button
+                type="button"
+                class="text-muted-foreground hover:text-destructive"
+                :aria-label="`Unpin ${loc}`"
+                @click="unpinLocale(loc)"
+              >
+                <X class="size-3.5" />
+              </button>
+            </div>
+            <Input :id="`glossary-tr-${loc}`" v-model="form.translations[loc]" :placeholder="`Exact ${loc} translation`" />
+          </div>
+
+          <select
+            v-if="unpinnedLocales.length"
+            v-model="pinPicker"
+            class="h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm text-muted-foreground"
+            aria-label="Pin a translation for a language"
+            @change="pinLocale(pinPicker)"
+          >
+            <option value="">+ Pin a translation…</option>
+            <option v-for="loc in unpinnedLocales" :key="loc" :value="loc">{{ loc }}</option>
+          </select>
         </div>
 
         <p v-if="error" class="text-sm text-destructive">{{ error }}</p>

@@ -6,11 +6,11 @@ const entries: GlossaryEntry[] = [
   {
     term: "Sprout",
     doNotTranslate: true,
-    caseSensitive: true,
     notes: "Brand name. Never translate.",
   },
   {
     term: "Feed",
+    aliases: ["feeding", "feeds"],
     notes: "Fertilizer for a plant, not a content feed.",
     translations: { fr: "Hôte", de: "Gastgeber" },
   },
@@ -36,6 +36,10 @@ describe("filterGlossary", () => {
 
   test("matches notes", () => {
     expect(filterGlossary(entries, "fertilizer")).toEqual([entries[1]]);
+  });
+
+  test("matches aliases", () => {
+    expect(filterGlossary(entries, "feeding")).toEqual([entries[1]]);
   });
 
   test("matches forced translation values", () => {

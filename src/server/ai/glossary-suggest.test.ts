@@ -48,5 +48,5 @@ test("dedupeTerms collapses case-variant duplicates, first wins", () => {
 test("schema requires term, allows the optional fields", () => {
   const props = (GLOSSARY_SUGGEST_SCHEMA as any).properties.terms.items;
   expect(props.required).toEqual(["term"]);
-  expect(Object.keys(props.properties).sort()).toEqual(["caseSensitive", "doNotTranslate", "note", "term", "wholeWord"]);
+  expect(Object.keys(props.properties).sort()).toEqual(["aliases", "doNotTranslate", "note", "term"]);
 });

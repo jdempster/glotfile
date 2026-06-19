@@ -1,5 +1,5 @@
 import { describe, it, expect, test } from "vitest";
-import { glossaryViolations, relevantGlossary, sourceKeysForTerm } from "./glossary.js";
+import { glossaryViolations, relevantGlossary, matchGlossary, matchGlossaryForms, glossaryHints, sourceKeysForTerm } from "./glossary.js";
 import { defaultState } from "./schema.js";
 
 describe("relevantGlossary", () => {
@@ -11,27 +11,68 @@ describe("relevantGlossary", () => {
     expect(hints).toEqual([{ term: "Sign in", doNotTranslate: undefined, forced: "Se connecter", notes: undefined }]);
   });
 
-  it("honors case sensitivity", () => {
-    const glossary = [{ term: "API", caseSensitive: true }];
-    expect(relevantGlossary("the api endpoint", "fr", glossary)).toEqual([]);
-    expect(relevantGlossary("the API endpoint", "fr", glossary)).toHaveLength(1);
+  it("matches case-insensitively", () => {
+    expect(relevantGlossary("the API endpoint", "fr", [{ term: "api" }])).toHaveLength(1);
+    expect(relevantGlossary("the api endpoint", "fr", [{ term: "API" }])).toHaveLength(1);
   });
 
-  it("matches case-insensitively by default", () => {
-    expect(relevantGlossary("the login page", "fr", [{ term: "Login" }])).toHaveLength(1);
-  });
-
-  it("matches only whole words by default — a term is a word, not a substring", () => {
+  it("matches only whole words — a term is a word, not a substring", () => {
     expect(relevantGlossary("Process the file", "fr", [{ term: "Pro" }])).toEqual([]);
     expect(relevantGlossary("Upgrade to Pro", "fr", [{ term: "Pro" }])).toHaveLength(1);
   });
 
-  it("matches inside a larger word when wholeWord is explicitly false", () => {
-    expect(relevantGlossary("Process the file", "fr", [{ term: "Pro", wholeWord: false }])).toHaveLength(1);
+  it("matches an inflected form listed as an alias", () => {
+    const glossary = [{ term: "feed", aliases: ["feeding", "feeds"] }];
+    expect(relevantGlossary("Feeding schedule", "de", glossary)).toHaveLength(1);
+    // ...but still not a substring of an unrelated word.
+    expect(relevantGlossary("Feedback form", "de", glossary)).toEqual([]);
+  });
+
+  it("does NOT carry a forced translation on an alias-only match", () => {
+    // The alias is an inflected source form whose target rendering differs from
+    // the pinned word, so we offer the term as a hint but not the forced string.
+    const glossary = [{ term: "feed", aliases: ["feeding"], translations: { de: "düngen" } }];
+    expect(relevantGlossary("Feeding schedule", "de", glossary)).toEqual([
+      { term: "feed", doNotTranslate: undefined, forced: undefined, notes: undefined },
+    ]);
+    // The canonical term still carries it.
+    expect(relevantGlossary("Time to feed", "de", glossary)[0]!.forced).toBe("düngen");
+  });
+
+  it("never emits a forced translation for a do-not-translate term", () => {
+    const glossary = [{ term: "Sprout", doNotTranslate: true, translations: { de: "Spross" } }];
+    expect(relevantGlossary("Open Sprout", "de", glossary)).toEqual([
+      { term: "Sprout", doNotTranslate: true, forced: undefined, notes: undefined },
+    ]);
   });
 
   it("treats an adjacent non-ASCII letter as a word character", () => {
     expect(relevantGlossary("Straße", "fr", [{ term: "Stra" }])).toEqual([]);
+  });
+});
+
+describe("matchGlossaryForms", () => {
+  it("matches a term present in any plural form, not just `other`", () => {
+    const glossary = [{ term: "plant" }];
+    // "plant" appears only in the `one` form here.
+    const matches = matchGlossaryForms(["1 plant", "{count} pots"], glossary);
+    expect(matches).toHaveLength(1);
+    expect(matches[0]!.canonical).toBe(true);
+  });
+
+  it("keeps word boundaries across forms (no cross-form false match)", () => {
+    // Joining forms must not let the end of one form + start of the next form a word.
+    const glossary = [{ term: "ab" }];
+    expect(matchGlossaryForms(["xa", "bx"], glossary)).toEqual([]);
+  });
+});
+
+describe("glossaryHints", () => {
+  it("is locale-independent for matching but locale-specific for forced", () => {
+    const matches = matchGlossary("Time to feed", [{ term: "feed", translations: { de: "düngen", fr: "nourrir" } }]);
+    expect(glossaryHints(matches, "de")[0]!.forced).toBe("düngen");
+    expect(glossaryHints(matches, "fr")[0]!.forced).toBe("nourrir");
+    expect(glossaryHints(matches, "es")[0]!.forced).toBeUndefined();
   });
 });
 
@@ -44,19 +85,13 @@ describe("glossaryViolations", () => {
     const v = glossaryViolations("sign in", "ouvrir", "fr", [{ term: "sign in", translations: { fr: "se connecter" } }]);
     expect(v).toEqual([{ term: "sign in", expected: "se connecter", kind: "forced" }]);
   });
-  it("matches case-insensitively when caseSensitive is unset", () => {
+  it("matches the do-not-translate term case-insensitively", () => {
     const glossary = [{ term: "Webhook", doNotTranslate: true }];
     expect(glossaryViolations("Send to a webhook endpoint", "Lähetä webhook-päätepisteeseen", "fi", glossary)).toEqual([]);
   });
-  it("matches a forced translation case-insensitively when caseSensitive is unset", () => {
+  it("matches a forced translation case-insensitively", () => {
     const glossary = [{ term: "sign in", translations: { fr: "se connecter" } }];
     expect(glossaryViolations("sign in", "Se connecter au portail", "fr", glossary)).toEqual([]);
-  });
-  it("flags a case mismatch when the entry is caseSensitive", () => {
-    const glossary = [{ term: "Kiosk", doNotTranslate: true, caseSensitive: true }];
-    expect(glossaryViolations("Open the Kiosk", "Ouvrir le kiosk", "fr", glossary)).toEqual([
-      { term: "Kiosk", expected: "Kiosk", kind: "do-not-translate" },
-    ]);
   });
   it("ignores entries whose term is absent from the source", () => {
     expect(glossaryViolations("hello", "bonjour", "fr", [{ term: "Webhook", doNotTranslate: true }])).toEqual([]);
@@ -69,12 +104,12 @@ describe("glossaryViolations", () => {
     ]);
   });
 
-  it("does not apply a term to a larger source word by default (whole-word)", () => {
+  it("does not apply a term to a larger source word (whole-word)", () => {
     const glossary = [{ term: "Pro", doNotTranslate: true }];
     expect(glossaryViolations("Process the file", "Traiter le fichier", "fr", glossary)).toEqual([]);
   });
 
-  it("does not apply a forced term to a larger source word by default", () => {
+  it("does not apply a forced term to a larger source word", () => {
     const glossary = [{ term: "cat", translations: { fr: "chat" } }];
     expect(glossaryViolations("category list", "liste de catégories", "fr", glossary)).toEqual([]);
   });
@@ -93,15 +128,23 @@ describe("glossaryViolations", () => {
     expect(glossaryViolations("The Webhook is ready", "Die Webhooks sind bereit", "de", glossary)).toEqual([]);
   });
 
-  it("applies a term inside a larger source word when wholeWord is false", () => {
-    const glossary = [{ term: "Pro", doNotTranslate: true, wholeWord: false }];
-    expect(glossaryViolations("Process the file", "Traiter le fichier", "fr", glossary)).toEqual([
-      { term: "Pro", expected: "Pro", kind: "do-not-translate" },
+  it("does NOT enforce a forced translation on an alias-only match", () => {
+    // Source uses the inflected alias, whose German renders differently from the
+    // pinned base word — enforcing "düngen" here would mis-flag a good translation.
+    const glossary = [{ term: "feed", aliases: ["feeding"], translations: { de: "düngen" } }];
+    expect(glossaryViolations("Feeding schedule", "Düngeplan", "de", glossary)).toEqual([]);
+  });
+
+  it("honors a do-not-translate term kept via its alias", () => {
+    const glossary = [{ term: "Webhook", aliases: ["Webhooks"], doNotTranslate: true }];
+    expect(glossaryViolations("Manage Webhooks", "Webhooks verwalten", "de", glossary)).toEqual([]);
+    expect(glossaryViolations("Manage Webhooks", "Haken verwalten", "de", glossary)).toEqual([
+      { term: "Webhook", expected: "Webhook", kind: "do-not-translate" },
     ]);
   });
 });
 
-test("sourceKeysForTerm finds keys whose source contains the term (whole-word default)", () => {
+test("sourceKeysForTerm finds keys whose source contains the term (whole-word)", () => {
   const s = defaultState();
   s.config.sourceLocale = "en"; s.config.locales = ["en"];
   s.keys = {
@@ -110,5 +153,4 @@ test("sourceKeysForTerm finds keys whose source contains the term (whole-word de
     "c": { values: { en: { value: "no term here", state: "source" } } },
   } as any;
   expect(sourceKeysForTerm(s, "Acme").sort()).toEqual(["a"]); // "Acmeification" excluded by whole-word
-  expect(sourceKeysForTerm(s, "Acme", { wholeWord: false }).sort()).toEqual(["a", "b"]);
 });

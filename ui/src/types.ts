@@ -24,19 +24,17 @@ export interface KeyEntry {
 
 export interface GlossaryEntry {
   term: string;
+  aliases?: string[];
   doNotTranslate?: boolean;
-  caseSensitive?: boolean;
-  wholeWord?: boolean;
   translations?: Record<string, string>;
   notes?: string;
 }
 
 export interface GlossarySuggestion {
   term: string;
+  aliases?: string[];
   note?: string;
   doNotTranslate?: boolean;
-  caseSensitive?: boolean;
-  wholeWord?: boolean;
   status: "pending" | "dismissed";
   occurrences?: number;
 }

@@ -57,6 +57,31 @@ function normalizeState(state: State): void {
     for (const [k, v] of Object.entries(state.config.localeInstructions)) remapped[canonLocale(k)] = v;
     state.config.localeInstructions = remapped;
   }
+  // Re-emit each glossary entry and suggestion with ONLY its known fields, so a
+  // saved file never carries stray keys (e.g. a pre-aliases caseSensitive /
+  // wholeWord flag) — the file self-heals on the next save. Forced-translation
+  // locale keys are canonicalized here too, so a value pinned under "pt-BR"
+  // still applies (and still enforces) when the target becomes "pt-br".
+  // Keep these field lists in sync with GlossaryEntry / GlossarySuggestion.
+  state.glossary = state.glossary.map((entry) => {
+    const clean: GlossaryEntry = { term: entry.term };
+    if (entry.aliases?.length) clean.aliases = entry.aliases;
+    if (entry.doNotTranslate) clean.doNotTranslate = true;
+    if (entry.translations && Object.keys(entry.translations).length) {
+      const remapped: Record<string, string> = {};
+      for (const [k, v] of Object.entries(entry.translations)) remapped[canonLocale(k)] = v;
+      clean.translations = remapped;
+    }
+    if (entry.notes) clean.notes = entry.notes;
+    return clean;
+  });
+  state.glossarySuggestions = state.glossarySuggestions.map((sug) => {
+    const clean: GlossarySuggestion = { term: sug.term, status: sug.status };
+    if (sug.aliases?.length) clean.aliases = sug.aliases;
+    if (sug.note) clean.note = sug.note;
+    if (sug.doNotTranslate) clean.doNotTranslate = true;
+    return clean;
+  });
 }
 
 export function loadState(path: string): State {
@@ -380,7 +405,7 @@ function normGlossaryTerm(term: string): string {
 // Returns the entries actually added.
 export function mergeGlossarySuggestions(
   state: State,
-  found: Array<{ term: string; note?: string; doNotTranslate?: boolean; caseSensitive?: boolean; wholeWord?: boolean }>,
+  found: Array<{ term: string; aliases?: string[]; note?: string; doNotTranslate?: boolean }>,
 ): GlossarySuggestion[] {
   const known = new Set<string>();
   for (const g of state.glossary) known.add(normGlossaryTerm(g.term));
@@ -393,10 +418,10 @@ export function mergeGlossarySuggestions(
     if (known.has(key)) continue;
     known.add(key);
     const sug: GlossarySuggestion = { term, status: "pending" };
+    const aliases = (f.aliases ?? []).map((a) => a.trim()).filter((a) => a && a !== term);
+    if (aliases.length) sug.aliases = aliases;
     if (f.note?.trim()) sug.note = f.note.trim();
     if (f.doNotTranslate) sug.doNotTranslate = true;
-    if (f.caseSensitive) sug.caseSensitive = true;
-    if (f.wholeWord === false) sug.wholeWord = false;
     state.glossarySuggestions.push(sug);
     added.push(sug);
   }

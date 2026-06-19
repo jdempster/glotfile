@@ -163,26 +163,35 @@ export interface Config {
   localeInstructions?: Record<string, string>;
 }
 export interface GlossaryEntry {
+  // The source-language term, exactly as it appears in strings. Matching is
+  // whole-word and case-insensitive — "Pro" applies to "Pro plan", never to
+  // "Process". To cover inflections/variants, add aliases rather than loosening
+  // the match.
   term: string;
+  // Other source-language surface forms of the same term — inflections, plurals,
+  // casing variants (e.g. "feed" → "feeding", "feeds", "fed"). They broaden which
+  // source strings the term applies to and what the do-not-translate check
+  // accepts, but they never carry their own forced translation (the canonical
+  // `term` owns that). Typically AI-suggested, not hand-authored.
+  aliases?: string[];
+  // Keep the term verbatim in every language (brand/product names, acronyms).
   doNotTranslate?: boolean;
-  caseSensitive?: boolean;
-  // Require the term to appear as a standalone word in the source for the entry
-  // to apply, not as a substring of a larger word (e.g. "Pro" won't match
-  // "Process"). Unicode-aware: any adjacent letter or digit, including
-  // non-ASCII, counts as part of the word. Defaults to true; set false to match
-  // inside larger source words. (The check that a translation kept the term is
-  // always lenient substring, so inflections/compounds are never flagged.)
-  wholeWord?: boolean;
+  // Per-locale fixed translation for a term that DOES translate but must render
+  // the same way everywhere. AI-populated — the dev never types a foreign word.
+  // Keys are canonical BCP-47 (normalizeState canonicalizes them on load/save).
   translations?: Record<string, string>;
+  // Meaning / usage guidance — disambiguates homonyms ("feed" = fertilize, not a
+  // social feed) and records translation decisions. The single biggest quality
+  // lever a non-translator can pull.
   notes?: string;
 }
 export interface GlossarySuggestion {
   term: string;
+  // Other source-language surface forms the AI proposes alongside the term.
+  aliases?: string[];
   // Rationale written by the model; becomes GlossaryEntry.notes on accept.
   note?: string;
   doNotTranslate?: boolean;
-  caseSensitive?: boolean;
-  wholeWord?: boolean;
   // "pending" awaits review; "dismissed" is a tombstone so re-runs never resurface it.
   status: "pending" | "dismissed";
 }

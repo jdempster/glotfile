@@ -88,7 +88,7 @@ function edit(entry: GlossaryEntry) {
 function acceptSuggestion(s: GlossarySuggestion) {
   acceptingTerm.value = s.term;
   editing.value = null;
-  prefill.value = { term: s.term, doNotTranslate: s.doNotTranslate, caseSensitive: s.caseSensitive, wholeWord: s.wholeWord, notes: s.note };
+  prefill.value = { term: s.term, aliases: s.aliases, doNotTranslate: s.doNotTranslate, notes: s.note };
   dialogOpen.value = true;
 }
 
@@ -99,7 +99,7 @@ async function onDialogSaved() {
   await Promise.all([reload(), reloadSuggestions()]);
 }
 
-// Forced translations as `loc: value` chips for the row.
+// Pinned translations as `loc: value` chips for the row.
 function translationChips(entry: GlossaryEntry): string[] {
   return Object.entries(entry.translations ?? {}).map(([loc, value]) => `${loc}: ${value}`);
 }
@@ -131,7 +131,7 @@ async function confirmDelete() {
       <div class="flex items-center justify-between">
         <div>
           <h2 class="text-base font-semibold">Glossary</h2>
-          <p class="text-sm text-muted-foreground">Do-not-translate terms and forced translations.</p>
+          <p class="text-sm text-muted-foreground">Teach the AI your terms so they translate consistently — or stay verbatim — across every key.</p>
         </div>
         <div class="flex items-center gap-2">
           <Button v-if="betaSuggest" variant="outline" @click="suggestOpen = true">
@@ -174,10 +174,8 @@ async function confirmDelete() {
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
                 <span class="font-mono text-sm font-medium">{{ s.term }}</span>
-                <Badge v-if="s.doNotTranslate" variant="secondary">Do-not-translate</Badge>
-                <Badge v-if="s.caseSensitive" variant="outline">Case-sensitive</Badge>
-                <Badge v-if="s.wholeWord === false" variant="outline">Substring</Badge>
-                <Badge v-else variant="outline">Whole word</Badge>
+                <Badge v-if="s.doNotTranslate" variant="secondary">Don't translate</Badge>
+                <span v-if="s.aliases?.length" class="font-mono text-xs text-muted-foreground">+ {{ s.aliases.join(", ") }}</span>
               </div>
               <p v-if="s.note" class="mt-1 text-sm text-muted-foreground">{{ s.note }}</p>
               <p v-if="typeof s.occurrences === 'number'" class="mt-1 text-xs text-muted-foreground">
@@ -196,7 +194,7 @@ async function confirmDelete() {
         v-if="entries.length === 0"
         class="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground"
       >
-        No glossary terms yet — add do-not-translate terms and forced translations to guide AI.
+        No glossary terms yet — add brand names to keep verbatim, or domain words whose meaning the AI should pin.
       </div>
 
       <div
@@ -215,10 +213,8 @@ async function confirmDelete() {
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2">
               <span class="font-mono text-sm font-medium">{{ entry.term }}</span>
-              <Badge v-if="entry.doNotTranslate" variant="secondary">Do-not-translate</Badge>
-              <Badge v-if="entry.caseSensitive" variant="outline">Case-sensitive</Badge>
-              <Badge v-if="entry.wholeWord === false" variant="outline">Substring</Badge>
-              <Badge v-else variant="outline">Whole word</Badge>
+              <Badge v-if="entry.doNotTranslate" variant="secondary">Don't translate</Badge>
+              <span v-if="entry.aliases?.length" class="font-mono text-xs text-muted-foreground">+ {{ entry.aliases.join(", ") }}</span>
             </div>
             <p v-if="entry.notes" class="mt-1 text-sm text-muted-foreground">{{ entry.notes }}</p>
             <div v-if="translationChips(entry).length" class="mt-2 flex flex-wrap gap-1.5">

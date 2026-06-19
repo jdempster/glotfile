@@ -101,6 +101,27 @@ describe("load/save", () => {
     expect(loaded.config.localeInstructions?.["PT_BR"]).toBeUndefined();
   });
 
+  it("canonicalizes glossary forced-translation keys to BCP-47 on save/load", () => {
+    const p = join(mkdtempSync(join(tmpdir(), "glot-")), "glotfile.json");
+    const s = defaultState();
+    s.config.locales = ["en", "pt-br"];
+    s.glossary = [{ term: "feed", translations: { "PT_BR": "alimentar" } }];
+    saveState(p, s);
+    const loaded = loadState(p);
+    // Pinned under "PT_BR", but the lookup uses the canonical "pt-br" target.
+    expect(loaded.glossary[0]!.translations).toEqual({ "pt-br": "alimentar" });
+  });
+
+  it("strips legacy/unknown glossary fields on save/load", () => {
+    const p = join(mkdtempSync(join(tmpdir(), "glot-")), "glotfile.json");
+    const s = defaultState();
+    // A hand-written or stale entry carrying the removed flags.
+    s.glossary = [{ term: "API", doNotTranslate: true, caseSensitive: true, wholeWord: false } as any];
+    saveState(p, s);
+    const loaded = loadState(p);
+    expect(loaded.glossary[0]).toEqual({ term: "API", doNotTranslate: true });
+  });
+
   it("downgrades a version-2 file to version 1 on load", () => {
     const p = join(mkdtempSync(join(tmpdir(), "glot-")), "glotfile.json");
     // A version-2 file whose value merely looks like an ICU plural must load

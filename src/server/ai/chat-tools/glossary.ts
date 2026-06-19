@@ -15,13 +15,18 @@ const setGlossaryTerm: ChatTool = {
       type: "object",
       properties: {
         term: { type: "string", description: "The source-language term exactly as it appears in strings (e.g. \"Sprout\", \"feed\")." },
+        aliases: {
+          type: "array",
+          items: { type: "string" },
+          description: "Other source-language surface forms of the SAME term — inflections, plurals, casing variants (e.g. for \"feed\": [\"feeding\", \"feeds\", \"fed\"]). Matching is whole-word, so add these to catch the term where it appears as a different word form.",
+        },
         doNotTranslate: { type: "boolean", description: "Keep the term verbatim in every language (brand/product names). Omit or false for terms that DO translate but must stay consistent." },
         translations: {
           type: "object",
-          description: "Locale → fixed translation for terms that translate but must be consistent (e.g. { \"de\": \"düngen\" }). Omit for do-not-translate terms.",
+          description: "Locale → fixed translation for terms that translate but must be consistent (e.g. { \"de\": \"düngen\" }). You fill these so the user never has to type a foreign word. Omit for do-not-translate terms.",
           additionalProperties: { type: "string" },
         },
-        notes: { type: "string", description: "Short rationale or usage note for translators." },
+        notes: { type: "string", description: "Meaning/usage guidance — especially to disambiguate a homonym (e.g. \"feed = give fertilizer, not a social feed\")." },
       },
       required: ["term"],
       additionalProperties: false,
@@ -29,9 +34,11 @@ const setGlossaryTerm: ChatTool = {
   },
   humanSummary: (input) => `add glossary term "${(input as { term?: string }).term ?? ""}"`,
   run: async (input, ctx: ToolContext) => {
-    const { term, doNotTranslate, translations, notes } = input as
-      { term: string; doNotTranslate?: boolean; translations?: Record<string, string>; notes?: string };
+    const { term, aliases, doNotTranslate, translations, notes } = input as
+      { term: string; aliases?: string[]; doNotTranslate?: boolean; translations?: Record<string, string>; notes?: string };
     const entry: GlossaryEntry = { term: term.trim() };
+    const cleanAliases = (aliases ?? []).map((a) => a.trim()).filter((a) => a && a !== entry.term);
+    if (cleanAliases.length) entry.aliases = cleanAliases;
     if (doNotTranslate) entry.doNotTranslate = true;
     if (translations && Object.keys(translations).length) entry.translations = translations;
     if (notes?.trim()) entry.notes = notes.trim();
@@ -94,8 +101,7 @@ const acceptGlossarySuggestion: ChatTool = {
     const entry: GlossaryEntry = { term: suggestion.term };
     const dnt = doNotTranslate ?? suggestion.doNotTranslate;
     if (dnt) entry.doNotTranslate = true;
-    if (suggestion.caseSensitive) entry.caseSensitive = true;
-    if (suggestion.wholeWord === false) entry.wholeWord = false;
+    if (suggestion.aliases?.length) entry.aliases = suggestion.aliases;
     if (suggestion.note?.trim()) entry.notes = suggestion.note.trim();
     if (translations && Object.keys(translations).length) entry.translations = translations;
     upsertGlossaryEntry(s, entry);

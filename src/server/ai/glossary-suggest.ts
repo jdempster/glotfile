@@ -7,10 +7,9 @@ export interface GlossarySource {
 
 export interface SuggestedTerm {
   term: string;
+  aliases?: string[];
   note?: string;
   doNotTranslate?: boolean;
-  caseSensitive?: boolean;
-  wholeWord?: boolean;
 }
 
 export interface GlossarySuggestSelectOptions {
@@ -66,9 +65,8 @@ export function buildGlossarySuggestSystemPrompt(): string {
     "- Only surface terms a translator would benefit from pinning. IGNORE ordinary words, verbs, and generic UI labels (e.g. 'Save', 'Cancel', 'Welcome').",
     "- Prefer terms that recur or are clearly proper nouns / product names / acronyms.",
     "- Set doNotTranslate: true for brand/product names, code identifiers, and acronyms that must stay verbatim in every language.",
-    "- Set caseSensitive: true only when casing is meaningful (e.g. an all-caps acronym that must not match a lowercase common word).",
-    "- Set wholeWord: false ONLY if the term should also match inside larger words; otherwise omit it (whole-word is the default).",
-    "- note: one short phrase on why it's a term (e.g. 'product name', 'industry acronym', 'recurring UI concept'). Keep it under 80 characters.",
+    "- aliases: other surface forms of the SAME term that appear (or plausibly appear) in the strings — inflections, plurals, casing variants (e.g. for 'feed': ['feeding', 'feeds', 'fed']). Matching is whole-word, so list the forms that should also be governed by this term. Omit if there are none.",
+    "- note: a short phrase. For a homonym or domain word, say what it MEANS so it translates in the right sense (e.g. 'feed = give fertilizer, not a social feed'); otherwise why it's a term ('product name', 'industry acronym'). Keep it under 80 characters.",
     "- Do NOT return any term in the provided 'Already known' list.",
     "- Return the term exactly as it appears in the source (preserve casing).",
   ].join("\n");
@@ -83,7 +81,7 @@ export function buildGlossarySuggestBatchPrompt(sources: GlossarySource[], known
     "Source strings:",
     lines,
     "",
-    'Return JSON {"terms":[{"term","note?","doNotTranslate?","caseSensitive?","wholeWord?"}]}. Return an empty array if you find no good candidates.',
+    'Return JSON {"terms":[{"term","aliases?","note?","doNotTranslate?"}]}. Return an empty array if you find no good candidates.',
   ].join("\n");
 }
 
@@ -96,10 +94,9 @@ export const GLOSSARY_SUGGEST_SCHEMA = {
         type: "object",
         properties: {
           term: { type: "string" },
+          aliases: { type: "array", items: { type: "string" } },
           note: { type: "string" },
           doNotTranslate: { type: "boolean" },
-          caseSensitive: { type: "boolean" },
-          wholeWord: { type: "boolean" },
         },
         required: ["term"],
         additionalProperties: false,

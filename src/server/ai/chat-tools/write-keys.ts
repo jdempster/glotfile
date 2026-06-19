@@ -1,4 +1,5 @@
 import { setMetadata, addNote, setTargetValue, setKeyState, canonLocale } from "../../state.js";
+import { glossaryViolations } from "../../glossary.js";
 import type { ChatTool, ToolContext } from "../chat-types.js";
 
 // Per-key writes: the string-level guidance and fixes the assistant can make.
@@ -82,7 +83,20 @@ const setTranslation: ChatTool = {
     const s = ctx.load();
     setTargetValue(s, key, loc, value);
     ctx.persist(s);
-    return { ok: true, key, locale: loc, value: value.trim(), state: "reviewed" };
+    // Surface (don't block) glossary breaches: the user agreed to this string,
+    // but a do-not-translate or forced term it ignored is worth flagging back so
+    // the assistant can offer to fix it and keep terminology consistent.
+    const source = s.keys[key]?.values[s.config.sourceLocale]?.value ?? "";
+    const violations = source ? glossaryViolations(source, value, loc, s.glossary) : [];
+    const result: Record<string, unknown> = { ok: true, key, locale: loc, value: value.trim(), state: "reviewed" };
+    if (violations.length) {
+      result.glossaryWarnings = violations.map((v) =>
+        v.kind === "do-not-translate"
+          ? `glossary: "${v.term}" should stay verbatim (keep "${v.expected}")`
+          : `glossary: "${v.term}" should translate to "${v.expected}"`,
+      );
+    }
+    return result;
   },
 };
 
