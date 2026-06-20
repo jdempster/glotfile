@@ -811,7 +811,6 @@ async function onCreated(key: string) {
           :usage-revision="usageRevision"
           :style="{ width: `${detailPanelWidth}px` }"
           @changed="reload"
-          @focus-key="(k: string) => focusKey(k)"
         />
       </div>
 
