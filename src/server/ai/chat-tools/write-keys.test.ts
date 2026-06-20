@@ -71,4 +71,42 @@ describe("key write tools", () => {
     ) as { glossaryWarnings?: string[] };
     expect(res.glossaryWarnings).toBeUndefined();
   });
+
+  it("add_key_tag adds a tag and is idempotent", async () => {
+    await tool("add_key_tag").run({ key: "plant.feed", tag: "cta" }, ctx);
+    await tool("add_key_tag").run({ key: "plant.feed", tag: "cta" }, ctx);
+    expect(state.keys["plant.feed"]!.tags).toEqual(["cta"]);
+  });
+
+  it("remove_key_tag drops a tag and clears the field when the last one goes", async () => {
+    state.keys["plant.feed"]!.tags = ["cta", "home"];
+    const res = await tool("remove_key_tag").run({ key: "plant.feed", tag: "cta" }, ctx) as { tags: string[] };
+    expect(res.tags).toEqual(["home"]);
+    await tool("remove_key_tag").run({ key: "plant.feed", tag: "home" }, ctx);
+    expect(state.keys["plant.feed"]!.tags).toBeUndefined();
+  });
+
+  it("set_max_length sets the cap, and 0 clears it", async () => {
+    await tool("set_max_length").run({ key: "plant.feed", maxLength: 40 }, ctx);
+    expect(state.keys["plant.feed"]!.maxLength).toBe(40);
+    await tool("set_max_length").run({ key: "plant.feed", maxLength: 0 }, ctx);
+    expect(state.keys["plant.feed"]!.maxLength).toBeUndefined();
+  });
+
+  it("set_source_text updates the source and flags translated targets needs-review", async () => {
+    await tool("set_source_text").run({ key: "plant.feed", value: "Feed the plant" }, ctx);
+    expect(state.keys["plant.feed"]!.values.en!.value).toBe("Feed the plant");
+    // changing the source invalidates the existing machine translation
+    expect(state.keys["plant.feed"]!.values.de!.state).toBe("needs-review");
+  });
+
+  it("add_key creates a new scalar key with source text in the source locale", async () => {
+    const res = await tool("add_key").run({ key: "plant.repot", value: "Repot" }, ctx) as { key: string };
+    expect(res.key).toBe("plant.repot");
+    expect(state.keys["plant.repot"]!.values.en).toEqual({ value: "Repot", state: "source" });
+  });
+
+  it("add_key rejects a key that already exists", async () => {
+    await expect(tool("add_key").run({ key: "plant.feed", value: "x" }, ctx)).rejects.toThrow(/exist/i);
+  });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyEvent, transcriptToUi, type UiMessage } from "./chat";
+import { applyEvent, transcriptToUi, viewFilterFromEvent, selectKeyFromEvent, type UiMessage } from "./chat";
 import type { ChatMessage } from "./types";
 
 function withUser(text: string): UiMessage[] {
@@ -66,6 +66,50 @@ describe("applyEvent (chat stream reducer)", () => {
     const msgs = withUser("hi");
     applyEvent(msgs, { type: "error", error: "Anthropic only" });
     expect(msgs[1]!.error).toBe("Anthropic only");
+  });
+});
+
+describe("viewFilterFromEvent", () => {
+  it("extracts the viewFilter the editor should apply from a filter_view tool-end", () => {
+    const vf = viewFilterFromEvent({
+      type: "tool-end",
+      id: "t1",
+      result: { ok: true, matched: 2, viewFilter: { states: ["missing"], locale: "de" } },
+    });
+    expect(vf).toEqual({ states: ["missing"], locale: "de" });
+  });
+
+  it("returns an empty filter object when filter_view cleared the view", () => {
+    const vf = viewFilterFromEvent({ type: "tool-end", id: "t1", result: { ok: true, viewFilter: {} } });
+    expect(vf).toEqual({});
+  });
+
+  it("returns null for a tool-end that carries no viewFilter", () => {
+    expect(viewFilterFromEvent({ type: "tool-end", id: "t1", result: { keyCount: 3 } })).toBeNull();
+  });
+
+  it("returns null for an errored tool-end even if a result is present", () => {
+    expect(viewFilterFromEvent({ type: "tool-end", id: "t1", error: "boom", result: { viewFilter: {} } })).toBeNull();
+  });
+
+  it("returns null for non-tool-end events", () => {
+    expect(viewFilterFromEvent({ type: "text", delta: "hi" })).toBeNull();
+    expect(viewFilterFromEvent({ type: "turn-start" })).toBeNull();
+  });
+});
+
+describe("selectKeyFromEvent", () => {
+  it("extracts the key to open from a select_key tool-end", () => {
+    expect(selectKeyFromEvent({ type: "tool-end", id: "t1", result: { ok: true, selectKey: "plant.feed" } })).toBe("plant.feed");
+  });
+
+  it("returns null for a tool-end with no selectKey", () => {
+    expect(selectKeyFromEvent({ type: "tool-end", id: "t1", result: { ok: true, viewFilter: {} } })).toBeNull();
+  });
+
+  it("returns null for an errored tool-end and for non-tool-end events", () => {
+    expect(selectKeyFromEvent({ type: "tool-end", id: "t1", error: "boom", result: { selectKey: "x" } })).toBeNull();
+    expect(selectKeyFromEvent({ type: "text", delta: "hi" })).toBeNull();
   });
 });
 

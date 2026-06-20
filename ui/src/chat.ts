@@ -1,6 +1,8 @@
 import { ref } from "vue";
 import { chatStream, getChat, clearChat as apiClearChat, confirmChatTool, getLocalSettings } from "./api";
+import { drillTo, selectKey } from "./drilldown";
 import type { ChatStreamEvent, ChatMessage } from "./types";
+import type { KeyFilter } from "./filter";
 
 // UI-side message model. Distinct from the persisted transcript: it carries the
 // rendered text plus a row per tool call with its live status, so the panel can
@@ -75,6 +77,30 @@ export function applyEvent(messages: UiMessage[], event: ChatStreamEvent): void 
     case "done":
       break;
   }
+}
+
+// The `filter_view` tool changes what the editor shows rather than the project
+// state, so its effect lives outside the message reducer: this reads the partial
+// filter it returned (null for any other event) and send() hands it to the editor
+// via the drilldown channel. Skipped on transcript reload, so reopening the panel
+// never re-filters the list.
+export function viewFilterFromEvent(event: ChatStreamEvent): Partial<KeyFilter> | null {
+  if (event.type !== "tool-end" || event.error) return null;
+  const result = event.result;
+  if (!result || typeof result !== "object") return null;
+  const vf = (result as { viewFilter?: unknown }).viewFilter;
+  if (!vf || typeof vf !== "object") return null;
+  return vf as Partial<KeyFilter>;
+}
+
+// The `select_key` tool opens a key's detail panel; like viewFilter this effect
+// lives outside the reducer. Returns the key to open, or null for any other event.
+export function selectKeyFromEvent(event: ChatStreamEvent): string | null {
+  if (event.type !== "tool-end" || event.error) return null;
+  const result = event.result;
+  if (!result || typeof result !== "object") return null;
+  const k = (result as { selectKey?: unknown }).selectKey;
+  return typeof k === "string" ? k : null;
 }
 
 // Rebuild the UI message list from a persisted transcript (on reload). tool_use
@@ -159,6 +185,12 @@ export async function send(text: string): Promise<void> {
   try {
     for await (const event of chatStream(trimmed, controller.signal, activeKey.value)) {
       applyEvent(messages.value, event);
+      // When Lingo filters the list or opens a key, drive the editor (navigating
+      // there if the user is elsewhere) so they see what it's talking about.
+      const vf = viewFilterFromEvent(event);
+      if (vf) drillTo(vf);
+      const sk = selectKeyFromEvent(event);
+      if (sk) selectKey(sk);
     }
   } catch (e) {
     applyEvent(messages.value, { type: "error", error: (e as Error).message });

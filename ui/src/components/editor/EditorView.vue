@@ -171,10 +171,10 @@ function removePlurality(p: PluralityFacet) {
   filter.value.plurality = filter.value.plurality.filter((x) => x !== p);
 }
 
-// Apply a drill-down handed over from the Analytics view. EditorView is remounted
-// on route change, so reading it here (at setup) runs each time we arrive.
-if (pendingFilter.value) {
-  const pf = pendingFilter.value;
+// Apply a drill-down handed over from another view (Analytics) or set live by the
+// chat assistant (Lingo's filter_view tool). Replaces the whole filter from
+// defaults so omitted facets reset.
+function applyDrilldown(pf: Partial<KeyFilter>) {
   filter.value = { text: "", states: [], issues: [], plurality: [], tag: "", needsAttention: false, emptySource: false, aiContextUnreviewed: false, noUsages: false, skipTranslate: false, ...pf };
   // A drilled issue filter is useless unless its check is fetched — checks the
   // user has toggled off (e.g. spelling, off by default) are re-enabled here.
@@ -186,8 +186,19 @@ if (pendingFilter.value) {
     view.value = "bilingual";
     selectedTarget.value = pf.locale;
   }
+}
+// EditorView is remounted on route change, so the setup-time read covers arriving
+// with a pending filter (drilled from Analytics, or navigated by Lingo from
+// elsewhere); the watch covers Lingo filtering while the editor is already open.
+if (pendingFilter.value) {
+  applyDrilldown(pendingFilter.value);
   pendingFilter.value = null;
 }
+watch(pendingFilter, (pf) => {
+  if (!pf) return;
+  applyDrilldown(pf);
+  pendingFilter.value = null;
+});
 
 // Shared with the chat store so Lingo knows which key is open ("this key").
 const selectedKey = activeKey;
@@ -199,11 +210,16 @@ onUnmounted(() => { activeKey.value = null; });
 const translateBanner = ref<InstanceType<typeof BatchBanner> | null>(null);
 const contextBanner = ref<InstanceType<typeof BatchBanner> | null>(null);
 
-// A specific key handed over (e.g. from the Screenshots view) — open its detail panel.
-if (pendingKey.value) {
+// A specific key handed over (e.g. from the Screenshots view, or Lingo's
+// select_key tool) — open its detail panel. Setup-time read covers arriving with
+// one pending; the watch covers Lingo selecting while the editor is already open.
+function consumePendingKey() {
+  if (!pendingKey.value) return;
   selectedKey.value = pendingKey.value;
   pendingKey.value = null;
 }
+consumePendingKey();
+watch(pendingKey, consumePendingKey);
 const addOpen = ref(false);
 const exportOpen = ref(false);
 const translateOpen = ref(false);

@@ -20,3 +20,11 @@ export function drillToKey(key: string): void {
   pendingKey.value = key;
   drillTo({ text: key });
 }
+
+// Open a key's detail panel WITHOUT touching the list filter (Lingo's select_key,
+// which composes with a separate filter_view). Navigates to the editor first so
+// it works from any view.
+export function selectKey(key: string): void {
+  pendingKey.value = key;
+  navigate("editor");
+}
