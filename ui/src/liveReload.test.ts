@@ -31,8 +31,7 @@ async function load() {
   sources.length = 0;
   vi.stubGlobal("EventSource", FakeEventSource as unknown as typeof EventSource);
   const live = await import("./liveReload.js");
-  const toast = await import("@/components/ui/toast");
-  return { live, toasts: toast.useToasts() };
+  return { live };
 }
 
 afterEach(() => {
@@ -51,15 +50,16 @@ function host(register: () => void) {
 }
 
 describe("liveReload", () => {
-  it("runs subscribed listeners and shows a toast on an external change", async () => {
-    const { live, toasts } = await load();
+  it("runs subscribed listeners and flashes the refresh indicator on an external change", async () => {
+    const { live } = await load();
     const refresh = vi.fn();
     const wrapper = host(() => live.onExternalChange(refresh));
 
+    expect(live.refreshing.value).toBe(false);
     live.dispatchExternalChange();
 
     expect(refresh).toHaveBeenCalledTimes(1);
-    expect(toasts.toasts).toHaveLength(1);
+    expect(live.refreshing.value).toBe(true);
     wrapper.unmount();
   });
 
@@ -75,7 +75,7 @@ describe("liveReload", () => {
   });
 
   it("opens /api/events and dispatches on a state-changed message", async () => {
-    const { live, toasts } = await load();
+    const { live } = await load();
     live.startLiveReload();
     expect(sources).toHaveLength(1);
     const es = sources[0]!;
@@ -86,7 +86,7 @@ describe("liveReload", () => {
     es.emit("state-changed");
 
     expect(refresh).toHaveBeenCalledTimes(1);
-    expect(toasts.toasts).toHaveLength(1);
+    expect(live.refreshing.value).toBe(true);
     wrapper.unmount();
   });
 

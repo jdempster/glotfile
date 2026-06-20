@@ -1672,7 +1672,14 @@ export function createApi(deps: ApiDeps): Hono {
       }
 
       const transcript = loadChat(projectRoot);
-      const ctx: ToolContext = { projectRoot, statePath: deps.statePath, load, persist, provider, signal };
+      // Chat tools mutate state server-side, so — unlike a REST edit the browser
+      // made itself — no connected UI knows anything moved, and persist()'s
+      // noteWrite() keeps the watcher silent for our own writes. Flag when a tool
+      // writes and broadcast state-changed once the turn ends so the editor/glossary
+      // views reload (see finally).
+      let stateChanged = false;
+      const persistAndFlag = (s: State) => { persist(s); stateChanged = true; };
+      const ctx: ToolContext = { projectRoot, statePath: deps.statePath, load, persist: persistAndFlag, provider, signal };
       const turnConfirmIds = new Set<string>();
       // Volatile per-turn context: the project snapshot, plus the key the user has
       // open in the editor (so "this key"/"this string" resolves to it).
@@ -1722,6 +1729,7 @@ export function createApi(deps: ApiDeps): Hono {
         }
       } finally {
         for (const id of turnConfirmIds) pendingConfirms.delete(id);
+        if (stateChanged) hub.broadcast("state-changed", JSON.stringify({ at: new Date().toISOString() }));
       }
     }));
   });

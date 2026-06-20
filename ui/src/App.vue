@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { useRoute, navigate } from "@/router";
-import { startLiveReload, onExternalChange } from "@/liveReload";
+import { startLiveReload, onExternalChange, refreshing } from "@/liveReload";
 import { scanLabel, scanDetail, scanPending, refreshScanSummary } from "@/scanStatus.js";
 
 const route = useRoute();
@@ -150,6 +150,21 @@ const localeSummary = computed(() => {
             </DropdownMenu>
           </div>
           <h1 class="text-sm font-semibold">{{ sectionTitle }}</h1>
+          <Transition
+            enter-active-class="transition-all duration-200"
+            enter-from-class="opacity-0 scale-90"
+            leave-active-class="transition-opacity duration-500"
+            leave-to-class="opacity-0"
+          >
+            <span
+              v-if="refreshing"
+              class="flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
+              role="status"
+            >
+              <Loader2 class="size-3.5 animate-spin" />
+              Updated
+            </span>
+          </Transition>
         </div>
         <div class="flex shrink-0 items-center gap-2">
           <Tooltip v-if="localeSummary">

@@ -3,6 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApi } from "./api.js";
+import { createEventHub } from "./events.js";
 import { saveState } from "./state.js";
 import { defaultState } from "./schema.js";
 import type { ChatEvent } from "./ai/chat-types.js";
@@ -29,7 +30,11 @@ function setup(opts: { chatTurns?: ChatEvent[][]; chat?: boolean } = {}) {
       for (const e of t) yield e;
     };
   }
-  return { dir, file, app: createApi({ statePath: file, makeProvider: () => provider as never }) };
+  // Capture live-reload broadcasts so a test can assert the UI is told to refresh.
+  const broadcasts: string[] = [];
+  const eventHub = createEventHub();
+  eventHub.subscribe((event) => { broadcasts.push(event); });
+  return { dir, file, broadcasts, app: createApi({ statePath: file, eventHub, makeProvider: () => provider as never }) };
 }
 
 async function collectSSE(res: Response): Promise<Array<{ event: string; data: unknown }>> {
@@ -89,6 +94,32 @@ describe("chat endpoints", () => {
     expect(events.some((e) => e.event === "tool-start" && (e.data as { name: string }).name === "overview")).toBe(true);
     expect(events.some((e) => e.event === "tool-end")).toBe(true);
     expect(events[events.length - 1]!.event).toBe("done");
+  });
+
+  it("broadcasts state-changed after a turn that writes state so the UI reloads", async () => {
+    const { app, broadcasts, file } = setup({
+      chatTurns: [
+        [{ type: "turn_end", stopReason: "tool_use", content: [{ type: "tool_use", id: "g1", name: "set_glossary_term", input: { term: "Sprout", doNotTranslate: true } }] }],
+        [{ type: "text", delta: "Added Sprout to the glossary." }, { type: "turn_end", stopReason: "end_turn", content: [{ type: "text", text: "Added Sprout to the glossary." }] }],
+      ],
+    });
+    await collectSSE(await post(app, "/chat/stream", { message: "add Sprout to the glossary" }));
+    // The tool persisted the change to disk...
+    const state = await (await app.request("/state")).json();
+    expect(state.glossary.some((g: { term: string }) => g.term === "Sprout")).toBe(true);
+    // ...and the UI was told to reload it.
+    expect(broadcasts).toContain("state-changed");
+  });
+
+  it("does not broadcast state-changed for a read-only turn", async () => {
+    const { app, broadcasts } = setup({
+      chatTurns: [
+        [{ type: "turn_end", stopReason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "overview", input: {} }] }],
+        [{ type: "text", delta: "You have 1 key." }, { type: "turn_end", stopReason: "end_turn", content: [{ type: "text", text: "You have 1 key." }] }],
+      ],
+    });
+    await collectSSE(await post(app, "/chat/stream", { message: "how many keys?" }));
+    expect(broadcasts).not.toContain("state-changed");
   });
 
   it("errors clearly when the provider can't chat", async () => {
