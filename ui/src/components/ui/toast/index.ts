@@ -6,14 +6,16 @@ export interface ToastItem {
   id: number;
   message: string;
   variant: ToastVariant;
+  // How long the toast stays up (ms) — also drives the countdown bar.
+  duration: number;
 }
 
 const state = reactive<{ toasts: ToastItem[] }>({ toasts: [] });
 let nextId = 0;
 
-function push(message: string, variant: ToastVariant, duration = 4000) {
+function push(message: string, variant: ToastVariant, duration = 2500) {
   const id = nextId++;
-  state.toasts.push({ id, message, variant });
+  state.toasts.push({ id, message, variant, duration });
   window.setTimeout(() => dismiss(id), duration);
 }
 
