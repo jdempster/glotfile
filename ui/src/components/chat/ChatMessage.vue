@@ -171,6 +171,12 @@ function detail(tool: UiToolCall): string {
       v-html="html"
     />
 
+    <!-- Transient retry status (e.g. "Retrying… 1/3"); cleared as soon as output lands. -->
+    <div v-if="message.notice" class="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <Loader2 class="size-3.5 shrink-0 animate-spin" />
+      <span>{{ message.notice }}</span>
+    </div>
+
     <div v-if="message.error" class="flex items-start gap-1.5 text-xs text-destructive">
       <AlertTriangle class="mt-0.5 size-3.5 shrink-0" />
       <span>{{ message.error }}</span>

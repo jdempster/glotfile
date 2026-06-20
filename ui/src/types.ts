@@ -192,6 +192,7 @@ export interface ChatTranscript {
 export type ChatStreamEvent =
   | { type: "turn-start" }
   | { type: "text"; delta: string }
+  | { type: "retry"; attempt: number; total: number }
   | { type: "tool-start"; id: string; name: string; humanSummary: string }
   | { type: "tool-end"; id: string; result?: unknown; error?: string }
   | { type: "tool-progress"; id: string; done: number; total: number; detail?: string }

@@ -27,6 +27,26 @@ describe("applyEvent (chat stream reducer)", () => {
     expect(msgs[2]!.text).toBe("Here's the answer.");
   });
 
+  it("shows a retry notice and clears it once output lands", () => {
+    const msgs = withUser("hi");
+    applyEvent(msgs, { type: "turn-start" });
+    applyEvent(msgs, { type: "retry", attempt: 1, total: 3 });
+    expect(msgs[1]!.notice).toBe("Retrying… 1/3");
+    applyEvent(msgs, { type: "retry", attempt: 2, total: 3 });
+    expect(msgs[1]!.notice).toBe("Retrying… 2/3");
+    applyEvent(msgs, { type: "text", delta: "ok" });
+    expect(msgs[1]!.notice).toBeNull();
+    expect(msgs[1]!.text).toBe("ok");
+  });
+
+  it("clears a retry notice when the turn errors out", () => {
+    const msgs = withUser("hi");
+    applyEvent(msgs, { type: "retry", attempt: 1, total: 3 });
+    applyEvent(msgs, { type: "error", error: "boom" });
+    expect(msgs[1]!.notice).toBeNull();
+    expect(msgs[1]!.error).toBe("boom");
+  });
+
   it("adds a tool row on tool-start and resolves it on tool-end", () => {
     const msgs = withUser("how many keys?");
     applyEvent(msgs, { type: "tool-start", id: "t1", name: "overview", humanSummary: "project overview" });

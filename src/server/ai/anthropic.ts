@@ -40,6 +40,23 @@ function supportsAdaptiveThinking(model: string): boolean {
   return /opus-4-[678]|sonnet-4-6|fable-5|mythos-5/i.test(model);
 }
 
+// Strict tools make the API compile their schemas into a constrained-decoding
+// grammar (cached 24h per schema). A cold compile can transiently exceed the
+// server's time budget and return "Grammar compilation timed out". This matches
+// that error so the chat turn can retry instead of dying.
+function isGrammarCompileTimeout(e: unknown): boolean {
+  const msg = `${(e as { message?: string })?.message ?? ""} ${String(e)}`;
+  return /grammar compilation/i.test(msg);
+}
+
+// Backoff (ms) before each retry of a grammar-compile timeout. Short — the point
+// is to let the schema cache warm; the last attempt drops strict regardless.
+const GRAMMAR_RETRY_DELAYS_MS = [300, 800];
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // Minimal shape we use from the SDK — lets tests inject a fake.
 interface MessagesClient {
   messages: {
@@ -172,7 +189,47 @@ export class AnthropicProvider implements BatchCompletionProvider, ChatProvider 
     const lastBlock = lastMsg?.content[lastMsg.content.length - 1];
     if (lastBlock) lastBlock.cache_control = { type: "ephemeral" };
 
-    const stream = this.client.messages.stream({
+    // Recover from a transient grammar-compile timeout (see isGrammarCompileTimeout):
+    // retry keeping strict — the schema cache warms after the first attempt — and on
+    // the final attempt drop strict so the turn always completes. Dropping strict is
+    // safe here: the tool schemas are trivial and each tool validates its own input,
+    // so the only thing lost is the API-side grammar guarantee. The grammar compiles
+    // before any output, so a failure never leaves half-streamed text behind.
+    const totalAttempts = GRAMMAR_RETRY_DELAYS_MS.length + 1;
+    for (let attempt = 0; attempt < totalAttempts; attempt++) {
+      const strict = attempt < totalAttempts - 1;
+      let emitted = false;
+      try {
+        const stream = this.client.messages.stream(
+          this.buildChatRequest(apiMessages, tools, system, context, adaptive, strict),
+          { signal },
+        );
+        for await (const ev of stream) {
+          if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta" && ev.delta.text) {
+            emitted = true;
+            yield { type: "text", delta: ev.delta.text };
+          }
+        }
+        const final = await stream.finalMessage();
+        this.recordUsage(final.usage);
+        yield { type: "turn_end", stopReason: final.stop_reason ?? "end_turn", content: final.content.map((b) => this.fromApiBlock(b)) };
+        return;
+      } catch (e) {
+        // Don't retry once text is on the wire (would duplicate it), on abort, on the
+        // last attempt, or for anything other than a grammar-compile timeout.
+        if (emitted || signal?.aborted || attempt === totalAttempts - 1 || !isGrammarCompileTimeout(e)) throw e;
+        // Tell the UI we're re-attempting (e.g. "Retrying… 1/3") before backing off.
+        yield { type: "retry", attempt: attempt + 1, total: totalAttempts };
+        await sleep(GRAMMAR_RETRY_DELAYS_MS[attempt]!);
+      }
+    }
+  }
+
+  private buildChatRequest(
+    apiMessages: { role: string; content: Record<string, unknown>[] }[],
+    tools: ToolDef[], system: string, context: string | undefined, adaptive: boolean, strict: boolean,
+  ): Record<string, unknown> {
+    return {
       model: this.config.model,
       max_tokens: 16000,
       ...(adaptive ? { thinking: { type: "adaptive" }, output_config: { effort: "medium" } } : {}),
@@ -181,19 +238,10 @@ export class AnthropicProvider implements BatchCompletionProvider, ChatProvider 
         ...(context ? [{ type: "text", text: context }] : []),
       ],
       ...(tools.length
-        ? { tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.schema, ...(t.strict ? { strict: true } : {}) })) }
+        ? { tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.schema, ...(strict && t.strict ? { strict: true } : {}) })) }
         : {}),
       messages: apiMessages,
-    }, { signal });
-
-    for await (const ev of stream) {
-      if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta" && ev.delta.text) {
-        yield { type: "text", delta: ev.delta.text };
-      }
-    }
-    const final = await stream.finalMessage();
-    this.recordUsage(final.usage);
-    yield { type: "turn_end", stopReason: final.stop_reason ?? "end_turn", content: final.content.map((b) => this.fromApiBlock(b)) };
+    };
   }
 
   private batchesClient() {

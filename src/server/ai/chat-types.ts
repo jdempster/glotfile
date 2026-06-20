@@ -40,6 +40,9 @@ export interface ToolDef {
 // transcript reflects exactly what the model produced, not a delta reconstruction.
 export type ChatEvent =
   | { type: "text"; delta: string }
+  // A retryable provider hiccup (a grammar-compile timeout) before any output —
+  // the provider is re-attempting. `attempt`/`total` drive a "Retrying… 1/3" notice.
+  | { type: "retry"; attempt: number; total: number }
   | { type: "turn_end"; stopReason: string; content: ChatContentBlock[] };
 
 // What a tool needs to do its work. `load` re-reads the current State from disk
@@ -72,6 +75,9 @@ export type ChatStreamEvent =
   // renders separately, matching how the reloaded transcript splits per turn.
   | { type: "turn-start" }
   | { type: "text"; delta: string }
+  // The in-flight turn is retrying a transient provider hiccup (grammar-compile
+  // timeout) before any output landed — surfaced as a transient "Retrying… N/total".
+  | { type: "retry"; attempt: number; total: number }
   | { type: "tool-start"; id: string; name: string; humanSummary: string }
   | { type: "tool-end"; id: string; result?: unknown; error?: string }
   | { type: "tool-progress"; id: string; done: number; total: number; detail?: string }

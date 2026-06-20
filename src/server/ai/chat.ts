@@ -50,6 +50,8 @@ export async function runChatTurn(history: ChatMessage[], userText: string, deps
       for await (const ev of deps.provider.chat(messages, toolDefs, deps.system, deps.signal, deps.context)) {
         if (ev.type === "text") {
           if (ev.delta) deps.onEvent({ type: "text", delta: ev.delta });
+        } else if (ev.type === "retry") {
+          deps.onEvent({ type: "retry", attempt: ev.attempt, total: ev.total });
         } else if (ev.type === "turn_end") {
           assistantContent = ev.content;
           stopReason = ev.stopReason;

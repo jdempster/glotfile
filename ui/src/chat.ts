@@ -27,6 +27,10 @@ export interface UiMessage {
   // Set while a batch of confirm-gated edits awaits the user's Approve/Skip; its
   // batchId resolves the whole batch. Cleared once they answer.
   pendingConfirm?: { batchId: string } | null;
+  // Transient status while the turn recovers from a retryable provider hiccup
+  // (e.g. a grammar-compile timeout), e.g. "Retrying… 1/3". Cleared the moment
+  // real output (text/tool/error) lands, so it never lingers past the recovery.
+  notice?: string | null;
 }
 
 // --- pure reducer (unit-tested) ---
@@ -67,9 +71,15 @@ export function applyEvent(messages: UiMessage[], event: ChatStreamEvent): void 
   const msg = currentAssistant(messages);
   switch (event.type) {
     case "text":
+      msg.notice = null;
       msg.text += event.delta;
       break;
+    case "retry":
+      // Shown until the next text/tool/error clears it — the retry resolves before output.
+      msg.notice = `Retrying… ${event.attempt}/${event.total}`;
+      break;
     case "tool-start":
+      msg.notice = null;
       upsertTool(msg, event.id, { name: event.name, humanSummary: event.humanSummary, status: "running" });
       break;
     case "tool-progress":
@@ -92,9 +102,11 @@ export function applyEvent(messages: UiMessage[], event: ChatStreamEvent): void 
       msg.pendingConfirm = { batchId: event.batchId };
       break;
     case "error":
+      msg.notice = null;
       msg.error = event.error;
       break;
     case "done":
+      msg.notice = null;
       break;
   }
 }

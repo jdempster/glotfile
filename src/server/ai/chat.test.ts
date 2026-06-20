@@ -59,6 +59,18 @@ describe("runChatTurn", () => {
     expect(history[3]!.content.some((b) => b.type === "text")).toBe(true);
   });
 
+  it("forwards a provider retry event to the UI stream", async () => {
+    const provider = scriptedProvider([
+      [{ type: "retry", attempt: 1, total: 3 }, { type: "text", delta: "ok" }, { type: "turn_end", stopReason: "end_turn", content: [{ type: "text", text: "ok" }] }],
+    ]);
+    const events: ChatStreamEvent[] = [];
+    await runChatTurn([], "hi", {
+      provider, tools: buildToolRegistry(), ctx: ctxFor(provider, sproutState()), system: "sys",
+      onEvent: (e) => events.push(e), confirm: async () => true,
+    });
+    expect(events).toContainEqual({ type: "retry", attempt: 1, total: 3 });
+  });
+
   it("gates a confirm tool: declining skips the run and feeds a declined result", async () => {
     let ran = false;
     const danger: ChatTool = {
