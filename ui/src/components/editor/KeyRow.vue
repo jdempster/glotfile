@@ -290,110 +290,123 @@ async function doClear() {
       )"
     >
       <div class="sticky top-3">
-        <!-- Bulk-select checkbox — lives in the floating header so it sticks with the key as tall rows scroll. -->
-        <button
-          type="button"
-          role="checkbox"
-          :aria-checked="!!checked"
-          data-testid="row-select"
-          class="absolute left-0 top-0.5 flex size-4 items-center justify-center rounded border transition-colors"
-          :class="checked ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground hover:border-primary hover:bg-primary/10'"
-          aria-label="Select key"
-          @click.stop="onCheckboxClick"
-        >
-          <Check v-if="checked" class="size-3" />
-        </button>
+        <!-- Control row: checkbox · key name + hover utilities · overflow menu.
+             Sticks (top-3) so it stays in view as tall multi-locale rows scroll. -->
+        <div class="flex items-start gap-2.5">
+          <!-- Bulk-select checkbox — top-aligned so it holds position as the name wraps. -->
+          <button
+            type="button"
+            role="checkbox"
+            :aria-checked="!!checked"
+            data-testid="row-select"
+            class="mt-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-[5px] border-[1.5px] transition-colors"
+            :class="checked ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground hover:border-primary hover:bg-primary/10'"
+            aria-label="Select key"
+            @click.stop="onCheckboxClick"
+          >
+            <Check v-if="checked" class="size-3" />
+          </button>
 
-        <!-- Overflow menu, top-right of the floating header (moved here so it sticks with the content). -->
-        <div class="absolute right-0 top-0">
-          <DropdownMenu>
-            <DropdownMenuTrigger as-child>
-              <button
-                type="button"
-                class="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                aria-label="Key actions"
-                :disabled="translatingMissing"
-                @click.stop
-              >
-                <MoreVertical class="size-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                v-if="missingLocales.length > 0"
-                :disabled="translatingMissing"
-                @select="translateMissing"
-              >
-                <Sparkles class="size-4" /> Translate missing ({{ missingLocales.length }})
-              </DropdownMenuItem>
+          <!-- Key name + the matched Copy/Focus utility pair, revealed on row hover. -->
+          <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-[7px] gap-y-1 pt-px">
+            <span
+              class="min-w-0 cursor-pointer break-words font-mono text-[15px] font-bold leading-tight tracking-tight"
+              @click.stop="onCheckboxClick($event)"
+              v-html="keyNameHtml"
+            />
+            <span class="inline-flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/key:opacity-100">
+              <Tooltip disable-closing-trigger>
+                <TooltipTrigger as-child>
+                  <button
+                    type="button"
+                    data-testid="copy-key"
+                    class="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    :aria-label="keyCopied ? 'Copied' : 'Copy key'"
+                    @click.stop="copyKeyName"
+                  >
+                    <Check v-if="keyCopied" class="size-[15px] text-primary" />
+                    <Copy v-else class="size-[15px]" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>{{ keyCopied ? "Copied" : "Copy key" }}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <button
+                    type="button"
+                    data-testid="focus-key"
+                    class="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label="Focus key"
+                    @click.stop="emit('focus-key', keyName)"
+                  >
+                    <Crosshair class="size-[15px]" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Focus — show only this key</TooltipContent>
+              </Tooltip>
+            </span>
+          </div>
 
-              <DropdownMenuSeparator />
-              <DropdownMenuItem data-testid="row-mark-reviewed" :disabled="busy" @select="markState('reviewed')">
-                <CheckCheck class="size-4" /> Mark reviewed
-              </DropdownMenuItem>
-              <DropdownMenuItem data-testid="row-mark-needs-review" :disabled="busy" @select="markState('needs-review')">
-                <RotateCcw class="size-4" /> Mark needs-review
-              </DropdownMenuItem>
+          <!-- Overflow menu. -->
+          <div class="relative shrink-0">
+            <DropdownMenu>
+              <DropdownMenuTrigger as-child>
+                <button
+                  type="button"
+                  class="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="Key actions"
+                  :disabled="translatingMissing"
+                  @click.stop
+                >
+                  <MoreVertical class="size-[18px]" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <!-- Translate missing + its trailing divider only when there are
+                     missing locales — otherwise the divider would lead the menu. -->
+                <template v-if="missingLocales.length > 0">
+                  <DropdownMenuItem :disabled="translatingMissing" @select="translateMissing">
+                    <Sparkles class="size-4" /> Translate missing ({{ missingLocales.length }})
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </template>
 
-              <DropdownMenuSeparator />
-              <DropdownMenuItem @select="openRename">
-                <Pencil class="size-4" /> Rename
-              </DropdownMenuItem>
-              <DropdownMenuItem data-testid="toggle-skip" :disabled="busy" @select="toggleSkip">
-                <Languages class="size-4" /> {{ entry.skipTranslate ? "Include in translation" : "Skip translation" }}
-              </DropdownMenuItem>
+                <DropdownMenuItem data-testid="row-mark-reviewed" :disabled="busy" @select="markState('reviewed')">
+                  <CheckCheck class="size-4" /> Mark reviewed
+                </DropdownMenuItem>
+                <DropdownMenuItem data-testid="row-mark-needs-review" :disabled="busy" @select="markState('needs-review')">
+                  <RotateCcw class="size-4" /> Mark needs-review
+                </DropdownMenuItem>
 
-              <DropdownMenuSeparator />
-              <DropdownMenuItem data-testid="row-clear" :disabled="busy" @select="confirmingClear = true">
-                <Eraser class="size-4" /> Clear translations
-              </DropdownMenuItem>
-              <DropdownMenuItem class="text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive" @select="confirmingDelete = true">
-                <Trash2 class="size-4" /> Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem @select="openRename">
+                  <Pencil class="size-4" /> Rename
+                </DropdownMenuItem>
+                <DropdownMenuItem data-testid="toggle-skip" :disabled="busy" @select="toggleSkip">
+                  <Languages class="size-4" /> {{ entry.skipTranslate ? "Include in translation" : "Skip translation" }}
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
+                <DropdownMenuItem data-testid="row-clear" :disabled="busy" @select="confirmingClear = true">
+                  <Eraser class="size-4" /> Clear translations
+                </DropdownMenuItem>
+                <DropdownMenuItem class="text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive" @select="confirmingDelete = true">
+                  <Trash2 class="size-4" /> Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
-        <div
-          class="break-words pl-6 pr-7 font-mono text-[13.5px] font-semibold tracking-tight cursor-pointer"
-          @click.stop="onCheckboxClick($event)"
-        ><span v-html="keyNameHtml" /><Tooltip disable-closing-trigger>
-          <TooltipTrigger as-child>
-            <button
-              type="button"
-              data-testid="copy-key"
-              class="ml-1.5 inline-flex size-4 items-center justify-center rounded align-[-3px] text-muted-foreground opacity-0 transition hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/key:opacity-100"
-              :aria-label="keyCopied ? 'Copied' : 'Copy key'"
-              @click.stop="copyKeyName"
-            >
-              <Check v-if="keyCopied" class="size-3 text-primary" />
-              <Copy v-else class="size-3" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>{{ keyCopied ? "Copied" : "Copy key" }}</TooltipContent>
-        </Tooltip><Tooltip>
-          <TooltipTrigger as-child>
-            <button
-              type="button"
-              data-testid="focus-key"
-              class="ml-0.5 inline-flex size-4 items-center justify-center rounded align-[-3px] text-muted-foreground opacity-0 transition hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/key:opacity-100"
-              aria-label="Focus key"
-              @click.stop="emit('focus-key', keyName)"
-            >
-              <Crosshair class="size-3" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Focus — show only this key</TooltipContent>
-        </Tooltip></div>
-
+        <!-- Status badges — aligned under the key name (ml-7 = checkbox + gap). -->
         <div
           v-if="entry.plural || entry.skipTranslate || entry.screenshot || (issues?.length ?? 0) > 0"
-          class="mt-1.5 flex flex-wrap items-center gap-1.5 pl-6"
+          class="ml-7 mt-3 flex flex-wrap items-center gap-1.5"
         >
           <span
             v-if="entry.plural"
-            class="inline-flex items-center gap-1 rounded-md border border-primary-border bg-primary/[0.09] px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-primary"
-            >PLURAL<span class="font-medium normal-case text-muted-foreground">· {{ entry.plural.arg }}</span></span
+            class="inline-flex items-center gap-1 rounded-md bg-primary-soft px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-primary"
+            >PLURAL<span class="font-medium normal-case text-primary/60">· {{ entry.plural.arg }}</span></span
           >
           <Tooltip v-if="entry.screenshot">
             <TooltipTrigger as-child>
@@ -411,7 +424,7 @@ async function doClear() {
             <TooltipTrigger as-child>
               <span
                 data-testid="skip-badge"
-                class="inline-flex items-center gap-1 rounded-md border border-warning-border bg-warning-bg px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-warning"
+                class="inline-flex items-center gap-1 rounded-md bg-warning-bg px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-warning"
                 >SKIP</span
               >
             </TooltipTrigger>
@@ -430,7 +443,7 @@ async function doClear() {
           </Tooltip>
         </div>
 
-        <div v-if="(entry.tags ?? []).length" class="mt-2 flex flex-wrap gap-1.5 pl-6">
+        <div v-if="(entry.tags ?? []).length" class="ml-7 mt-2.5 flex flex-wrap gap-1.5">
           <Tooltip v-for="t in entry.tags" :key="t">
             <TooltipTrigger as-child>
               <button
@@ -445,62 +458,64 @@ async function doClear() {
           </Tooltip>
         </div>
 
-        <!-- Inline Translate-missing; doubles as the in-flight indicator (testid flips).
-             Stays mounted while a run is in flight even after the last missing cell
-             fills (missingLocales → 0), so its in-button progress bar survives to 100%. -->
-        <Tooltip v-if="missingLocales.length > 0 || translatingMissing">
-          <TooltipTrigger as-child>
-            <button
-              type="button"
-              :data-testid="translatingMissing ? 'translating-missing' : 'translate-missing-btn'"
-              :disabled="translatingMissing"
-              class="relative ml-6 mt-2.5 inline-flex items-center gap-1.5 overflow-hidden rounded-lg border border-primary-border bg-primary-soft px-2.5 py-1.5 text-[11.5px] font-semibold text-primary transition hover:brightness-95 disabled:opacity-80"
-              @click.stop="translateMissing"
-            >
-              <LoaderCircle v-if="translatingMissing" class="size-3 animate-spin" />
-              <Sparkles v-else class="size-3" />
-              {{ translatingMissing ? (missingProgress.total ? `Translating ${missingProgress.done}/${missingProgress.total}…` : "Translating…") : `Translate ${missingLocales.length} missing` }}
-              <!-- In-button progress bar (grows left→right as each language lands), echoing the toast timer bar. -->
-              <span
-                v-if="translatingMissing"
-                data-testid="translate-missing-progress"
-                class="pointer-events-none absolute inset-x-0 bottom-0 h-[3px] origin-left bg-primary transition-transform duration-300 ease-out"
-                :style="{ transform: `scaleX(${missingFraction})` }"
-                aria-hidden="true"
-              />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Translate the {{ missingLocales.length }} missing language{{ missingLocales.length > 1 ? "s" : "" }} for this key</TooltipContent>
-        </Tooltip>
+        <!-- Contextual AI actions — a stacked group aligned under the name. Each
+             button doubles as its own in-flight indicator (testid flips) and stays
+             mounted for the whole run so its progress bar survives to 100% even after
+             the underlying missing/stale set empties. -->
+        <div
+          v-if="missingLocales.length > 0 || translatingMissing || staleLocales.length > 0 || retranslatingStale"
+          class="ml-7 mt-3.5 flex flex-col items-start gap-2"
+        >
+          <Tooltip v-if="missingLocales.length > 0 || translatingMissing">
+            <TooltipTrigger as-child>
+              <button
+                type="button"
+                :data-testid="translatingMissing ? 'translating-missing' : 'translate-missing-btn'"
+                :disabled="translatingMissing"
+                class="relative inline-flex items-center gap-1.5 overflow-hidden rounded-lg bg-primary-soft px-3 py-1.5 text-[11.5px] font-semibold text-primary transition hover:brightness-95 disabled:opacity-80"
+                @click.stop="translateMissing"
+              >
+                <LoaderCircle v-if="translatingMissing" class="size-3 animate-spin" />
+                <Sparkles v-else class="size-3" />
+                {{ translatingMissing ? (missingProgress.total ? `Translating ${missingProgress.done}/${missingProgress.total}…` : "Translating…") : `Translate ${missingLocales.length} missing` }}
+                <!-- In-button progress bar (grows left→right as each language lands), echoing the toast timer bar. -->
+                <span
+                  v-if="translatingMissing"
+                  data-testid="translate-missing-progress"
+                  class="pointer-events-none absolute inset-x-0 bottom-0 h-[3px] origin-left bg-primary transition-transform duration-300 ease-out"
+                  :style="{ transform: `scaleX(${missingFraction})` }"
+                  aria-hidden="true"
+                />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Translate the {{ missingLocales.length }} missing language{{ missingLocales.length > 1 ? "s" : "" }} for this key</TooltipContent>
+          </Tooltip>
 
-        <!-- Re-translate stale: shown when the source changed and targets need re-review.
-             Like translate-missing, it stays mounted for the whole run — a force
-             re-translation flips needs-review → machine on the first reload, emptying
-             staleLocales, and the in-button progress bar must not vanish with it. -->
-        <Tooltip v-if="staleLocales.length > 0 || retranslatingStale">
-          <TooltipTrigger as-child>
-            <button
-              type="button"
-              data-testid="retranslate-stale-btn"
-              :disabled="retranslatingStale"
-              class="relative ml-6 mt-2.5 inline-flex items-center gap-1.5 overflow-hidden rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-[11.5px] font-semibold text-amber-700 transition hover:brightness-95 disabled:opacity-80 dark:text-amber-300"
-              @click.stop="retranslateStale"
-            >
-              <LoaderCircle v-if="retranslatingStale" class="size-3 animate-spin" />
-              <RefreshCw v-else class="size-3" />
-              {{ retranslatingStale ? (staleProgress.total ? `Re-translating ${staleProgress.done}/${staleProgress.total}…` : "Re-translating…") : `Re-translate ${staleLocales.length} stale` }}
-              <!-- In-button progress bar, matching the translate-missing affordance. -->
-              <span
-                v-if="retranslatingStale"
-                data-testid="retranslate-stale-progress"
-                class="pointer-events-none absolute inset-x-0 bottom-0 h-[3px] origin-left bg-amber-500 transition-transform duration-300 ease-out"
-                :style="{ transform: `scaleX(${staleFraction})` }"
-                aria-hidden="true"
-              />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Re-translate the {{ staleLocales.length }} stale language{{ staleLocales.length > 1 ? "s" : "" }} for this key</TooltipContent>
-        </Tooltip>
+          <Tooltip v-if="staleLocales.length > 0 || retranslatingStale">
+            <TooltipTrigger as-child>
+              <button
+                type="button"
+                data-testid="retranslate-stale-btn"
+                :disabled="retranslatingStale"
+                class="relative inline-flex items-center gap-1.5 overflow-hidden rounded-lg border-[1.5px] border-primary-border bg-transparent px-3 py-1.5 text-[11.5px] font-semibold text-primary transition hover:bg-primary-soft disabled:opacity-80"
+                @click.stop="retranslateStale"
+              >
+                <LoaderCircle v-if="retranslatingStale" class="size-3 animate-spin" />
+                <RefreshCw v-else class="size-3" />
+                {{ retranslatingStale ? (staleProgress.total ? `Re-translating ${staleProgress.done}/${staleProgress.total}…` : "Re-translating…") : `Re-translate ${staleLocales.length} stale` }}
+                <!-- In-button progress bar, matching the translate-missing affordance. -->
+                <span
+                  v-if="retranslatingStale"
+                  data-testid="retranslate-stale-progress"
+                  class="pointer-events-none absolute inset-x-0 bottom-0 h-[3px] origin-left bg-primary transition-transform duration-300 ease-out"
+                  :style="{ transform: `scaleX(${staleFraction})` }"
+                  aria-hidden="true"
+                />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Re-translate the {{ staleLocales.length }} stale language{{ staleLocales.length > 1 ? "s" : "" }} for this key</TooltipContent>
+          </Tooltip>
+        </div>
       </div>
     </div>
 
