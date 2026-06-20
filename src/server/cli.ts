@@ -36,7 +36,7 @@ import { runScan, scanOptions } from "./scanner.js";
 import { refreshLocationUsage, isLocationScannedState, usageCounts } from "./import/usage.js";
 import {
   selectContextTargets, attachUsageSnippets, applyContext,
-  buildContextSystemPrompt, buildContextBatchPrompt, CONTEXT_BATCH_SCHEMA,
+  buildContextSystemPrompt, buildContextBatchPrompt, CONTEXT_BATCH_SCHEMA, contextGuidance,
 } from "./ai/context.js";
 import { runLint, sortFindings, countSeverities } from "./lint/run.js";
 import { RULE_IDS, unknownRuleIds, suggestRuleId } from "./lint/registry.js";
@@ -819,7 +819,7 @@ async function runBuildContext(args: ParsedArgs): Promise<void> {
   attachUsageSnippets(targets, cache, projectRoot);
 
   if (args.estimate) {
-    const est = estimateContext(targets, aiCfg);
+    const est = estimateContext(targets, aiCfg, contextGuidance(state));
     const fmt = (n: number) => n.toLocaleString("en-US");
     console.log(`Estimate for ${fmt(est.keys)} key(s) in ${fmt(est.batches)} batch(es) — ${aiCfg.provider} · ${aiCfg.model}`);
     console.log(`Totals: ~${fmt(est.inputTokens)} input / ~${fmt(est.outputTokens)} output tokens`);
@@ -840,7 +840,7 @@ async function runBuildContext(args: ParsedArgs): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  const system = buildContextSystemPrompt();
+  const system = buildContextSystemPrompt(contextGuidance(state));
   const batchSize = aiCfg.contextBatchSize ?? aiCfg.batchSize ?? 10;
   const concurrency = aiCfg.contextConcurrency ?? aiCfg.concurrency ?? 3;
 
@@ -852,7 +852,7 @@ async function runBuildContext(args: ParsedArgs): Promise<void> {
     }
     let pending;
     try {
-      pending = await submitContextBatch(provider, targets, batchSize, aiCfg.model, projectRoot, false);
+      pending = await submitContextBatch(provider, targets, batchSize, aiCfg.model, projectRoot, false, contextGuidance(state));
     } catch (e) {
       console.error((e as Error).message);
       process.exitCode = 1;

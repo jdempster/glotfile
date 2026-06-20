@@ -17,7 +17,7 @@ import { findMissing, loadUsageCache, computeUsedKeys, literalMatcher } from "./
 import { runScan, scanOptions } from "./scanner.js";
 import {
   selectContextTargets, attachUsageSnippets, applyContext,
-  buildContextSystemPrompt, buildContextBatchPrompt, CONTEXT_BATCH_SCHEMA,
+  buildContextSystemPrompt, buildContextBatchPrompt, CONTEXT_BATCH_SCHEMA, contextGuidance,
 } from "./ai/context.js";
 import { computeStats } from "./stats.js";
 import { runChecks, CHECK_IDS, type CheckId } from "./checks.js";
@@ -1776,7 +1776,7 @@ export function createApi(deps: ApiDeps): Hono {
       await stream.writeSSE({ event: "start", data: JSON.stringify({ total: targets.length }) });
       attachUsageSnippets(targets, cache, projectRoot);
 
-      const system = buildContextSystemPrompt();
+      const system = buildContextSystemPrompt(contextGuidance(s));
       const batchSize = aiCfg.contextBatchSize ?? aiCfg.batchSize ?? 10;
       const concurrency = aiCfg.contextConcurrency ?? aiCfg.concurrency ?? 3;
       const chunks: typeof targets[] = [];
@@ -1840,7 +1840,8 @@ export function createApi(deps: ApiDeps): Hono {
     const body = await c.req.json().catch(() => ({}));
     const cache = loadUsageCache(projectRoot);
     if (!cache) return c.json({ error: "No usage index found. Run 'glotfile scan' first." }, 400);
-    const targets = selectContextTargets(load(), {
+    const s = load();
+    const targets = selectContextTargets(s, {
       all: body.all,
       keyGlob: body.keyGlob,
       limit: body.limit,
@@ -1850,7 +1851,7 @@ export function createApi(deps: ApiDeps): Hono {
     }, cache, body.lastRunAt);
     const aiCfg = loadLocalSettings(projectRoot).ai;
     attachUsageSnippets(targets, cache, projectRoot);
-    return c.json(estimateContext(targets, aiCfg));
+    return c.json(estimateContext(targets, aiCfg, contextGuidance(s)));
   });
 
   // Pending context-batch status. Same shape as /batch/status; the two batch
@@ -1907,7 +1908,7 @@ export function createApi(deps: ApiDeps): Hono {
     const batchSize = aiCfg.contextBatchSize ?? aiCfg.batchSize ?? 10;
     let pending;
     try {
-      pending = await submitContextBatch(provider, targets, batchSize, aiCfg.model, projectRoot, body.force === true);
+      pending = await submitContextBatch(provider, targets, batchSize, aiCfg.model, projectRoot, body.force === true, contextGuidance(s));
     } catch (e) {
       return c.json({ error: (e as Error).message }, 409);
     }
@@ -1917,7 +1918,7 @@ export function createApi(deps: ApiDeps): Hono {
       kind: "context",
       summary: `Submitted context batch ${pending.batchId} (${pending.total} keys)`,
       model: aiCfg.model,
-      system: buildContextSystemPrompt(),
+      system: buildContextSystemPrompt(contextGuidance(s)),
       items: targets.map((t) => ({ id: t.id, key: t.key, source: t.source })),
     });
     console.log(`[context-batch] submitted ${pending.batchId} — ${pending.total} key(s)`);

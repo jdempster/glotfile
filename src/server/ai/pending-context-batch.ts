@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type { ContextRequest } from "./context.js";
+import type { ContextRequest, ContextGuidance } from "./context.js";
 
 // A submitted context request, persisted for the apply step. Screenshots are
 // never sent for context builds, so only the prompt-bearing fields are kept;
@@ -22,6 +22,9 @@ export interface PendingContextBatch {
   total: number;
   // Whether existing context should be overwritten at apply time.
   force: boolean;
+  // Source-language + project guidance the batch was submitted with, reused so a
+  // sync-fallback retry renders the identical system prompt.
+  guidance?: ContextGuidance;
   jobs: PendingContextBatchJob[];
 }
 

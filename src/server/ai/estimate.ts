@@ -1,7 +1,7 @@
 import type { AiConfig, State } from "../schema.js";
 import { selectRequests, type SelectOptions } from "./run.js";
 import { buildSystemPrompt, buildBatchPrompt, type TranslationRequest } from "./provider.js";
-import { buildContextSystemPrompt, buildContextBatchPrompt, type ContextRequest } from "./context.js";
+import { buildContextSystemPrompt, buildContextBatchPrompt, type ContextRequest, type ContextGuidance } from "./context.js";
 import { buildGlossarySuggestSystemPrompt, buildGlossarySuggestBatchPrompt, type GlossarySource } from "./glossary-suggest.js";
 import { chunk } from "./batch.js";
 import { resolvePricing, type ResolvedPricing } from "./pricing.js";
@@ -106,10 +106,10 @@ const TYPICAL_CONTEXT_TOKENS = 35;
 // render the same system + batch prompts each LLM call sends, and count tokens.
 // Input is dominated by the attached code snippets, so callers MUST run
 // attachUsageSnippets before estimating or the figure will be far too low.
-export function estimateContext(targets: ContextRequest[], ai: AiConfig): ContextEstimate {
+export function estimateContext(targets: ContextRequest[], ai: AiConfig, guidance: ContextGuidance = {}): ContextEstimate {
   const batchSize = Math.max(1, ai.contextBatchSize ?? ai.batchSize ?? 10);
   const batches = chunk(targets, batchSize);
-  const system = buildContextSystemPrompt();
+  const system = buildContextSystemPrompt(guidance);
   let inputTokens = 0;
   let outputTokens = 0;
   for (const batch of batches) {

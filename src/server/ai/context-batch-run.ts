@@ -2,7 +2,7 @@ import type { AiConfig, State } from "../schema.js";
 import type { BatchCompletionProvider, CompletionRequest } from "./provider.js";
 import {
   buildContextSystemPrompt, buildContextBatchPrompt, CONTEXT_BATCH_SCHEMA,
-  applyContext, type ContextRequest,
+  applyContext, type ContextRequest, type ContextGuidance,
 } from "./context.js";
 import {
   loadPendingContextBatch, savePendingContextBatch, clearPendingContextBatch,
@@ -17,9 +17,9 @@ interface ContextReplyItem {
   error?: string;
 }
 
-function completionRequestFor(chunk: ContextRequest[]): CompletionRequest {
+function completionRequestFor(chunk: ContextRequest[], guidance: ContextGuidance): CompletionRequest {
   return {
-    system: buildContextSystemPrompt(),
+    system: buildContextSystemPrompt(guidance),
     content: [{ type: "text", text: buildContextBatchPrompt(chunk) }],
     schema: CONTEXT_BATCH_SCHEMA,
   };
@@ -32,6 +32,7 @@ export async function submitContextBatch(
   model: string,
   projectRoot: string,
   force: boolean,
+  guidance: ContextGuidance = {},
 ): Promise<PendingContextBatch> {
   if (loadPendingContextBatch(projectRoot)) {
     throw new Error("A context batch is already pending. Apply or cancel it first.");
@@ -41,7 +42,7 @@ export async function submitContextBatch(
   for (let i = 0; i < targets.length; i += size) chunks.push(targets.slice(i, i + size));
   const jobs = chunks.map((chunk, i) => ({ customId: `ctx_${i}`, chunk }));
   const batchId = await provider.submitCompletionBatch(
-    jobs.map((j) => ({ customId: j.customId, request: completionRequestFor(j.chunk) })),
+    jobs.map((j) => ({ customId: j.customId, request: completionRequestFor(j.chunk, guidance) })),
   );
   const pending: PendingContextBatch = {
     version: 1,
@@ -52,6 +53,7 @@ export async function submitContextBatch(
     createdAt: new Date().toISOString(),
     total: targets.length,
     force,
+    guidance,
     jobs: jobs.map((j) => ({
       customId: j.customId,
       requests: j.chunk.map(({ image: _image, ...rest }): StoredContextRequest => rest),
@@ -107,7 +109,7 @@ export async function applyContextBatchResults(
   // original chunk, so a single bad batch entry never sinks the run.
   for (const chunk of retryChunks) {
     try {
-      const raw = await provider.complete(completionRequestFor(chunk));
+      const raw = await provider.complete(completionRequestFor(chunk, pending.guidance ?? {}));
       const batch = raw as { items?: ContextReplyItem[] };
       applied.push(...chunk);
       items.push(...(batch.items ?? []));

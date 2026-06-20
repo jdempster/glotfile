@@ -141,20 +141,62 @@ export function selectContextTargets(
   return candidates;
 }
 
-export function buildContextSystemPrompt(): string {
-  return [
+// Config-derived guidance the context writer needs to reason about translation
+// nuance: the language the source is written in, and the project-wide note.
+export interface ContextGuidance {
+  // BCP-47 code of the source language. Lets the writer reason about what the
+  // source does NOT encode (formality, grammatical gender, number) but that
+  // target languages will demand — which is exactly what a note must surface.
+  sourceLocale?: string;
+  // config.projectContext — the same project-wide disambiguation the translation
+  // engine receives, so the writer resolves product-name-vs-common-word
+  // collisions (e.g. a "feed" homonym) the same way the translator will.
+  projectContext?: string;
+}
+
+export function contextGuidance(state: State): ContextGuidance {
+  return {
+    sourceLocale: state.config.sourceLocale,
+    projectContext: state.config.projectContext,
+  };
+}
+
+export function buildContextSystemPrompt(guidance: ContextGuidance = {}): string {
+  const sourceLocale = guidance.sourceLocale?.trim();
+  const projectContext = guidance.projectContext?.trim();
+  const lines = [
     "You are a localization context writer for a UI string catalog.",
+    sourceLocale
+      ? `The source strings are written in ${sourceLocale}. Your note guides translation of each string FROM ${sourceLocale} INTO many other languages, so judge ambiguity from a translator's point of view: what does ${sourceLocale} leave unsaid that a target language must decide?`
+      : "Your note guides translation of each string into many other languages.",
     "For each translation key you are given: its dot-path name, its source string, and one or more code snippets showing where the string is referenced in the codebase.",
-    "Your task: write a concise 1–2 sentence context note that describes WHERE in the UI this string appears and WHAT the user is doing at that point.",
-    "The context is read by human translators AND by an AI translation engine. It must answer: what screen is this on, what element is this (button, label, error, etc.), and what action does it relate to?",
+    "Your task: write a context note that removes ambiguity a translator cannot resolve from the source string alone. The note is read by human translators AND by an AI translation engine.",
+    "",
+    "Context exists to disambiguate. If the source string is already unambiguous, keep the note short or skip the obvious — don't restate what the string plainly says. Spend words only where a translator could plausibly get it wrong, and especially where the target language must encode a distinction the source language does not (formality/register, grammatical gender of the subject, singular vs. plural, inclusive vs. exclusive).",
+    "",
+    "Pin down, where relevant:",
+    "- Part of speech / grammatical role — is it a button (imperative verb), a heading (noun), a label, or a status? A word like \"Open\", \"Complete\", or \"Water\" translates differently as verb vs. noun vs. adjective. Say which.",
+    "- Who/what the subject or addressee is — does the string speak to the end user, or describe someone else? Register, pronouns, and (in many target languages) gender and formality depend on it even when the source marks none of them.",
+    "- Where it appears — screen/component and surrounding flow (e.g. \"toggle on the plant detail screen\", \"shown on the onboarding welcome card\"). The UI surface signals tone and length budget.",
+    "- Placeholders — what each {token} resolves to at runtime (e.g. \"{gardener} = the user's display name\", \"{count} = number of plants\"). Explain what they mean, not that they must be preserved.",
+    "- Sense of ambiguous words — homonyms and product-name-vs-common-word collisions. Name the intended sense.",
+    "",
     "Rules:",
     "- Use the code snippets as your primary signal. Look at the component name, surrounding labels, event handlers, and variable names.",
+    "- Be concise and concrete: 1–3 sentences, under 500 characters. Lead with the disambiguation that matters most. Prefer \"Button that confirms deleting a plant\" over vague prose like \"This is a message shown to users.\"",
     "- Do NOT restate the source string itself.",
     "- Do NOT say 'This string is...' — write the context as a direct description.",
-    "- Keep it under 500 characters.",
     "- If no code snippets are available, infer from the key path and source value.",
     "- Tokens: a source may contain interpolation placeholders ({name}, {{name}}, :name, %s) and ICU-apostrophe-quoted LITERAL tokens (e.g. '{{gardener}}', '{name}') that the app fills at runtime. Any provided `literals` are literal tokens, NOT plain placeholders. If you reference a token, write it EXACTLY as it appears in the source — keep apostrophe-quoted literals quoted, and never relabel a quoted literal as a placeholder or strip its quotes. The translation engine needs these to survive verbatim, so a note may simply remind translators to reproduce them exactly.",
-  ].join("\n");
+  ];
+  if (projectContext) {
+    lines.push(
+      "",
+      "Project context (applies to every key):",
+      projectContext,
+    );
+  }
+  return lines.join("\n");
 }
 
 export function buildContextBatchPrompt(reqs: ContextRequest[]): string {

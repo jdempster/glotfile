@@ -278,6 +278,19 @@ describe("buildContextSystemPrompt", () => {
     // the apostrophe-quoted form must be referenced so the writer doesn't strip it
     expect(p).toMatch(/'\{|apostrophe/i);
   });
+
+  it("names the source language so the writer reasons about translation nuance", () => {
+    const p = buildContextSystemPrompt({ sourceLocale: "en" });
+    expect(p).toContain("en");
+    // the note must flag distinctions the source omits but target languages need
+    expect(p).toMatch(/formality|register|gender/i);
+  });
+
+  it("injects project context when provided", () => {
+    const p = buildContextSystemPrompt({ projectContext: "Sprout is a houseplant-care app; 'feed' means fertilizer." });
+    expect(p).toMatch(/project context/i);
+    expect(p).toContain("'feed' means fertilizer");
+  });
 });
 
 describe("buildContextBatchPrompt literals", () => {
