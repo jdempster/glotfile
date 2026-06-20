@@ -27,6 +27,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import LanguageLabel from "@/components/lang/LanguageLabel.vue";
+import AddLocaleCombobox from "@/components/lang/AddLocaleCombobox.vue";
 import { compareByLanguageName } from "@/languages.js";
 import OutputEditor from "./OutputEditor.vue";
 import ScanListField from "./ScanListField.vue";
@@ -596,16 +597,13 @@ onUnmounted(() => {
 
 // ── Languages ────────────────────────────────────────────────────────────────
 
-const newLocale = ref("");
-
-function addLocale() {
-  const loc = newLocale.value.trim().toLowerCase();
+function addLocale(code: string) {
+  const loc = code.trim().toLowerCase();
   if (!loc) return;
   if (draft.locales.some((l) => l.toLowerCase() === loc)) {
     toast.error(`${loc} is already in the list`); return;
   }
   draft.locales.push(loc);
-  newLocale.value = "";
 }
 
 function removeLocale(loc: string) {
@@ -958,12 +956,9 @@ function onSynced(): void {
 
             <div class="grid max-w-sm gap-1.5">
               <Label for="add-locale">Add language</Label>
-              <div class="flex gap-2">
-                <Input id="add-locale" v-model="newLocale" class="font-mono" placeholder="es" @keydown.enter.prevent="addLocale" />
-                <Button variant="outline" @click="addLocale"><Plus class="size-4" /> Add</Button>
-              </div>
-              <p v-if="newLocale.trim()" class="flex items-center gap-1.5 text-xs text-muted-foreground">
-                Preview: <LanguageLabel :code="newLocale.trim()" show-name :size="14" />
+              <AddLocaleCombobox :existing="draft.locales" @add="addLocale" />
+              <p class="text-xs text-muted-foreground">
+                Search any language or locale, or type an invented code (e.g. <span class="font-mono">yoda</span>) and press Enter.
               </p>
             </div>
           </div>
