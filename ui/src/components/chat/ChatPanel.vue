@@ -127,7 +127,7 @@ onMounted(() => {
     <!-- Header (h-12 to line up with the app header bar) -->
     <div class="flex h-12 shrink-0 items-center justify-between border-b pl-5 pr-3">
       <div class="flex items-center gap-2.5">
-        <Sparkles class="size-[18px] text-primary" />
+        <Sparkles class="size-[18px] text-primary" fill="currentColor" />
         <span class="text-base font-bold tracking-tight text-foreground">Lingo</span>
       </div>
       <div class="flex items-center gap-0.5">
