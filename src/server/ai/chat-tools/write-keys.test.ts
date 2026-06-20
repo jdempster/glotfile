@@ -110,6 +110,14 @@ describe("key write tools", () => {
     expect(state.keys["plant.feed"]!.values.de!.state).toBe("needs-review");
   });
 
+  it("set_source_text flags translations needs-review on a case-only change", async () => {
+    // "Feed" -> "feed": differs only in casing, which is still a real source
+    // change, so the existing machine translation must be re-reviewed.
+    await tool("set_source_text").run({ key: "plant.feed", value: "feed" }, ctx);
+    expect(state.keys["plant.feed"]!.values.en!.value).toBe("feed");
+    expect(state.keys["plant.feed"]!.values.de!.state).toBe("needs-review");
+  });
+
   it("add_key creates a new scalar key with source text in the source locale", async () => {
     const res = await tool("add_key").run({ key: "plant.repot", value: "Repot" }, ctx) as { key: string };
     expect(res.key).toBe("plant.repot");

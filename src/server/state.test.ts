@@ -811,11 +811,20 @@ describe("setSourceValue — stale marking", () => {
     expect(s.keys["k"]!.values["de"]!.value).toBe("Hallo");
   });
 
-  it("does not flip when source changes only in whitespace or casing", () => {
+  it("does not flip when source changes only in surrounding/collapsible whitespace", () => {
     const s = makeState();
-    setSourceValue(s, "k", "  HELLO  ");
+    setSourceValue(s, "k", "  Hello  ");
     expect(s.keys["k"]!.values["fr"]!.state).toBe("reviewed");
     expect(s.keys["k"]!.values["de"]!.state).toBe("machine");
+  });
+
+  it("flips targets to needs-review when the source changes only in casing", () => {
+    const s = makeState();
+    // Case carries meaning (e.g. title vs sentence case, acronyms), so a
+    // case-only edit is a real source change — translations need re-review.
+    setSourceValue(s, "k", "HELLO");
+    expect(s.keys["k"]!.values["fr"]!.state).toBe("needs-review");
+    expect(s.keys["k"]!.values["de"]!.state).toBe("needs-review");
   });
 
   it("does not flip targets that are already needs-review", () => {
