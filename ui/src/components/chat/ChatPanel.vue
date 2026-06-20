@@ -159,8 +159,20 @@ onMounted(() => {
           :class="i === 0 ? '' : (m.role === 'user' || messages[i - 1].role === 'user' ? 'mt-5' : 'mt-2')"
         />
         <div v-if="thinking" data-thinking class="mt-3 flex">
-          <div class="flex items-center gap-1.5 py-0.5" role="status" aria-label="Lingo is thinking">
-            <span class="lf-dot" /><span class="lf-dot" /><span class="lf-dot" />
+          <div class="flex items-center gap-2.5 py-0.5" role="status" aria-label="Lingo is thinking">
+            <span class="lf-reel" aria-hidden="true">
+              <span class="lf-reel-strip">
+                <span class="lf-glyph">A</span>
+                <span class="lf-glyph">あ</span>
+                <span class="lf-glyph">ع</span>
+                <span class="lf-glyph">क</span>
+                <span class="lf-glyph">文</span>
+                <span class="lf-glyph">A</span>
+              </span>
+            </span>
+            <span class="flex gap-[5px]">
+              <span class="lf-dot" /><span class="lf-dot" /><span class="lf-dot" />
+            </span>
           </div>
         </div>
       </div>
@@ -199,24 +211,65 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* Three pulsing dots — Lingo's "thinking" indicator, shown until the user's turn
-   returns. Each dot fades and lifts on a staggered cycle. */
+/* Glyph reel — Lingo's "thinking" indicator. A slot-style reel flips through
+   scripts (Latin, Japanese, Arabic, Devanagari, Han) while three dots bounce
+   below: a polyglot nod that suits translation work. Shown until the user's
+   turn returns. Each glyph is 20px tall and the strip stacks six of them
+   (the last repeats the first), so the reel loops seamlessly. */
+.lf-reel {
+  position: relative;
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  overflow: hidden;
+}
+.lf-reel-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: lf-reel 6s cubic-bezier(0.7, 0, 0.3, 1) infinite;
+}
+.lf-glyph {
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--primary);
+}
+
+@keyframes lf-reel {
+  0%, 15% { transform: translateY(0); }
+  20%, 35% { transform: translateY(-20px); }
+  40%, 55% { transform: translateY(-40px); }
+  60%, 75% { transform: translateY(-60px); }
+  80%, 95% { transform: translateY(-80px); }
+  100% { transform: translateY(-100px); }
+}
+
 .lf-dot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 9999px;
   background: var(--primary);
-  animation: lf-pulse 1.3s ease-in-out infinite;
+  animation: lf-bounce 1s ease-in-out infinite;
 }
-.lf-dot:nth-child(2) { animation-delay: 0.16s; }
-.lf-dot:nth-child(3) { animation-delay: 0.32s; }
+.lf-dot:nth-child(2) { animation-delay: 0.13s; }
+.lf-dot:nth-child(3) { animation-delay: 0.26s; }
 
-@keyframes lf-pulse {
-  0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
-  40% { opacity: 1; transform: translateY(-2px); }
+@keyframes lf-bounce {
+  0%, 70%, 100% { transform: translateY(0); }
+  35% { transform: translateY(-6px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .lf-reel-strip { animation: none; }
   .lf-dot { animation: none; opacity: 0.6; }
 }
 </style>
