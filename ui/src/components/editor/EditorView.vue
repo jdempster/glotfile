@@ -10,6 +10,7 @@ import { fetchState, fetchChecks, usedKeys } from "@/api.js";
 import { onExternalChange } from "@/liveReload";
 import { activeKey } from "@/chat";
 import { pendingFilter, pendingKey } from "@/drilldown.js";
+import { nextRowIndex } from "./keyNav.js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -361,6 +362,33 @@ const virtualizer = useVirtualizer(
 const virtualItems = computed(() => virtualizer.value.getVirtualItems());
 const totalSize = computed(() => virtualizer.value.getTotalSize());
 
+// Row indices currently inside the scroll viewport (partially-visible rows
+// count), ascending. getVirtualItems() also yields a couple of overscan rows
+// outside the viewport, so clip to the visible band.
+function visibleRowIndices(): number[] {
+  const el = parent.value;
+  if (!el) return [];
+  const top = el.scrollTop;
+  const bottom = top + el.clientHeight;
+  return virtualizer.value
+    .getVirtualItems()
+    .filter((it) => it.start < bottom && it.start + it.size > top)
+    .map((it) => it.index);
+}
+
+// Keep the selected row on screen whenever the selection changes — arrow-key
+// nav, a row click, AND Lingo's select_key all set selectedKey, so routing the
+// scroll through one watcher means every path reliably "focuses" its key.
+// align "auto" is a no-op when the row is already visible, so visible
+// selections never jump. flush "post" runs it after the row list has rendered.
+function scrollSelectedIntoView() {
+  const key = selectedKey.value;
+  if (!key) return;
+  const idx = rows.value.indexOf(key);
+  if (idx !== -1) virtualizer.value.scrollToIndex(idx, { align: "auto" });
+}
+watch(selectedKey, scrollSelectedIntoView, { flush: "post" });
+
 function selectKey(key: string) {
   selectedKey.value = key;
 }
@@ -388,22 +416,26 @@ function onKeydown(e: KeyboardEvent) {
     return;
   }
 
-  // Arrow up/down move the selection between key rows (and scroll it into view).
+  // Arrow up/down move the selection between key rows; the selectedKey watcher
+  // keeps the new row on screen.
   if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
   if (typing || overlayOpen) return;
   const list = rows.value;
   if (list.length === 0) return;
   e.preventDefault();
+  const down = e.key === "ArrowDown";
   const cur = selectedKey.value ? list.indexOf(selectedKey.value) : -1;
-  const next = Math.max(0, Math.min(list.length - 1, e.key === "ArrowDown" ? cur + 1 : cur - 1));
+  const next = nextRowIndex({ down, cur, visible: visibleRowIndices(), count: list.length });
   const key = list[next];
-  if (key) {
-    selectedKey.value = key;
-    virtualizer.value.scrollToIndex(next, { align: "auto" });
-  }
+  if (key) selectedKey.value = key;
 }
 
-onMounted(() => window.addEventListener("keydown", onKeydown));
+onMounted(() => {
+  window.addEventListener("keydown", onKeydown);
+  // Arriving with a key already selected (e.g. Lingo's select_key navigated here
+  // while the editor was closed) — scroll it into view now the list has mounted.
+  scrollSelectedIntoView();
+});
 onUnmounted(() => {
   window.removeEventListener("keydown", onKeydown);
   if (textDebounce) clearTimeout(textDebounce);
