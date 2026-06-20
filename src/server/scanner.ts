@@ -1,5 +1,6 @@
 import { readdirSync, statSync, readFileSync } from "node:fs";
 import { join, extname, relative } from "node:path";
+import type { Config, OutputConfig } from "./schema.js";
 import type { UsageCacheFile } from "./scan.js";
 import { saveUsageCache } from "./scan.js";
 
@@ -475,6 +476,28 @@ function* walkFiles(dir: string, root: string, exclude: string[]): Generator<str
       yield rel;
     }
   }
+}
+
+// The locale files glotfile exports live inside the project, so a raw scan reads
+// keys straight back out of its own output — a flat dotted key (or, for nested
+// formats, a key-shaped literal) gets matched against the catalog and the key is
+// reported as "used", defeating prune and cluttering the usage tree. Turn each
+// output path template into an exclude glob so the scanner skips its targets.
+// {locale} is always a single path segment; {namespace} may span directories
+// (e.g. the key "emails/welcome.subject" → lang/en/emails/welcome.php), so it
+// maps to a cross-segment wildcard.
+export function outputExcludeGlobs(outputs: OutputConfig[]): string[] {
+  return outputs.map((o) => o.path.replaceAll("{locale}", "*").replaceAll("{namespace}", "**"));
+}
+
+// ScanOptions for a project: the user's config.scan merged with the auto-derived
+// export-target excludes. Every scan entry point routes through this, so generated
+// locale files are skipped everywhere the scanner runs.
+export function scanOptions(config: Config): ScanOptions {
+  return {
+    ...config.scan,
+    exclude: [...(config.scan?.exclude ?? []), ...outputExcludeGlobs(config.outputs)],
+  };
 }
 
 export function runScan(

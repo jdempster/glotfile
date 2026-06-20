@@ -14,7 +14,7 @@ import { buildProjectContextSystemPrompt, buildProjectContextUserPrompt, PROJECT
 import { sourceKeysForTerm } from "./glossary.js";
 import { acceptFindings } from "./lint/accept.js";
 import { findMissing, loadUsageCache, computeUsedKeys, literalMatcher } from "./scan.js";
-import { runScan } from "./scanner.js";
+import { runScan, scanOptions } from "./scanner.js";
 import {
   selectContextTargets, attachUsageSnippets, applyContext,
   buildContextSystemPrompt, buildContextBatchPrompt, CONTEXT_BATCH_SCHEMA,
@@ -1495,7 +1495,7 @@ export function createApi(deps: ApiDeps): Hono {
     // Location-scanned formats (Angular) index from the catalog, not a code walk.
     const result = isLocationScannedState(s)
       ? refreshLocationUsage(projectRoot)
-      : runScan(projectRoot, s.config.scan ?? {}, loadUsageCache(projectRoot));
+      : runScan(projectRoot, scanOptions(s.config), loadUsageCache(projectRoot));
     if (!result) return c.json({ files: 0, refs: 0, scannedAt: new Date().toISOString() });
     const { files, refs } = usageCounts(result);
     console.log(`[scan] ${files} file(s), ${refs} reference(s)`);

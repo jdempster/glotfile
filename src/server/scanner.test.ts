@@ -2,8 +2,9 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { extractRefs, extractPrefixes, extractLiterals, scannerForExt, runScan, CACHE_VERSION } from "./scanner.js";
+import { extractRefs, extractPrefixes, extractLiterals, scannerForExt, runScan, scanOptions, outputExcludeGlobs, CACHE_VERSION } from "./scanner.js";
 import { loadUsageCache } from "./scan.js";
+import type { Config } from "./schema.js";
 
 function tmpDir() {
   return mkdtempSync(join(tmpdir(), "glot-scanner-"));
@@ -555,5 +556,87 @@ describe("runScan", () => {
     expect(result.files["Lang.php"]!.prefixes).toEqual([
       expect.objectContaining({ prefix: "messages.", scanner: "laravel" }),
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// auto-excluding export targets
+// ---------------------------------------------------------------------------
+
+function configWithOutputs(outputs: Config["outputs"], scan?: Config["scan"]): Config {
+  return {
+    sourceLocale: "en",
+    locales: ["en"],
+    outputs,
+    format: { indent: 2, sortKeys: true, finalNewline: true },
+    scan,
+  };
+}
+
+describe("outputExcludeGlobs", () => {
+  it("turns {locale} into a single-segment wildcard", () => {
+    expect(outputExcludeGlobs([{ adapter: "flutter-arb", path: "lib/l10n/app_{locale}.arb" }]))
+      .toEqual(["lib/l10n/app_*.arb"]);
+  });
+
+  it("turns {namespace} into a cross-segment wildcard (namespaces may nest)", () => {
+    expect(outputExcludeGlobs([{ adapter: "laravel-php", path: "lang/{locale}/{namespace}.php" }]))
+      .toEqual(["lang/*/**.php"]);
+  });
+
+  it("maps every output", () => {
+    expect(outputExcludeGlobs([
+      { adapter: "laravel-php", path: "lang/{locale}/{namespace}.php" },
+      { adapter: "i18next-json", path: "locales/{locale}.json" },
+    ])).toEqual(["lang/*/**.php", "locales/*.json"]);
+  });
+});
+
+describe("scanOptions", () => {
+  it("merges export-target excludes with the user's config.scan.exclude", () => {
+    const opts = scanOptions(configWithOutputs(
+      [{ adapter: "laravel-php", path: "lang/{locale}/{namespace}.php" }],
+      { exclude: ["**/*.test.ts"] },
+    ));
+    expect(opts.exclude).toEqual(["**/*.test.ts", "lang/*/**.php"]);
+  });
+
+  it("preserves include/accessors/patterns from config.scan", () => {
+    const opts = scanOptions(configWithOutputs(
+      [{ adapter: "i18next-json", path: "locales/{locale}.json" }],
+      { include: ["src/**"], accessors: ["loc"], patterns: ["foo\\('([^']+)'"] },
+    ));
+    expect(opts.include).toEqual(["src/**"]);
+    expect(opts.accessors).toEqual(["loc"]);
+    expect(opts.patterns).toEqual(["foo\\('([^']+)'"]);
+  });
+});
+
+describe("runScan auto-excludes export targets", () => {
+  it("skips a generated Laravel PHP locale file but still scans real source", () => {
+    const dir = tmpDir();
+    mkdirSync(join(dir, "lang", "en"), { recursive: true });
+    // A generated locale file: flat dotted keys would otherwise be picked up as
+    // key-shaped literals and report those keys as "used".
+    writeFileSync(join(dir, "lang", "en", "messages.php"), "<?php\nreturn [\n  'plant.water' => 'Water',\n];\n");
+    mkdirSync(join(dir, "app"), { recursive: true });
+    writeFileSync(join(dir, "app", "Plant.php"), "echo __('plant.water');");
+
+    const config = configWithOutputs([{ adapter: "laravel-php", path: "lang/{locale}/{namespace}.php" }]);
+    const result = runScan(dir, scanOptions(config));
+
+    expect(result.files["lang/en/messages.php"]).toBeUndefined();
+    expect(result.files["app/Plant.php"]).toBeDefined();
+  });
+
+  it("skips a generated file in a nested namespace directory", () => {
+    const dir = tmpDir();
+    mkdirSync(join(dir, "lang", "en", "emails"), { recursive: true });
+    writeFileSync(join(dir, "lang", "en", "emails", "welcome.php"), "<?php\nreturn ['subject' => 'Hi'];\n");
+
+    const config = configWithOutputs([{ adapter: "laravel-php", path: "lang/{locale}/{namespace}.php" }]);
+    const result = runScan(dir, scanOptions(config));
+
+    expect(result.files["lang/en/emails/welcome.php"]).toBeUndefined();
   });
 });

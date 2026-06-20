@@ -9,7 +9,7 @@ import { createApi, type ApiDeps } from "./api.js";
 import type { StateWatcher } from "./watch.js";
 import { loadState } from "./state.js";
 import { loadUsageCache } from "./scan.js";
-import { runScan } from "./scanner.js";
+import { runScan, scanOptions } from "./scanner.js";
 import { refreshLocationUsage, isLocationScannedState, usageCounts } from "./import/usage.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -188,7 +188,7 @@ function backgroundScan(statePath: string): void {
       return;
     }
     const existing = loadUsageCache(projectRoot);
-    const result = runScan(projectRoot, state.config.scan ?? {}, existing);
+    const result = runScan(projectRoot, scanOptions(state.config), existing);
     const { files, refs } = usageCounts(result);
     console.log(`[scan] ${files} file(s), ${refs} reference(s)`);
   }).catch((err: unknown) => {

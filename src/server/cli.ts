@@ -32,7 +32,7 @@ import { refreshPrices } from "./ai/price-fetch.js";
 import { loadPriceCache, defaultPriceCachePath, invalidatePriceCache } from "./ai/price-cache.js";
 import { appendLog } from "./log.js";
 import { loadUsageCache, computeUsedKeys } from "./scan.js";
-import { runScan } from "./scanner.js";
+import { runScan, scanOptions } from "./scanner.js";
 import { refreshLocationUsage, isLocationScannedState, usageCounts } from "./import/usage.js";
 import {
   selectContextTargets, attachUsageSnippets, applyContext,
@@ -1073,7 +1073,7 @@ async function runScanCmd(args: ParsedArgs): Promise<void> {
     return;
   }
   const existing = loadUsageCache(projectRoot);
-  const result = runScan(projectRoot, state.config.scan ?? {}, existing);
+  const result = runScan(projectRoot, scanOptions(state.config), existing);
   const fileCount = Object.keys(result.files).length;
   const refCount = Object.values(result.files).reduce((n, f) => n + f.refs.length, 0);
   console.log(`Scanned ${fileCount} file(s), found ${refCount} reference(s).`);
@@ -1105,7 +1105,7 @@ export async function runPrune(args: ParsedArgs): Promise<void> {
       // Scan first so "unused" is computed from current code, not a stale cache —
       // a stale cache could report a now-referenced key as dead. runScan is
       // incremental (reuses unchanged files) and re-persists .glotfile/usage.json.
-      const cache = runScan(projectRoot, state.config.scan ?? {}, loadUsageCache(projectRoot));
+      const cache = runScan(projectRoot, scanOptions(state.config), loadUsageCache(projectRoot));
       const used = new Set(computeUsedKeys(state, cache));
       for (const k of Object.keys(state.keys)) {
         if (!used.has(k)) toRemove.add(k);
