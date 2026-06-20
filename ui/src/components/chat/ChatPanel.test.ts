@@ -19,14 +19,16 @@ describe("ChatPanel thinking indicator", () => {
     expect(wrapper.find("[data-thinking]").exists()).toBe(true);
   });
 
-  it("hides once assistant text is streaming", () => {
+  it("stays up while the model narrates and then generates its tool calls", () => {
+    // After text streams, the model generates tool_use blocks with NO events
+    // until the turn ends — the dead air the dots must cover.
     messages.value = [
       { role: "user", text: "hi", tools: [] },
-      { role: "assistant", text: "Hello", tools: [] },
+      { role: "assistant", text: "Let me check that.", tools: [] },
     ];
     isSending.value = true;
     const wrapper = mount(ChatPanel);
-    expect(wrapper.find("[data-thinking]").exists()).toBe(false);
+    expect(wrapper.find("[data-thinking]").exists()).toBe(true);
   });
 
   it("hides while a tool row is already spinning", () => {
@@ -37,6 +39,18 @@ describe("ChatPanel thinking indicator", () => {
     isSending.value = true;
     const wrapper = mount(ChatPanel);
     expect(wrapper.find("[data-thinking]").exists()).toBe(false);
+  });
+
+  it("shows between steps when a narrated tool call has finished", () => {
+    // A turn that narrated text then ran a tool which has now completed: the model
+    // is deciding its next move, so the indicator must stay up.
+    messages.value = [
+      { role: "user", text: "hi", tools: [] },
+      { role: "assistant", text: "Let me check that.", tools: [{ id: "t1", name: "overview", humanSummary: "overview", status: "done" }] },
+    ];
+    isSending.value = true;
+    const wrapper = mount(ChatPanel);
+    expect(wrapper.find("[data-thinking]").exists()).toBe(true);
   });
 
   it("is absent when not sending", () => {

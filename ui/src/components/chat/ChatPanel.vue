@@ -45,16 +45,19 @@ const greetIndex = (Number(localStorage.getItem(greetKey)) || 0) % GREETINGS.len
 const greeting = GREETINGS[greetIndex];
 localStorage.setItem(greetKey, String((greetIndex + 1) % GREETINGS.length));
 
-// Show the "thinking" dots while a turn is in flight but nothing visible is
-// happening yet — right after sending, and in the gaps between tool calls. Hide
-// it once text is streaming or a tool row is already spinning (those show work).
+// Lingo is working whenever a turn is in flight, so keep the dots up until it's
+// the user's turn again. Crucially we can't key off narrated text or a specific
+// phase: while the model is generating its next tool call, nothing streams (only
+// text deltas do — tool_use arrives whole at turn end), so a bubble that reads
+// "text, no tools" is just as likely mid-generation as finished. Showing the
+// dots unconditionally avoids that dead air. The one exception: a tool actually
+// running (or awaiting confirm) already shows its own row state, so dots there
+// would be redundant noise.
 const thinking = computed(() => {
   if (!isSending.value) return false;
   const last = messages.value[messages.value.length - 1];
   if (!last || last.role === "user") return true;
-  const hasText = last.text.trim().length > 0;
-  const toolBusy = last.tools.some((t) => t.status === "running" || t.status === "pending-confirm");
-  return !hasText && !toolBusy;
+  return !last.tools.some((t) => t.status === "running" || t.status === "pending-confirm");
 });
 
 async function submit() {
