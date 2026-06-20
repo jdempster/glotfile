@@ -217,6 +217,10 @@ export function createApi(deps: ApiDeps): Hono {
         patch[field] = Math.round(body[field]);
       }
     }
+    if ("detailPanelOpen" in body) {
+      if (typeof body.detailPanelOpen !== "boolean") return c.json({ error: "detailPanelOpen must be a boolean" }, 400);
+      patch.detailPanelOpen = body.detailPanelOpen;
+    }
     if (Object.keys(patch).length === 0) return c.json({ error: "no recognized preferences in body" }, 400);
     saveUiPrefs(uiPrefsPath, patch);
     return c.json({ ok: true });

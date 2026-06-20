@@ -290,6 +290,7 @@ export interface UiPrefs {
   keyColumnWidth?: number;
   detailPanelWidth?: number;
   chatPanelWidth?: number;
+  detailPanelOpen?: boolean;
 }
 export const getUiPrefs = () => fetch("/api/ui-prefs").then((r) => json<UiPrefs>(r));
 export const putUiPrefs = (patch: Partial<UiPrefs>) =>

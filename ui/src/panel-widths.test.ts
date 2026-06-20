@@ -73,3 +73,33 @@ describe("panel widths", () => {
     expect(localStorage.getItem("glotfile-detailPanelWidth")).toBeNull();
   });
 });
+
+describe("detail panel toggle", () => {
+  it("defaults to open", async () => {
+    const p = await loadPanelWidths();
+    expect(p.detailPanelToggle.open.value).toBe(true);
+  });
+
+  it("boots from the localStorage cache", async () => {
+    const p = await loadPanelWidths({ cached: { "glotfile-detailPanelOpen": "false" } });
+    expect(p.detailPanelToggle.open.value).toBe(false);
+  });
+
+  it("toggle flips the flag, caches it, and PUTs the new state", async () => {
+    const p = await loadPanelWidths();
+    p.detailPanelToggle.toggle();
+    expect(p.detailPanelToggle.open.value).toBe(false);
+    expect(localStorage.getItem("glotfile-detailPanelOpen")).toBe("false");
+    expect(p.fetchMock).toHaveBeenCalledWith(
+      "/api/ui-prefs",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ detailPanelOpen: false }) }),
+    );
+  });
+
+  it("syncPanelWidths adopts the server's detailPanelOpen", async () => {
+    const p = await loadPanelWidths({ serverPrefs: { detailPanelOpen: false } });
+    await p.syncPanelWidths();
+    expect(p.detailPanelToggle.open.value).toBe(false);
+    expect(localStorage.getItem("glotfile-detailPanelOpen")).toBe("false");
+  });
+});

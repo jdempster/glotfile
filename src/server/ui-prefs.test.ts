@@ -68,6 +68,15 @@ describe("ui-prefs", () => {
     expect(loadUiPrefs(path)).toEqual({ theme: "system" });
   });
 
+  it("round-trips the detail panel open flag and ignores a non-boolean", () => {
+    const path = tmpFile();
+    saveUiPrefs(path, { theme: "dark", detailPanelOpen: false });
+    expect(loadUiPrefs(path)).toEqual({ theme: "dark", detailPanelOpen: false });
+
+    writeFileSync(path, JSON.stringify({ detailPanelOpen: "nope" }), "utf8");
+    expect(loadUiPrefs(path)).toEqual({ theme: "system" });
+  });
+
   it("defaultUiPrefsPath points at ~/.glotfile/ui.json", () => {
     expect(defaultUiPrefsPath().endsWith(join(".glotfile", "ui.json"))).toBe(true);
   });
@@ -104,6 +113,29 @@ describe("ui-prefs api", () => {
     });
     expect(res.status).toBe(200);
     expect(loadUiPrefs(uiPrefsPath)).toEqual({ theme: "dark", detailPanelWidth: 512 });
+  });
+
+  it("PUT /ui-prefs persists the detail panel open flag", async () => {
+    const { app, uiPrefsPath } = apiSetup();
+    saveUiPrefs(uiPrefsPath, { theme: "dark" });
+    const res = await app.request("/ui-prefs", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ detailPanelOpen: false }),
+    });
+    expect(res.status).toBe(200);
+    expect(loadUiPrefs(uiPrefsPath)).toEqual({ theme: "dark", detailPanelOpen: false });
+  });
+
+  it("PUT /ui-prefs rejects a non-boolean detail panel open flag with 400", async () => {
+    const { app, uiPrefsPath } = apiSetup();
+    const res = await app.request("/ui-prefs", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ detailPanelOpen: "yes" }),
+    });
+    expect(res.status).toBe(400);
+    expect(existsSync(uiPrefsPath)).toBe(false);
   });
 
   it("PUT /ui-prefs rejects an out-of-range panel width with 400", async () => {

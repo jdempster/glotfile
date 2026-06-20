@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, shallowRef, computed, watch, onMounted, onUnmounted } from "vue";
 import { useVirtualizer } from "@tanstack/vue-virtual";
-import { Search, Plus, ListFilter, FileDown, Sparkles, X, TriangleAlert, ScanSearch, Loader2, Check, Minus, CircleQuestionMark } from "lucide-vue-next";
+import { Search, Plus, ListFilter, FileDown, Sparkles, X, TriangleAlert, ScanSearch, Loader2, Check, Minus, CircleQuestionMark, PanelRight } from "lucide-vue-next";
 import type { State, Issue } from "@/types.js";
 import { filterKeys, type KeyFilter } from "@/filter.js";
 import { filterFromUrl, filterToUrl, type SortMode, type ViewMode } from "@/filterUrl.js";
@@ -40,10 +40,11 @@ import ContextDialog from "./ContextDialog.vue";
 import BatchBanner from "./BatchBanner.vue";
 import LocaleCombobox from "@/components/lang/LocaleCombobox.vue";
 import ResizeHandle from "@/components/ResizeHandle.vue";
-import { keyColumn, detailPanel } from "@/panel-widths.js";
+import { keyColumn, detailPanel, detailPanelToggle } from "@/panel-widths.js";
 
 const keyColumnWidth = keyColumn.width;
 const detailPanelWidth = detailPanel.width;
+const detailPanelOpen = detailPanelToggle.open;
 
 // shallowRef, not ref: the state tree (3.7k keys × 19 locales ≈ 55k values) is
 // treated as immutable — every edit goes through the API then a full reload that
@@ -612,6 +613,17 @@ async function onCreated(key: string) {
           <Button size="sm" @click="addOpen = true">
             <Plus class="size-4" /> Add key
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            class="w-8 px-0 max-[1080px]:hidden"
+            role="switch"
+            :aria-checked="detailPanelOpen"
+            :aria-label="detailPanelOpen ? 'Hide key details' : 'Show key details'"
+            @click="detailPanelToggle.toggle()"
+          >
+            <PanelRight class="size-4" :class="detailPanelOpen ? '' : 'text-muted-foreground'" />
+          </Button>
         </div>
       </div>
 
@@ -768,6 +780,7 @@ async function onCreated(key: string) {
         </div>
 
         <ResizeHandle
+          v-if="detailPanelOpen"
           side="left"
           class="max-[1080px]:hidden"
           :width="detailPanelWidth"
@@ -778,6 +791,7 @@ async function onCreated(key: string) {
           @reset="detailPanel.reset"
         />
         <DetailPanel
+          v-if="detailPanelOpen"
           :key-name="selectedKey"
           :entry="selectedEntry"
           :issues="selectedKey ? (issuesByKey.get(selectedKey) ?? []) : []"

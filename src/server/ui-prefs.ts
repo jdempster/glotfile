@@ -12,6 +12,8 @@ export interface UiPrefs {
   keyColumnWidth?: number;
   detailPanelWidth?: number;
   chatPanelWidth?: number;
+  // Whether the editor's key-details sidebar is shown; absent means the UI default (shown).
+  detailPanelOpen?: boolean;
 }
 
 const THEMES: ThemeMode[] = ["system", "light", "dark"];
@@ -42,6 +44,7 @@ export function loadUiPrefs(path: string): UiPrefs {
   if (isPanelWidth(raw.keyColumnWidth)) prefs.keyColumnWidth = Math.round(raw.keyColumnWidth);
   if (isPanelWidth(raw.detailPanelWidth)) prefs.detailPanelWidth = Math.round(raw.detailPanelWidth);
   if (isPanelWidth(raw.chatPanelWidth)) prefs.chatPanelWidth = Math.round(raw.chatPanelWidth);
+  if (typeof raw.detailPanelOpen === "boolean") prefs.detailPanelOpen = raw.detailPanelOpen;
   return prefs;
 }
 

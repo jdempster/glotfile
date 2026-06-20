@@ -54,6 +54,42 @@ export const keyColumn = panelWidth("keyColumnWidth", 272, 180, 560);
 export const detailPanel = panelWidth("detailPanelWidth", 420, 320, 720);
 export const chatPanel = panelWidth("chatPanelWidth", 416, 320, 720);
 
+interface PanelToggle {
+  open: Ref<boolean>;
+  toggle: () => void;
+  syncValue: (v: unknown) => void;
+}
+
+// A shown/hidden flag persisted the same way as the widths: localStorage for a
+// flash-free boot, the prefs file as the cross-port source of truth.
+function panelToggle(prefKey: "detailPanelOpen", def: boolean): PanelToggle {
+  const storageKey = `glotfile-${prefKey}`;
+  const cached = () => {
+    const raw = localStorage.getItem(storageKey);
+    return raw === null ? def : raw === "true";
+  };
+  const open = ref(cached());
+  const persist = () => {
+    localStorage.setItem(storageKey, String(open.value));
+    void putUiPrefs({ [prefKey]: open.value }).catch(() => {});
+  };
+  return {
+    open,
+    toggle: () => {
+      open.value = !open.value;
+      persist();
+    },
+    syncValue: (v) => {
+      if (typeof v === "boolean") {
+        open.value = v;
+        localStorage.setItem(storageKey, String(v));
+      }
+    },
+  };
+}
+
+export const detailPanelToggle = panelToggle("detailPanelOpen", true);
+
 // Reconcile with the machine-wide prefs after mount, same as the theme.
 export async function syncPanelWidths(prefs?: UiPrefs): Promise<void> {
   try {
@@ -61,6 +97,7 @@ export async function syncPanelWidths(prefs?: UiPrefs): Promise<void> {
     keyColumn.syncValue(p.keyColumnWidth);
     detailPanel.syncValue(p.detailPanelWidth);
     chatPanel.syncValue(p.chatPanelWidth);
+    detailPanelToggle.syncValue(p.detailPanelOpen);
   } catch {
     /* offline or API error: keep the cached widths */
   }
