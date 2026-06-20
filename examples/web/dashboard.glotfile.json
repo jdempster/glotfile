@@ -34,7 +34,6 @@
         "de": {
           "source": "ai",
           "state": "machine",
-          "updatedAt": "2026-05-15T12:00:00.000Z",
           "value": "Keine Daten für diesen Zeitraum verfügbar"
         },
         "en": {
@@ -80,7 +79,6 @@
         "de": {
           "source": "ai",
           "state": "machine",
-          "updatedAt": "2026-05-15T12:00:00.000Z",
           "value": "{count, plural, one {# Zeile} other {# Zeilen}}"
         },
         "en": {

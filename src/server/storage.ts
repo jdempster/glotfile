@@ -28,6 +28,19 @@ export interface SplitParts {
   locales: Record<string, Record<string, LocaleValue>>;    // locale -> key -> value
 }
 
+// `glossarySuggestions` backs a beta feature (GLOTFILE_BETA_GLOSSARY_SUGGEST).
+// Keep the empty array out of serialized output so the feature doesn't leak into
+// every user's committed catalog; validate() defaults it back to [] on load, and
+// a beta user's actual (non-empty) suggestions are still written.
+export function stripEmptySuggestions<T extends Record<string, unknown>>(obj: T): T {
+  const sug = obj.glossarySuggestions;
+  if (Array.isArray(sug) && sug.length === 0) {
+    const { glossarySuggestions: _omit, ...rest } = obj;
+    return rest as unknown as T;
+  }
+  return obj;
+}
+
 export function disassemble(state: State): SplitParts {
   const { keys, ...manifest } = state;
   const keyMeta: Record<string, KeyMeta> = {};
@@ -39,7 +52,7 @@ export function disassemble(state: State): SplitParts {
       (locales[locale] ??= {})[key] = lv;
     }
   }
-  return { manifest, keys: keyMeta, locales };
+  return { manifest: stripEmptySuggestions(manifest), keys: keyMeta, locales };
 }
 
 // Inverse of disassemble. Returns a raw object for validate() to check/normalize.

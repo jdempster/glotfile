@@ -4,10 +4,10 @@ import { serializeJson } from "./format.js";
 import { writeFileAtomic } from "./atomic-write.js";
 import {
   validate, defaultState, GlotfileError, isPluralForm, CURRENT_VERSION, STATES,
-  type State, type LocaleState, type KeyEntry, type GlossaryEntry, type Note, type PluralCategory, type PluralForm, type GlossarySuggestion,
+  type State, type LocaleState, type LocaleValue, type KeyEntry, type GlossaryEntry, type Note, type PluralCategory, type PluralForm, type GlossarySuggestion,
 } from "./schema.js";
 import { formsToIcu } from "./plurals.js";
-import { splitDirFor, detectFormat, loadSplit, saveSplit } from "./storage.js";
+import { splitDirFor, detectFormat, loadSplit, saveSplit, stripEmptySuggestions } from "./storage.js";
 import { normalizeSource } from "./normalize.js";
 import { sourceHash, pruneStaleSuppressions } from "./lint/suppress.js";
 import { RULE_IDS, type RuleId } from "./lint/registry.js";
@@ -42,7 +42,17 @@ function normalizeState(state: State): void {
   state.config.locales = [src, ...rest];
   for (const entry of Object.values(state.keys)) {
     const remapped: typeof entry.values = {};
-    for (const [loc, lv] of Object.entries(entry.values)) remapped[canonLocale(loc)] = lv;
+    // Re-emit each locale value with ONLY its known fields, so a removed field
+    // (e.g. the dropped per-cell `updatedAt`) self-heals on the next save instead
+    // of lingering on every untouched cell — the expensive, high-cardinality bloat
+    // case. Keep this field list in sync with LocaleValue.
+    for (const [loc, lv] of Object.entries(entry.values)) {
+      const clean: LocaleValue = { state: lv.state };
+      if (lv.value !== undefined) clean.value = lv.value;
+      if (lv.forms !== undefined) clean.forms = lv.forms;
+      if (lv.source !== undefined) clean.source = lv.source;
+      remapped[canonLocale(loc)] = clean;
+    }
     entry.values = remapped;
     for (const s of entry.suppressions ?? []) s.locale = canonLocale(s.locale);
   }
@@ -105,7 +115,7 @@ export function saveState(path: string, state: State): void {
     // Drop a single file left behind by a pre-split save (post-promotion hygiene).
     if (existsSync(path)) rmSync(path);
   } else {
-    writeFileAtomic(path, serializeJson(state, state.config.format));
+    writeFileAtomic(path, serializeJson(stripEmptySuggestions({ ...state }), state.config.format));
   }
 }
 

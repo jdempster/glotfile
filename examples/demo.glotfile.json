@@ -31,7 +31,6 @@
   },
   "glossary": [
     {
-      "caseSensitive": true,
       "doNotTranslate": true,
       "notes": "Product name — never translate or inflect.",
       "term": "Glotfile"
@@ -53,7 +52,6 @@
         "de": {
           "source": "ai",
           "state": "machine",
-          "updatedAt": "2026-05-24T14:00:00.000Z",
           "value": "Ihre E-Mail-Adresse wurde erfolgreich aktualisiert. Sie können sich jetzt mit Ihrer neuen Adresse anmelden."
         },
         "en": {
@@ -111,7 +109,6 @@
         "es": {
           "source": "ai",
           "state": "machine",
-          "updatedAt": "2026-05-21T09:14:00.000Z",
           "value": "Eliminar"
         },
         "fr": {
@@ -121,7 +118,6 @@
         "ja": {
           "source": "ai",
           "state": "machine",
-          "updatedAt": "2026-05-21T09:14:00.000Z",
           "value": "削除"
         }
       }
@@ -192,7 +188,6 @@
         "es": {
           "source": "ai",
           "state": "machine",
-          "updatedAt": "2026-05-23T07:00:00.000Z",
           "value": "Vista previa de exportación"
         },
         "fr": {
@@ -211,7 +206,6 @@
         "de": {
           "source": "ai",
           "state": "machine",
-          "updatedAt": "2026-05-20T08:00:00.000Z",
           "value": "{count, plural, one {# Schlüssel} other {# Schlüssel}}"
         },
         "en": {
@@ -233,7 +227,6 @@
         "de": {
           "source": "ai",
           "state": "machine",
-          "updatedAt": "2026-05-22T11:30:00.000Z",
           "value": "Schlüssel suchen…"
         },
         "en": {
@@ -243,7 +236,6 @@
         "es": {
           "source": "ai",
           "state": "machine",
-          "updatedAt": "2026-05-22T11:30:00.000Z",
           "value": "Buscar claves…"
         },
         "fr": {
@@ -308,7 +300,6 @@
         "de": {
           "source": "ai",
           "state": "machine",
-          "updatedAt": "2026-05-19T16:45:00.000Z",
           "value": "Begriff hinzufügen"
         },
         "en": {
@@ -358,7 +349,6 @@
         "de": {
           "source": "ai",
           "state": "machine",
-          "updatedAt": "2026-05-18T13:20:00.000Z",
           "value": "Ausgangssprache"
         },
         "en": {
@@ -416,7 +406,6 @@
         "es": {
           "source": "ai",
           "state": "machine",
-          "updatedAt": "2026-05-17T10:05:00.000Z",
           "value": "Traducción completada"
         },
         "fr": {

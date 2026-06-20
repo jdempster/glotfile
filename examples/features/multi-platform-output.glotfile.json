@@ -63,13 +63,11 @@
   },
   "glossary": [
     {
-      "caseSensitive": true,
       "doNotTranslate": true,
       "notes": "Brand name.",
       "term": "Sprout"
     }
   ],
-  "glossarySuggestions": [],
   "keys": {
     "app.name": {
       "tags": [

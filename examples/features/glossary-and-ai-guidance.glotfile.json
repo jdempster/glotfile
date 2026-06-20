@@ -36,7 +36,6 @@
   },
   "glossary": [
     {
-      "caseSensitive": true,
       "doNotTranslate": true,
       "notes": "Brand name. Never translate.",
       "term": "Sprout"
@@ -48,8 +47,7 @@
     },
     {
       "notes": "In Sprout, 'feed' means fertilizing a plant — never a content feed. Translate to the gardening sense (fr: nourrir/fertiliser, de: düngen).",
-      "term": "feed",
-      "wholeWord": true
+      "term": "feed"
     },
     {
       "notes": "Forced UI label for the light-level setting so every locale matches the design.",
@@ -61,7 +59,6 @@
       }
     }
   ],
-  "glossarySuggestions": [],
   "keys": {
     "care.feed.cta": {
       "context": "Button on the plant detail screen that opens the fertilizer scheduler.",

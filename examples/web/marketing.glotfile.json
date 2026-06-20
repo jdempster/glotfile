@@ -69,7 +69,6 @@
         "pt": {
           "source": "ai",
           "state": "machine",
-          "updatedAt": "2026-04-02T09:00:00.000Z",
           "value": "Comece gratuitamente"
         },
         "zh": {
@@ -87,7 +86,6 @@
         "de": {
           "source": "ai",
           "state": "machine",
-          "updatedAt": "2026-04-01T10:00:00.000Z",
           "value": "Übersetzungen schneller ausliefern"
         },
         "en": {
@@ -97,7 +95,6 @@
         "es": {
           "source": "ai",
           "state": "machine",
-          "updatedAt": "2026-04-01T10:00:00.000Z",
           "value": "Publica traducciones más rápido"
         },
         "fr": {
@@ -134,7 +131,6 @@
         "zh": {
           "source": "ai",
           "state": "machine",
-          "updatedAt": "2026-04-01T10:00:00.000Z",
           "value": "定价"
         }
       }

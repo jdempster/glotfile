@@ -122,6 +122,37 @@ describe("load/save", () => {
     expect(loaded.glossary[0]).toEqual({ term: "API", doNotTranslate: true });
   });
 
+  it("strips legacy/unknown locale-value fields on save/load", () => {
+    const p = join(mkdtempSync(join(tmpdir(), "glot-")), "glotfile.json");
+    const s = defaultState();
+    s.config.locales = ["en", "fr"];
+    createKey(s, "k", "Hi");
+    // A stale value carrying the removed updatedAt timestamp — the per-cell bloat case.
+    s.keys["k"]!.values["fr"] = { value: "Salut", state: "reviewed", source: "ai", updatedAt: "2026-05-24T14:00:00.000Z" } as any;
+    saveState(p, s);
+    const loaded = loadState(p);
+    expect(loaded.keys["k"]!.values["fr"]).toEqual({ value: "Salut", state: "reviewed", source: "ai" });
+  });
+
+  it("omits an empty glossarySuggestions from saved output so the beta feature stays hidden", () => {
+    const p = join(mkdtempSync(join(tmpdir(), "glot-")), "glotfile.json");
+    const s = defaultState();
+    createKey(s, "k", "Hi");
+    saveState(p, s);
+    expect(readFileSync(p, "utf8")).not.toContain("glossarySuggestions");
+    // Load defaults it back to [], so consumers still see a real array.
+    expect(loadState(p).glossarySuggestions).toEqual([]);
+  });
+
+  it("keeps glossarySuggestions in saved output once it has entries", () => {
+    const p = join(mkdtempSync(join(tmpdir(), "glot-")), "glotfile.json");
+    const s = defaultState();
+    s.glossarySuggestions = [{ term: "API", status: "pending" }];
+    saveState(p, s);
+    expect(readFileSync(p, "utf8")).toContain("glossarySuggestions");
+    expect(loadState(p).glossarySuggestions).toEqual([{ term: "API", status: "pending" }]);
+  });
+
   it("downgrades a version-2 file to version 1 on load", () => {
     const p = join(mkdtempSync(join(tmpdir(), "glot-")), "glotfile.json");
     // A version-2 file whose value merely looks like an ICU plural must load
