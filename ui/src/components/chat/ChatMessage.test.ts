@@ -1,9 +1,15 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import ChatMessage from "./ChatMessage.vue";
 import type { UiMessage } from "@/chat";
+import { knownKeys } from "@/keyIndex";
+import * as drilldown from "@/drilldown";
 
 describe("ChatMessage", () => {
+  beforeEach(() => {
+    knownKeys.value = new Set();
+    vi.restoreAllMocks();
+  });
   it("renders assistant markdown as HTML", () => {
     const message: UiMessage = { role: "assistant", text: "Hello **gardener**", tools: [] };
     const wrapper = mount(ChatMessage, { props: { message } });
@@ -69,6 +75,38 @@ describe("ChatMessage", () => {
     expect(wrapper.find("img").exists()).toBe(false);
     // …while legitimate markdown still renders.
     expect(wrapper.find("strong").exists()).toBe(true);
+  });
+
+  it("makes a backticked real key clickable and focuses it", async () => {
+    knownKeys.value = new Set(["plant.water"]);
+    const spy = vi.spyOn(drilldown, "drillToKey").mockImplementation(() => {});
+    const message: UiMessage = { role: "assistant", text: "Update `plant.water` for German.", tools: [] };
+    const wrapper = mount(ChatMessage, { props: { message } });
+    const code = wrapper.find("code.gf-key");
+    expect(code.exists()).toBe(true);
+    expect(code.text()).toBe("plant.water");
+    await code.trigger("click");
+    expect(spy).toHaveBeenCalledWith("plant.water");
+  });
+
+  it("leaves backticked non-keys inert", async () => {
+    knownKeys.value = new Set(["plant.water"]);
+    const spy = vi.spyOn(drilldown, "drillToKey").mockImplementation(() => {});
+    // `de` is a locale code, not a key — it should not become a link.
+    const message: UiMessage = { role: "assistant", text: "Translate into `de`.", tools: [] };
+    const wrapper = mount(ChatMessage, { props: { message } });
+    expect(wrapper.find("code.gf-key").exists()).toBe(false);
+    await wrapper.find("code").trigger("click");
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("focuses a key on Enter for keyboard users", async () => {
+    knownKeys.value = new Set(["plant.water"]);
+    const spy = vi.spyOn(drilldown, "drillToKey").mockImplementation(() => {});
+    const message: UiMessage = { role: "assistant", text: "See `plant.water`.", tools: [] };
+    const wrapper = mount(ChatMessage, { props: { message } });
+    await wrapper.find("code.gf-key").trigger("keydown", { key: "Enter" });
+    expect(spy).toHaveBeenCalledWith("plant.water");
   });
 
   it("renders a plain user message without markdown HTML", () => {

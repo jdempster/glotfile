@@ -20,16 +20,53 @@ renderer.html = ({ text }) => escapeHtml(text);
 import { Check, X, Loader2, AlertTriangle, ChevronRight } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { respondConfirm, type UiMessage, type UiToolCall } from "@/chat";
+import { knownKeys } from "@/keyIndex";
+import { drillToKey } from "@/drilldown";
 
 const props = defineProps<{ message: UiMessage }>();
+
+// Lingo cites keys in backticks (so they arrive as <code> spans). Tag the ones
+// that are real keys in the project with `gf-key` so they read and behave as
+// links; source strings, locale codes, and other code spans stay inert. Operates
+// on already-sanitized HTML, only ADDING attributes, so it can't reintroduce XSS.
+function tagKeyCodes(sanitized: string): string {
+  const keys = knownKeys.value;
+  if (!keys.size || !sanitized.includes("<code")) return sanitized;
+  const tpl = document.createElement("template");
+  tpl.innerHTML = sanitized;
+  for (const code of Array.from(tpl.content.querySelectorAll("code"))) {
+    if (keys.has(code.textContent ?? "")) {
+      code.classList.add("gf-key");
+      code.setAttribute("role", "button");
+      code.setAttribute("tabindex", "0");
+    }
+  }
+  return tpl.innerHTML;
+}
 
 // Assistant text is model output that can echo content the agent read from the
 // user's codebase (file bodies, key values), so it is NOT trusted. Render the
 // markdown, then sanitize the HTML before v-html to strip <script>, inline event
 // handlers, and javascript:/data: URLs.
 const html = computed(() =>
-  props.message.text ? purifier.sanitize(marked.parse(props.message.text, { async: false, renderer }) as string) : "",
+  props.message.text ? tagKeyCodes(purifier.sanitize(marked.parse(props.message.text, { async: false, renderer }) as string)) : "",
 );
+
+// A key path Lingo mentioned was clicked/activated → jump to the editor, filter
+// the list down to that key, and open its detail panel.
+function activateKey(target: EventTarget | null): boolean {
+  const el = (target as HTMLElement | null)?.closest?.("code.gf-key");
+  const key = el?.textContent ?? "";
+  if (!el || !knownKeys.value.has(key)) return false;
+  drillToKey(key);
+  return true;
+}
+function onKeyClick(e: MouseEvent) {
+  if (activateKey(e.target)) e.preventDefault();
+}
+function onKeyDown(e: KeyboardEvent) {
+  if ((e.key === "Enter" || e.key === " ") && activateKey(e.target)) e.preventDefault();
+}
 
 // Per-tool expand state (reveals the applied change / raw result).
 const expanded = ref<Record<string, boolean>>({});
@@ -127,7 +164,9 @@ function detail(tool: UiToolCall): string {
   <div v-else class="flex flex-col gap-2.5">
     <div
       v-if="html"
-      class="prose prose-sm dark:prose-invert max-w-none break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 prose-strong:text-foreground prose-em:text-muted-foreground prose-a:text-primary prose-code:rounded prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:font-mono prose-code:text-[0.85em] prose-code:font-normal prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-hr:my-3 prose-hr:border-border"
+      class="prose prose-sm dark:prose-invert max-w-none break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 prose-strong:text-foreground prose-em:text-muted-foreground prose-a:text-primary prose-code:rounded prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:font-mono prose-code:text-[0.85em] prose-code:font-normal prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-hr:my-3 prose-hr:border-border [&_code.gf-key]:cursor-pointer [&_code.gf-key]:underline [&_code.gf-key]:decoration-dotted [&_code.gf-key]:decoration-primary/40 [&_code.gf-key]:underline-offset-[3px] [&_code.gf-key:hover]:bg-primary-soft [&_code.gf-key:hover]:decoration-solid [&_code.gf-key:hover]:decoration-primary"
+      @click="onKeyClick"
+      @keydown="onKeyDown"
       v-html="html"
     />
 
