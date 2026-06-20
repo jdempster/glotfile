@@ -15,6 +15,23 @@ function sourceText(entry: KeyEntry, sourceLocale: string): string {
   return (lv?.value ?? lv?.forms?.other ?? "").trim();
 }
 
+// The searchable text for a key in one locale: the plain value, or all plural
+// forms joined so a regex can hit any of them. Empty string when unset.
+function localeText(entry: KeyEntry, loc: string): string {
+  const lv = entry.values[loc];
+  if (!lv) return "";
+  if (entry.plural) return Object.values(lv.forms ?? {}).join(" ").trim();
+  return (lv.value ?? "").trim();
+}
+
+// A key's translation state in one locale, treating an empty value as missing.
+function localeState(entry: KeyEntry, loc: string): string {
+  const lv = entry.values[loc];
+  if (!lv) return "missing";
+  const filled = entry.plural ? lv.forms?.other?.trim() : lv.value?.trim();
+  return filled ? lv.state : "missing";
+}
+
 const overview: ChatTool = {
   def: {
     name: "overview",
@@ -79,12 +96,6 @@ const searchKeys: ChatTool = {
     const q = query?.trim().toLowerCase();
     const out: { key: string; source: string; states: Record<string, string> }[] = [];
     let truncated = false;
-    const localeState = (entry: KeyEntry, loc: string): string => {
-      const lv = entry.values[loc];
-      if (!lv) return "missing";
-      const filled = entry.plural ? lv.forms?.other?.trim() : lv.value?.trim();
-      return filled ? lv.state : "missing";
-    };
     for (const key of Object.keys(s.keys).sort()) {
       const entry = s.keys[key]!;
       const src = sourceText(entry, s.config.sourceLocale);
@@ -100,6 +111,52 @@ const searchKeys: ChatTool = {
       out.push({ key, source: src, states });
     }
     return { keys: out, truncated };
+  },
+};
+
+const grepSource: ChatTool = {
+  def: {
+    name: "grep_source",
+    description:
+      "Search the catalog's text with a JavaScript regular expression — the source strings by default, or a target locale's translations when `locale` is set. Use for pattern-level drift that substring search can't express: spelling/hyphenation variants (\"[Ss]ign-?in\"), verb-vs-noun splits (\"[Ll]og ?in\"), or a case-sensitive product-name-vs-common-noun check (\"Spaces\" but not \"spaces\"). Matches against the source of truth, not exported files. Returns key, the matched value, and per-locale state, so no follow-up lookup is needed.",
+    schema: {
+      type: "object",
+      properties: {
+        pattern: { type: "string", description: "JavaScript regex matched against the value." },
+        flags: { type: "string", description: "Optional regex flags (i, m, s, u). Default is case-sensitive (no flags)." },
+        locale: { type: "string", description: "Locale whose values to search. Defaults to the source locale." },
+        keyGlob: { type: "string", description: "Glob matched against the key path to narrow the search (e.g. \"emails.*\")." },
+        limit: { type: "number", description: `Max keys to return (default ${SEARCH_LIMIT}).` },
+      },
+      required: ["pattern"],
+      additionalProperties: false,
+    },
+  },
+  humanSummary: (input) => `grep source ${JSON.stringify((input as { pattern?: string }).pattern ?? "")}`,
+  run: async (input, ctx) => {
+    const { pattern, flags, locale, keyGlob, limit } = input as
+      { pattern: string; flags?: string; locale?: string; keyGlob?: string; limit?: number };
+    // Reject the stateful flags (g, y): we only test for presence, and a sticky
+    // lastIndex would make .test() skip matches across the key loop.
+    if (flags && !/^[imsu]*$/.test(flags)) throw new Error(`Invalid regex flags "${flags}" (allowed: i, m, s, u).`);
+    let re: RegExp;
+    try { re = new RegExp(pattern, flags ?? ""); } catch (e) { throw new Error(`Invalid regex: ${(e as Error).message}`); }
+    const s = ctx.load();
+    const loc = locale ?? s.config.sourceLocale;
+    const cap = Math.min(limit ?? SEARCH_LIMIT, 200);
+    const out: { key: string; locale: string; value: string; states: Record<string, string> }[] = [];
+    let truncated = false;
+    for (const key of Object.keys(s.keys).sort()) {
+      const entry = s.keys[key]!;
+      if (keyGlob && !matchesGlob(key, keyGlob)) continue;
+      const value = localeText(entry, loc);
+      if (!value || !re.test(value)) continue;
+      if (out.length >= cap) { truncated = true; break; }
+      const states: Record<string, string> = {};
+      for (const l of s.config.locales) states[l] = localeState(entry, l);
+      out.push({ key, locale: loc, value, states });
+    }
+    return { matches: out, truncated };
   },
 };
 
@@ -167,4 +224,4 @@ const readGuidance: ChatTool = {
   },
 };
 
-export const stateReadTools: ChatTool[] = [overview, searchKeys, readKey, readGuidance];
+export const stateReadTools: ChatTool[] = [overview, searchKeys, grepSource, readKey, readGuidance];

@@ -1,6 +1,6 @@
 import { readdirSync, statSync, readFileSync } from "node:fs";
 import { join, relative, resolve, isAbsolute, extname } from "node:path";
-import { ALWAYS_EXCLUDE, matchesGlob } from "../../scanner.js";
+import { ALWAYS_EXCLUDE, matchesGlob, outputExcludeGlobs } from "../../scanner.js";
 import type { ChatTool, ToolContext } from "../chat-types.js";
 
 // Claude-Code-style read-only access to the user's repository, so the assistant
@@ -24,9 +24,17 @@ const BINARY_EXT = new Set([
   ".exe", ".dll", ".so", ".dylib", ".bin", ".class", ".jar", ".wasm",
 ]);
 
+// The exported locale files live inside the project, so without this the chat
+// tools read keys straight back out of glotfile's own output. Merge the user's
+// scan excludes with the auto-derived export-target globs, mirroring the usage
+// scanner's scanOptions() so the assistant never greps its generated catalog.
 function scanGlobs(ctx: ToolContext): { include: string[]; exclude: string[] } {
-  const scan = ctx.load().config.scan;
-  return { include: scan?.include ?? [], exclude: scan?.exclude ?? [] };
+  const config = ctx.load().config;
+  const scan = config.scan;
+  return {
+    include: scan?.include ?? [],
+    exclude: [...(scan?.exclude ?? []), ...outputExcludeGlobs(config.outputs)],
+  };
 }
 
 // Walk the tree yielding repo-relative file paths, skipping always-excluded dir

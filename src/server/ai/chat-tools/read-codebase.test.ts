@@ -56,4 +56,19 @@ describe("codebase read tools", () => {
     const res = (await tool("find_files").run({ glob: "**/*.ts" }, ctx)) as { files: string[] };
     expect(res.files).not.toContain("src/a.ts");
   });
+
+  it("auto-excludes export targets so grep doesn't read keys back out of its own output", async () => {
+    mkdirSync(join(root, "src", "locale"), { recursive: true });
+    writeFileSync(join(root, "src", "locale", "en.json"), '{ "plant": { "water": "feed the plant" } }\n');
+    const state = defaultState();
+    state.config.outputs = [{ adapter: "vue-i18n-json", path: "src/locale/{locale}.json" }];
+    ctx.load = () => state;
+
+    const found = (await tool("find_files").run({ glob: "**/*.json" }, ctx)) as { files: string[] };
+    expect(found.files).not.toContain("src/locale/en.json");
+
+    const grepped = (await tool("grep_codebase").run({ pattern: "feed" }, ctx)) as { matches: { file: string }[] };
+    expect(grepped.matches.some((m) => m.file === "src/locale/en.json")).toBe(false);
+    expect(grepped.matches.some((m) => m.file === "src/a.ts")).toBe(true);
+  });
 });

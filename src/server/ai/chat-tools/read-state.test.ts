@@ -68,6 +68,43 @@ describe("state read tools", () => {
     expect(r.values.de!.state).toBe("reviewed");
   });
 
+  it("grep_source matches a regex over source text that substring search can't express", async () => {
+    const s = sproutState();
+    s.keys = {
+      "auth.sign_in": { values: { en: { value: "Sign-in to Sprout", state: "source" } } },
+      "auth.signin_alt": { values: { en: { value: "Signin reminder", state: "source" } } },
+      "plant.water": { values: { en: { value: "Water your plant", state: "source" } } },
+    };
+    const r = (await tool("grep_source").run({ pattern: "[Ss]ign-?in" }, ctxFor(s))) as
+      { matches: { key: string; value: string }[] };
+    expect(r.matches.map((m) => m.key).sort()).toEqual(["auth.sign_in", "auth.signin_alt"]);
+    expect(r.matches.find((m) => m.key === "auth.sign_in")!.value).toBe("Sign-in to Sprout");
+  });
+
+  it("grep_source is case-sensitive by default, case-insensitive with flag i", async () => {
+    const s = sproutState();
+    s.keys = {
+      "rooms.spaces": { values: { en: { value: "Spaces are bookable desks", state: "source" } } },
+      "verb.spaces": { values: { en: { value: "Add extra spaces between rows", state: "source" } } },
+    };
+    const sensitive = (await tool("grep_source").run({ pattern: "Spaces" }, ctxFor(s))) as { matches: { key: string }[] };
+    expect(sensitive.matches.map((m) => m.key)).toEqual(["rooms.spaces"]);
+    const insensitive = (await tool("grep_source").run({ pattern: "spaces", flags: "i" }, ctxFor(s))) as { matches: { key: string }[] };
+    expect(insensitive.matches.map((m) => m.key).sort()).toEqual(["rooms.spaces", "verb.spaces"]);
+  });
+
+  it("grep_source searches a target locale's translations when locale is given", async () => {
+    const r = (await tool("grep_source").run({ pattern: "Pflanze", locale: "de" }, ctx)) as
+      { matches: { key: string; locale: string }[] };
+    expect(r.matches.map((m) => m.key)).toEqual(["plant.feed"]);
+    expect(r.matches[0]!.locale).toBe("de");
+  });
+
+  it("grep_source rejects stateful flags and invalid regex", async () => {
+    await expect(tool("grep_source").run({ pattern: "x", flags: "g" }, ctx)).rejects.toThrow();
+    await expect(tool("grep_source").run({ pattern: "(" }, ctx)).rejects.toThrow();
+  });
+
   it("read_guidance returns project context, locale rules, and glossary", async () => {
     const r = (await tool("read_guidance").run({}, ctx)) as {
       projectContext: string; localeInstructions: Record<string, string>;
