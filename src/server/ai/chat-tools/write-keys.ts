@@ -61,7 +61,7 @@ const setTranslation: ChatTool = {
   def: {
     name: "set_translation",
     strict: true,
-    description: "Set or fix ONE key's translation in one target locale, and mark it reviewed. Use to correct a specific bad string the user agreed on — NOT for bulk filling (use translate for that). Does not apply to plural keys.",
+    description: "Set or fix ONE key's translation in one target locale, and mark it reviewed. Use to correct a specific bad string the user agreed on — NOT for bulk filling (use translate for that). If the locale is the source locale, this edits the source text instead and flags existing reviewed/machine translations needs-review (they may no longer match). Does not apply to plural keys.",
     schema: {
       type: "object",
       properties: {
@@ -81,6 +81,16 @@ const setTranslation: ChatTool = {
     const { key, locale, value } = input as { key: string; locale: string; value: string };
     const loc = canonLocale(locale);
     const s = ctx.load();
+    // Writing the source locale is a source edit, not a translation: route it
+    // through setSourceValue so the source keeps state `source` AND existing
+    // reviewed/machine translations are flagged needs-review (they may no
+    // longer match). setTargetValue would skip both — see the editor's same
+    // routing in api.ts PUT /keys/:key/values/:locale.
+    if (loc === s.config.sourceLocale) {
+      setSourceValue(s, key, value);
+      ctx.persist(s);
+      return { ok: true, key, locale: loc, value: value.trim(), state: "source" };
+    }
     setTargetValue(s, key, loc, value);
     ctx.persist(s);
     // Surface (don't block) glossary breaches: the user agreed to this string,

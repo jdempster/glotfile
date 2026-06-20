@@ -51,14 +51,47 @@ const iconFor = (name: string) => {
 
 function detail(tool: UiToolCall): string {
   if (tool.status === "error") return tool.error ?? "error";
-  if (tool.result === undefined || tool.result === null) return "";
-  try { return typeof tool.result === "string" ? tool.result : JSON.stringify(tool.result, null, 2); }
-  catch { return String(tool.result); }
+  const raw = tool.result;
+  if (raw === undefined || raw === null) return "";
+  // Pretty-print as indented JSON: objects directly, and strings that are
+  // themselves JSON after parsing. Plain (non-JSON) strings pass through as-is.
+  if (typeof raw === "string") {
+    try { return JSON.stringify(JSON.parse(raw), null, 2); }
+    catch { return raw; }
+  }
+  try { return JSON.stringify(raw, null, 2); }
+  catch { return String(raw); }
 }
 </script>
 
 <template>
   <div :class="message.role === 'user' ? 'flex justify-end' : 'flex flex-col gap-1.5'">
+    <!-- Message body first — the model narrates what it's about to do ("here's
+         what I'll do"), then the tool rows below show it happening. Only render
+         when there's text or an error, so tool-only turns don't leave an empty
+         bubble behind. -->
+    <div
+      v-if="hasBody"
+      :class="[
+        'rounded-lg px-3 py-2 text-sm',
+        message.role === 'user'
+          ? 'max-w-[44rem] border border-primary-border bg-primary-soft text-foreground'
+          : 'w-full border border-border bg-muted',
+      ]"
+    >
+      <div
+        v-if="message.role === 'assistant' && html"
+        class="prose prose-sm dark:prose-invert max-w-none break-words prose-hr:my-3 prose-hr:border-border"
+        v-html="html"
+      />
+      <div v-else-if="message.text" class="whitespace-pre-wrap break-words">{{ message.text }}</div>
+
+      <div v-if="message.error" class="mt-1 flex items-start gap-1.5 text-xs text-destructive">
+        <AlertTriangle class="mt-0.5 size-3.5 shrink-0" />
+        <span>{{ message.error }}</span>
+      </div>
+    </div>
+
     <!-- Tool activity (assistant): quiet rows, deliberately NOT wrapped in a
          bubble — they read as a subtle activity log, not a stack of cards. -->
     <div v-if="message.tools.length" class="flex flex-col gap-0.5 pl-2 text-xs text-muted-foreground">
@@ -94,31 +127,7 @@ function detail(tool: UiToolCall): string {
 
         <span v-else-if="tool.status === 'declined'" class="block opacity-70">Skipped.</span>
 
-        <pre v-if="expanded[tool.id]" class="mt-1 max-h-60 overflow-auto rounded bg-muted p-1.5 text-[11px] leading-snug text-foreground">{{ detail(tool) }}</pre>
-      </div>
-    </div>
-
-    <!-- Message body — only when there's text or an error, so tool-only turns
-         don't leave an empty bubble behind. -->
-    <div
-      v-if="hasBody"
-      :class="[
-        'rounded-lg px-3 py-2 text-sm',
-        message.role === 'user'
-          ? 'max-w-[44rem] border border-primary-border bg-primary-soft text-foreground'
-          : 'w-full border border-border bg-muted',
-      ]"
-    >
-      <div
-        v-if="message.role === 'assistant' && html"
-        class="prose prose-sm dark:prose-invert max-w-none break-words prose-hr:my-3 prose-hr:border-border"
-        v-html="html"
-      />
-      <div v-else-if="message.text" class="whitespace-pre-wrap break-words">{{ message.text }}</div>
-
-      <div v-if="message.error" class="mt-1 flex items-start gap-1.5 text-xs text-destructive">
-        <AlertTriangle class="mt-0.5 size-3.5 shrink-0" />
-        <span>{{ message.error }}</span>
+        <pre v-if="expanded[tool.id]" class="mt-1 max-h-[32rem] overflow-auto rounded bg-muted p-2.5 font-mono text-xs leading-relaxed text-foreground">{{ detail(tool) }}</pre>
       </div>
     </div>
   </div>

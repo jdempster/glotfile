@@ -19,6 +19,33 @@ describe("ChatMessage", () => {
     expect(wrapper.text()).toContain("project overview");
   });
 
+  it("renders the message text before the tool rows", () => {
+    const message: UiMessage = {
+      role: "assistant",
+      text: "Let me check the untranslated keys.",
+      tools: [{ id: "t1", name: "filter_view", humanSummary: "filter to untranslated", status: "done" }],
+    };
+    const wrapper = mount(ChatMessage, { props: { message } });
+    const html = wrapper.html();
+    expect(html.indexOf("Let me check the untranslated keys")).toBeLessThan(html.indexOf("filter to untranslated"));
+  });
+
+  it("pretty-prints the tool result as indented monospace JSON when expanded", async () => {
+    const message: UiMessage = {
+      role: "assistant", text: "",
+      tools: [{ id: "t1", name: "overview", humanSummary: "project overview", status: "done", result: { keyCount: 3, locales: ["en", "de"] } }],
+    };
+    const wrapper = mount(ChatMessage, { props: { message } });
+    await wrapper.find("button").trigger("click");
+    const pre = wrapper.find("pre");
+    expect(pre.exists()).toBe(true);
+    // Pretty-printed: indented, multi-line JSON rather than a single-line dump.
+    expect(pre.text()).toContain('"keyCount": 3');
+    expect(pre.text()).toContain("\n  ");
+    // Monospace and roomy.
+    expect(pre.classes()).toContain("font-mono");
+  });
+
   it("shows Apply/Skip buttons for a pending-confirm tool", () => {
     const message: UiMessage = {
       role: "assistant", text: "",
