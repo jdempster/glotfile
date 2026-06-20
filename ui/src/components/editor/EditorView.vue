@@ -28,7 +28,7 @@ import { useSelection } from "@/selection.js";
 import { ALL_CHECKS, CHECK_LABELS, STATE_LABELS, PLURALITY_LABELS, DEFAULT_ENABLED, indexIssuesByKey } from "@/checks.js";
 import type { CheckId } from "@/types.js";
 import type { StateFacet, PluralityFacet } from "@/filter.js";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { scanInfo, runScan, scanPending } from "@/scanStatus.js";
 import KeyRow from "./KeyRow.vue";
 import MultilingualLocalePicker from "./MultilingualLocalePicker.vue";
@@ -440,6 +440,14 @@ function onKeydown(e: KeyboardEvent) {
   const typing = !!(t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable));
   const overlayOpen = !!document.querySelector('[role="listbox"],[role="menu"],[role="dialog"]');
 
+  // Cmd/Ctrl+I toggles the key-details panel ("Get Info"). The modifier means it
+  // can't insert a character, so it works even while typing (not gated on `typing`).
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "i") {
+    e.preventDefault();
+    detailPanelToggle.toggle();
+    return;
+  }
+
   // "/" jumps to the search box (the classic search hotkey).
   if (e.key === "/" && !typing && !overlayOpen && !e.metaKey && !e.ctrlKey && !e.altKey) {
     e.preventDefault();
@@ -704,22 +712,27 @@ async function onCreated(key: string) {
           @translate="translateOpen = true"
           @build-context="contextOpen = true"
         />
-        <Button
-          size="sm"
-          variant="ghost"
-          role="switch"
-          :aria-checked="detailPanelOpen"
-          :aria-label="detailPanelOpen ? 'Hide key details' : 'Show key details'"
-          :class="[
-            'ml-auto w-8 px-0 max-[1080px]:hidden',
-            detailPanelOpen
-              ? 'bg-accent text-foreground shadow-[inset_0_1px_2px_rgb(0_0_0/0.25)] hover:bg-accent'
-              : 'text-muted-foreground',
-          ]"
-          @click="detailPanelToggle.toggle()"
-        >
-          <PanelRight class="size-4" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <Button
+              size="sm"
+              variant="ghost"
+              role="switch"
+              :aria-checked="detailPanelOpen"
+              :aria-label="detailPanelOpen ? 'Hide key details' : 'Show key details'"
+              :class="[
+                'ml-auto w-8 px-0 max-[1080px]:hidden',
+                detailPanelOpen
+                  ? 'bg-accent text-foreground shadow-[inset_0_1px_2px_rgb(0_0_0/0.25)] hover:bg-accent'
+                  : 'text-muted-foreground',
+              ]"
+              @click="detailPanelToggle.toggle()"
+            >
+              <PanelRight class="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{{ detailPanelOpen ? "Hide key details" : "Show key details" }} · ⌘/Ctrl + I</TooltipContent>
+        </Tooltip>
       </div>
 
       <!-- Body: virtualized list + detail panel -->

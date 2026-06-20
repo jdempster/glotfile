@@ -2,6 +2,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Kbd from "@/components/ui/Kbd.vue";
 import { shortcuts } from "@/hotkeys.js";
+import { available as chatAvailable } from "@/chat";
 
 // v-model:open is owned by the shortcutsOpen singleton in App.vue. Escape closes
 // via the Dialog primitive; "?" toggles it shut via the global listener (§7).
@@ -28,6 +29,14 @@ const open = defineModel<boolean>("open", { required: true });
         <li class="flex items-center justify-between py-1 text-sm">
           <span>Search keys</span>
           <span class="flex items-center gap-1"><Kbd>/</Kbd></span>
+        </li>
+        <li class="flex items-center justify-between py-1 text-sm">
+          <span>Toggle key details</span>
+          <span class="flex items-center gap-1"><Kbd>⌘/Ctrl</Kbd><Kbd>I</Kbd></span>
+        </li>
+        <li v-if="chatAvailable" class="flex items-center justify-between py-1 text-sm">
+          <span>Lingo</span>
+          <span class="flex items-center gap-1"><Kbd>⌘/Ctrl</Kbd><Kbd>J</Kbd></span>
         </li>
       </ul>
     </DialogContent>
