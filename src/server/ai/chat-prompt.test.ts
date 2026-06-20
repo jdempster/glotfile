@@ -25,11 +25,13 @@ describe("chat system prompt", () => {
     expect(projectSnapshot(s)).toContain("Project context: NOT set");
   });
 
-  it("system prompt explains the role, propose-and-wait, and the interview", () => {
+  it("system prompt explains the role and the agree-the-task-then-carry-it-out behaviour", () => {
     const prompt = buildChatSystemPrompt();
     expect(prompt).toContain("Lingo");
-    expect(prompt).toContain("PROPOSE, then WAIT");
-    expect(prompt.toLowerCase()).toContain("one question");
+    expect(prompt).toContain("agree the task");
+    expect(prompt.toLowerCase()).toContain("green light");
+    // Approval is per-task, so a multi-step task runs without re-asking per edit.
+    expect(prompt).toContain("not fresh approval for each individual edit");
   });
 
   it("the system prompt is static — the volatile snapshot is delivered separately", () => {
