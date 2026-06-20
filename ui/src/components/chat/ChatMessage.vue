@@ -72,7 +72,7 @@ function shortLabel(tool: UiToolCall): string {
 // Tools whose effect is setting a single text value. For these the expanded view
 // shows the applied value rather than a raw JSON dump.
 const EDIT_TOOLS = new Set([
-  "set_source_text", "add_key", "set_translation",
+  "set_source_text", "add_key",
   "set_key_context", "set_project_context", "set_locale_instruction",
 ]);
 
@@ -85,7 +85,6 @@ function appliedValue(tool: UiToolCall): string | null {
   if (r) {
     if (tool.name === "set_source_text" && typeof r.source === "string") return r.source;
     if (tool.name === "add_key" && typeof r.source === "string") return r.source;
-    if (tool.name === "set_translation" && typeof r.value === "string") return r.value;
     if (tool.name === "set_key_context" && typeof r.context === "string") return r.context;
     if (tool.name === "set_project_context" && typeof r.projectContext === "string") return r.projectContext;
     if (tool.name === "set_locale_instruction" && typeof r.instruction === "string") return r.instruction;

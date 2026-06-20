@@ -41,47 +41,6 @@ describe("key write tools", () => {
     expect(typeof res.noteId).toBe("string");
   });
 
-  it("set_translation sets the value, marks it reviewed, and canonicalises the locale", async () => {
-    await tool("set_translation").run({ key: "plant.feed", locale: "DE", value: "Düngen" }, ctx);
-    expect(state.keys["plant.feed"]!.values.de).toEqual({ value: "Düngen", state: "reviewed" });
-  });
-
-  it("set_translation on the source locale edits the source and flags translations needs-review", async () => {
-    const res = await tool("set_translation").run({ key: "plant.feed", locale: "en", value: "Feed the plant" }, ctx) as { state: string };
-    // Writing the source locale is a source edit: the text updates and stays
-    // `source` (not flipped to `reviewed`)...
-    expect(state.keys["plant.feed"]!.values.en).toEqual({ value: "Feed the plant", state: "source" });
-    expect(res.state).toBe("source");
-    // ...and the existing machine translation is now stale.
-    expect(state.keys["plant.feed"]!.values.de!.state).toBe("needs-review");
-  });
-
-  it("set_translation_state flips review state without touching the text", async () => {
-    await tool("set_translation_state").run({ key: "plant.feed", locale: "de", state: "reviewed" }, ctx);
-    expect(state.keys["plant.feed"]!.values.de).toEqual({ value: "Füttern", state: "reviewed" });
-  });
-
-  it("set_translation warns (but does not block) when a translation breaches the glossary", async () => {
-    state.glossary = [{ term: "Feed", doNotTranslate: true }];
-    const res = await tool("set_translation").run(
-      { key: "plant.feed", locale: "de", value: "Düngen" }, ctx,
-    ) as { ok: boolean; glossaryWarnings?: string[] };
-    // The write still lands...
-    expect(state.keys["plant.feed"]!.values.de!.value).toBe("Düngen");
-    expect(res.ok).toBe(true);
-    // ...but the dropped do-not-translate term is surfaced back to the assistant.
-    expect(res.glossaryWarnings).toHaveLength(1);
-    expect(res.glossaryWarnings![0]).toContain("Feed");
-  });
-
-  it("set_translation returns no warnings when the glossary is honored", async () => {
-    state.glossary = [{ term: "Feed", doNotTranslate: true }];
-    const res = await tool("set_translation").run(
-      { key: "plant.feed", locale: "de", value: "Feed läuft" }, ctx,
-    ) as { glossaryWarnings?: string[] };
-    expect(res.glossaryWarnings).toBeUndefined();
-  });
-
   it("add_key_tag adds a tag and is idempotent", async () => {
     await tool("add_key_tag").run({ key: "plant.feed", tag: "cta" }, ctx);
     await tool("add_key_tag").run({ key: "plant.feed", tag: "cta" }, ctx);

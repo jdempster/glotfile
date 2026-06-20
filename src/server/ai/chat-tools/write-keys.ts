@@ -1,11 +1,12 @@
-import { setMetadata, addNote, setTargetValue, setKeyState, setSourceValue, createKey, canonLocale } from "../../state.js";
-import { glossaryViolations } from "../../glossary.js";
+import { setMetadata, addNote, setSourceValue, createKey } from "../../state.js";
 import type { ChatTool, ToolContext } from "../chat-types.js";
 
-// Per-key writes: the string-level guidance and fixes the assistant can make.
-// All single, reversible edits, so no confirm gate (the conversational
-// propose-then-wait covers approval). Each loads, mutates, persists the WHOLE
-// state.
+// Per-key writes: source text, context, notes, tags, and length budget — the
+// per-string guidance the assistant authors. Lingo never writes translations
+// itself (that's the app's own translate/review controls); these tools only
+// shape the SOURCE and the guidance around it. All single, reversible edits, so
+// no confirm gate (the conversational propose-then-wait covers approval). Each
+// loads, mutates, persists the WHOLE state.
 
 const setKeyContext: ChatTool = {
   def: {
@@ -54,89 +55,6 @@ const addKeyNote: ChatTool = {
     const note = addNote(s, key, text.trim());
     ctx.persist(s);
     return { ok: true, key, noteId: note.id };
-  },
-};
-
-const setTranslation: ChatTool = {
-  def: {
-    name: "set_translation",
-    strict: true,
-    description: "Set or fix ONE key's translation in one target locale, and mark it reviewed. Use to correct a specific bad string the user agreed on — NOT for bulk filling (use translate for that). If the locale is the source locale, this edits the source text instead and flags existing reviewed/machine translations needs-review (they may no longer match). Does not apply to plural keys.",
-    schema: {
-      type: "object",
-      properties: {
-        key: { type: "string" },
-        locale: { type: "string", description: "Target locale (BCP-47, e.g. \"de\")." },
-        value: { type: "string", description: "The translated text." },
-      },
-      required: ["key", "locale", "value"],
-      additionalProperties: false,
-    },
-  },
-  humanSummary: (input) => {
-    const i = input as { key?: string; locale?: string };
-    return `set ${canonLocale(i.locale ?? "")} for ${i.key ?? ""}`;
-  },
-  run: async (input, ctx: ToolContext) => {
-    const { key, locale, value } = input as { key: string; locale: string; value: string };
-    const loc = canonLocale(locale);
-    const s = ctx.load();
-    // Writing the source locale is a source edit, not a translation: route it
-    // through setSourceValue so the source keeps state `source` AND existing
-    // reviewed/machine translations are flagged needs-review (they may no
-    // longer match). setTargetValue would skip both — see the editor's same
-    // routing in api.ts PUT /keys/:key/values/:locale.
-    if (loc === s.config.sourceLocale) {
-      setSourceValue(s, key, value);
-      ctx.persist(s);
-      return { ok: true, key, locale: loc, value: value.trim(), state: "source" };
-    }
-    setTargetValue(s, key, loc, value);
-    ctx.persist(s);
-    // Surface (don't block) glossary breaches: the user agreed to this string,
-    // but a do-not-translate or forced term it ignored is worth flagging back so
-    // the assistant can offer to fix it and keep terminology consistent.
-    const source = s.keys[key]?.values[s.config.sourceLocale]?.value ?? "";
-    const violations = source ? glossaryViolations(source, value, loc, s.glossary) : [];
-    const result: Record<string, unknown> = { ok: true, key, locale: loc, value: value.trim(), state: "reviewed" };
-    if (violations.length) {
-      result.glossaryWarnings = violations.map((v) =>
-        v.kind === "do-not-translate"
-          ? `glossary: "${v.term}" should stay verbatim (keep "${v.expected}")`
-          : `glossary: "${v.term}" should translate to "${v.expected}"`,
-      );
-    }
-    return result;
-  },
-};
-
-const setTranslationState: ChatTool = {
-  def: {
-    name: "set_translation_state",
-    strict: true,
-    description: "Change a translation's review state without changing its text: mark it reviewed (approved), needs-review (flag for a human), or machine. Use to approve a translation the user is happy with, or to flag one that looks off.",
-    schema: {
-      type: "object",
-      properties: {
-        key: { type: "string" },
-        locale: { type: "string", description: "Target locale (BCP-47)." },
-        state: { type: "string", enum: ["reviewed", "needs-review", "machine"] },
-      },
-      required: ["key", "locale", "state"],
-      additionalProperties: false,
-    },
-  },
-  humanSummary: (input) => {
-    const i = input as { key?: string; locale?: string; state?: string };
-    return `mark ${i.key ?? ""} @ ${canonLocale(i.locale ?? "")} ${i.state ?? ""}`;
-  },
-  run: async (input, ctx: ToolContext) => {
-    const { key, locale, state } = input as { key: string; locale: string; state: "reviewed" | "needs-review" | "machine" };
-    const loc = canonLocale(locale);
-    const s = ctx.load();
-    setKeyState(s, key, loc, state);
-    ctx.persist(s);
-    return { ok: true, key, locale: loc, state };
   },
 };
 
@@ -280,4 +198,4 @@ const addKey: ChatTool = {
   },
 };
 
-export const keyWriteTools: ChatTool[] = [setKeyContext, addKeyNote, setTranslation, setTranslationState, addKeyTag, removeKeyTag, setMaxLength, setSourceText, addKey];
+export const keyWriteTools: ChatTool[] = [setKeyContext, addKeyNote, addKeyTag, removeKeyTag, setMaxLength, setSourceText, addKey];

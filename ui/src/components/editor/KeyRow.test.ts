@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import KeyRow from "./KeyRow.vue";
 import TranslationRow from "./TranslationRow.vue";
 import { translate, bulkMeta } from "@/api.js";
+import { copyText } from "@/lib/utils";
 import type { Issue, KeyEntry } from "@/types.js";
 
 // KeyRow's TranslationRows use Tooltip, which needs a TooltipProvider ancestor.
@@ -24,6 +25,11 @@ vi.mock("@/api.js", () => ({
 }));
 
 vi.mock("@/components/ui/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+
+vi.mock("@/lib/utils", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/utils")>();
+  return { ...actual, copyText: vi.fn(() => Promise.resolve()) };
+});
 
 const entry: KeyEntry = {
   tags: ["nav"],
@@ -208,6 +214,36 @@ describe("KeyRow row click selects", () => {
     const before = w.findComponent(KeyRow).emitted("select")!.length;
     await textarea.trigger("click");
     expect(w.findComponent(KeyRow).emitted("select")!.length).toBe(before);
+  });
+});
+
+describe("KeyRow copy key", () => {
+  const baseProps = {
+    keyName: "home.title",
+    entry,
+    sourceLocale: "en",
+    locales: ["en", "fr", "de"],
+    selected: false,
+    issues: [] as Issue[],
+  };
+
+  it("copies the key name and flips the button to a copied state", async () => {
+    const w = mountInProvider(baseProps);
+    const btn = w.find('[data-testid="copy-key"]');
+    expect(btn.exists()).toBe(true);
+    expect(btn.attributes("aria-label")).toBe("Copy key");
+    await btn.trigger("click");
+    await flushPromises();
+    expect(copyText).toHaveBeenCalledWith("home.title");
+    expect(w.find('[data-testid="copy-key"]').attributes("aria-label")).toBe("Copied");
+  });
+
+  it("does not select or toggle the row when the copy button is clicked", async () => {
+    const w = mountInProvider(baseProps);
+    await w.find('[data-testid="copy-key"]').trigger("click");
+    const row = w.findComponent(KeyRow);
+    expect(row.emitted("select")).toBeFalsy();
+    expect(row.emitted("toggle-select")).toBeFalsy();
   });
 });
 

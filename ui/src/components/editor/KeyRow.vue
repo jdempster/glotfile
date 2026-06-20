@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import {
-  MoreVertical, Image as ImageIcon, Pencil, Trash2, AlertTriangle, Sparkles, Tag, LoaderCircle, RefreshCw, Check, Languages,
+  MoreVertical, Image as ImageIcon, Pencil, Trash2, AlertTriangle, Sparkles, Tag, LoaderCircle, RefreshCw, Check, Languages, Copy,
 } from "lucide-vue-next";
 import type { Issue, KeyEntry } from "@/types.js";
 import { bulkMeta, deleteKey, patchKey, translate } from "@/api.js";
@@ -26,7 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import TranslationRow from "./TranslationRow.vue";
-import { cn } from "@/lib/utils";
+import { cn, copyText } from "@/lib/utils";
 
 const props = defineProps<{
   keyName: string;
@@ -43,6 +43,20 @@ const keyNameHtml = computed(() => {
   const escaped = props.keyName.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return escaped.replace(/\./g, "<wbr>.");
 });
+
+// Copy the key name to the clipboard; the icon and tooltip flip to a "copied"
+// state briefly as feedback, matching the detail panel's copy affordance.
+const keyCopied = ref(false);
+let keyCopiedTimer: ReturnType<typeof setTimeout> | undefined;
+function copyKeyName() {
+  copyText(props.keyName)
+    .then(() => {
+      keyCopied.value = true;
+      clearTimeout(keyCopiedTimer);
+      keyCopiedTimer = setTimeout(() => (keyCopied.value = false), 1500);
+    })
+    .catch(() => {});
+}
 
 const issuesByLocale = computed(() => {
   const m = new Map<string, Issue[]>();
@@ -180,7 +194,7 @@ async function doDelete() {
 <template>
   <div
     :class="cn(
-      'relative flex border-b-2 border-border bg-card',
+      'group relative flex border-b-2 border-border bg-card',
       selected && 'z-[1]',
     )"
     role="button"
@@ -253,7 +267,21 @@ async function doDelete() {
         <div
           class="break-words pl-6 pr-7 font-mono text-[13.5px] font-semibold tracking-tight cursor-pointer"
           @click.stop="onCheckboxClick($event)"
-        ><span v-html="keyNameHtml" /><ImageIcon v-if="entry.screenshot" class="ml-1.5 inline size-3.5 align-[-2px] text-muted-foreground" aria-label="Has screenshot" /></div>
+        ><span v-html="keyNameHtml" /><ImageIcon v-if="entry.screenshot" class="ml-1.5 inline size-3.5 align-[-2px] text-muted-foreground" aria-label="Has screenshot" /><Tooltip disable-closing-trigger>
+          <TooltipTrigger as-child>
+            <button
+              type="button"
+              data-testid="copy-key"
+              class="ml-1.5 inline-flex size-4 items-center justify-center rounded align-[-3px] text-muted-foreground opacity-0 transition hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100"
+              :aria-label="keyCopied ? 'Copied' : 'Copy key'"
+              @click.stop="copyKeyName"
+            >
+              <Check v-if="keyCopied" class="size-3 text-primary" />
+              <Copy v-else class="size-3" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>{{ keyCopied ? "Copied" : "Copy key" }}</TooltipContent>
+        </Tooltip></div>
 
         <div
           v-if="entry.plural || entry.skipTranslate || (issues?.length ?? 0) > 0"
