@@ -35,10 +35,8 @@ describe("key write tools", () => {
     expect(state.keys["plant.feed"]!.context).toBeUndefined();
   });
 
-  it("add_key_note appends a note and returns its id", async () => {
-    const res = await tool("add_key_note").run({ key: "plant.feed", text: "Confirm with design." }, ctx) as { noteId: string };
-    expect(state.keys["plant.feed"]!.notes?.map((n) => n.text)).toEqual(["Confirm with design."]);
-    expect(typeof res.noteId).toBe("string");
+  it("does not expose an add_key_note tool — Lingo has no access to the human Notes field", () => {
+    expect(keyWriteTools.find((t) => t.def.name === "add_key_note")).toBeUndefined();
   });
 
   it("add_key_tag adds a tag and is idempotent", async () => {

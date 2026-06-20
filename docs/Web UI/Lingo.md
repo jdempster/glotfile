@@ -23,9 +23,9 @@ Lingo opens beside your work, and remembers the layout you last used:
 
 - **Understand your project** — locales, keys, translation progress, and the guidance and glossary you already have.
 - **Read your codebase** — search and read files (your README, components, locale files) to learn what your product actually is. This is **read-only** and scoped to your project directory.
-- **Author guidance** — write your project context note and per-language rules for you, so the AI translator has the background it needs. See How Translation Works.
+- **Author guidance** — write your project context and per-language rules for you, so the AI translator has the background it needs. See How Translation Works.
 - **Build your glossary** — add terms that must translate consistently or stay verbatim, and accept or dismiss suggested terms.
-- **Sharpen each string** — write the per-key context note that disambiguates a key, set tags and a length budget, fix or reword source text, and add new keys.
+- **Sharpen each string** — write the per-key context that disambiguates a key, set tags and a length budget, fix or reword source text, and add new keys.
 
 **What Lingo won't do:** Lingo never writes or reviews translations — single or bulk. When you want strings translated or a whole language reviewed, run it from the app's own translate/review controls; Lingo's job is to make that run come out better, not to do it for you.
 

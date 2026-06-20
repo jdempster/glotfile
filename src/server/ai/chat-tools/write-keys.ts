@@ -1,9 +1,10 @@
-import { setMetadata, addNote, setSourceValue, createKey } from "../../state.js";
+import { setMetadata, setSourceValue, createKey } from "../../state.js";
 import type { ChatTool, ToolContext } from "../chat-types.js";
 
-// Per-key writes: source text, context, notes, tags, and length budget — the
-// per-string guidance the assistant authors. Lingo never writes translations
-// itself (that's the app's own translate/review controls); these tools only
+// Per-key writes: source text, context, tags, and length budget — the per-string
+// guidance the assistant authors. Lingo never writes translations itself (that's
+// the app's own translate/review controls), and it has no access to the human
+// Notes field (that's for the developer's own annotations); these tools only
 // shape the SOURCE and the guidance around it. All single, reversible edits, so
 // no confirm gate (the conversational propose-then-wait covers approval). Each
 // loads, mutates, persists the WHOLE state.
@@ -12,7 +13,7 @@ const setKeyContext: ChatTool = {
   def: {
     name: "set_key_context",
     strict: true,
-    description: "Set the human context note for ONE key — what the string means, where it appears, and anything a translator needs to disambiguate it (e.g. button vs. heading, who the subject is). This is the single biggest per-string quality lever. Pass empty text to clear it. Writing context marks it human-authored.",
+    description: "Set the context for ONE key — what the string means, where it appears, and anything a translator needs to disambiguate it (e.g. button vs. heading, who the subject is). This is the single biggest per-string quality lever. Pass empty text to clear it. Writing context marks it human-authored.",
     schema: {
       type: "object",
       properties: {
@@ -30,31 +31,6 @@ const setKeyContext: ChatTool = {
     setMetadata(s, key, { context: context.trim() });
     ctx.persist(s);
     return { ok: true, key, context: s.keys[key]?.context ?? "" };
-  },
-};
-
-const addKeyNote: ChatTool = {
-  def: {
-    name: "add_key_note",
-    strict: true,
-    description: "Add a freeform note to a key — an observation, a question for the developer, or a translation decision worth recording. Notes accumulate; they don't replace each other.",
-    schema: {
-      type: "object",
-      properties: {
-        key: { type: "string" },
-        text: { type: "string" },
-      },
-      required: ["key", "text"],
-      additionalProperties: false,
-    },
-  },
-  humanSummary: (input) => `note on ${(input as { key?: string }).key ?? ""}`,
-  run: async (input, ctx: ToolContext) => {
-    const { key, text } = input as { key: string; text: string };
-    const s = ctx.load();
-    const note = addNote(s, key, text.trim());
-    ctx.persist(s);
-    return { ok: true, key, noteId: note.id };
   },
 };
 
@@ -198,4 +174,4 @@ const addKey: ChatTool = {
   },
 };
 
-export const keyWriteTools: ChatTool[] = [setKeyContext, addKeyNote, addKeyTag, removeKeyTag, setMaxLength, setSourceText, addKey];
+export const keyWriteTools: ChatTool[] = [setKeyContext, addKeyTag, removeKeyTag, setMaxLength, setSourceText, addKey];

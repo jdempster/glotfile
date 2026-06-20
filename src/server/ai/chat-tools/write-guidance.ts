@@ -10,7 +10,7 @@ const setProjectContext: ChatTool = {
   def: {
     name: "set_project_context",
     strict: true,
-    description: "Set the project-wide context note injected into the translator's system prompt for EVERY language — what the product is, who uses it, how domain terms should be read, and the overall tone. Pass empty text to clear it. This applies globally; use set_locale_instruction for per-language rules.",
+    description: "Set the project-wide context injected into the translator's system prompt for EVERY language — what the product is, who uses it, how domain terms should be read, and the overall tone. Pass empty text to clear it. This applies globally; use set_locale_instruction for per-language rules.",
     schema: {
       type: "object",
       properties: { text: { type: "string", description: "The project context prose (plain English; instructs the translator, not shown to end users)." } },

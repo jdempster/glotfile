@@ -163,7 +163,7 @@ const grepSource: ChatTool = {
 const readKey: ChatTool = {
   def: {
     name: "read_key",
-    description: "Read one key in full: source text, human context, notes, tags, max length, whether it is plural or has a screenshot, and every locale's value/forms + state.",
+    description: "Read one key in full: source text, context, tags, max length, whether it is plural or has a screenshot, and every locale's value/forms + state.",
     schema: {
       type: "object",
       properties: { key: { type: "string" } },
@@ -188,7 +188,6 @@ const readKey: ChatTool = {
       source: sourceText(entry, s.config.sourceLocale),
       context: entry.context,
       contextSource: entry.contextSource,
-      notes: (entry.notes ?? []).map((n) => n.text),
       tags: entry.tags ?? [],
       maxLength: entry.maxLength,
       skipTranslate: entry.skipTranslate ?? false,

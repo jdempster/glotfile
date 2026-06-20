@@ -8,7 +8,7 @@ import type { ChatTool, ToolContext } from "../chat-types.js";
 type FileRef = Reference & { file: string };
 
 // Where a key is actually used in the user's codebase, with code snippets around
-// each call site — so the assistant can ground context notes, glossary calls and
+// each call site — so the assistant can ground context, glossary calls and
 // translation reasoning in how a string is really used, not just its text. Reads
 // the persisted scan cache (.glotfile/usage.json); no scan == indexed:false.
 
