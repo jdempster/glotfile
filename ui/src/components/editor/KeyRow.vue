@@ -3,8 +3,8 @@ import { ref, computed } from "vue";
 import {
   MoreVertical, Image as ImageIcon, Pencil, Trash2, AlertTriangle, Sparkles, Tag, LoaderCircle, RefreshCw, Check, CheckCheck, Languages, Copy, Crosshair, Eraser, RotateCcw,
 } from "lucide-vue-next";
-import type { Issue, KeyEntry } from "@/types.js";
-import { bulkClear, bulkMeta, bulkState, deleteKey, patchKey, translate } from "@/api.js";
+import type { Issue, KeyEntry, TranslateError } from "@/types.js";
+import { bulkClear, bulkMeta, bulkState, deleteKey, patchKey, translateStream } from "@/api.js";
 import { missingTargetLocales, staleTargetLocales } from "@/missing.js";
 import { toast } from "@/components/ui/toast";
 import {
@@ -93,6 +93,17 @@ const confirmingClear = ref(false);
 const busy = ref(false);
 const translatingMissing = ref(false);
 const retranslatingStale = ref(false);
+// Live per-button progress, driven by the SSE stream. {done,total} fills the
+// in-button bar (0→1) while each language's cell updates in realtime; total is
+// seeded optimistically from the locale count, then the "start" event confirms it.
+const missingProgress = ref({ done: 0, total: 0 });
+const staleProgress = ref({ done: 0, total: 0 });
+const missingFraction = computed(() =>
+  missingProgress.value.total > 0 ? missingProgress.value.done / missingProgress.value.total : 0,
+);
+const staleFraction = computed(() =>
+  staleProgress.value.total > 0 ? staleProgress.value.done / staleProgress.value.total : 0,
+);
 
 // Target locales this key's "translate missing" call would fill.
 const missingLocales = computed(() =>
@@ -106,16 +117,27 @@ const staleLocales = computed(() =>
 
 async function retranslateStale() {
   retranslatingStale.value = true;
+  staleProgress.value = { done: 0, total: staleLocales.value.length };
+  let written = 0;
+  let errors: TranslateError[] = [];
   try {
-    const res = await translate({
-      onlyMissing: false,
-      force: true,
-      keyGlob: props.keyName,
-      locales: staleLocales.value,
-    });
-    if (res.errors?.length) toast.error(res.errors[0]?.error ?? "Translation failed");
-    else toast.success(`Re-translated ${res.written} stale value${res.written === 1 ? "" : "s"}`);
-    emit("changed");
+    // onlyMissing:false + force:true overwrites the stale (needs-review) values,
+    // scoped to this key and just its stale locales. Each progress event ticks
+    // the bar and emits "changed" so the cell fills the instant it lands.
+    for await (const ev of translateStream(undefined, [props.keyName], staleLocales.value, { onlyMissing: false, force: true })) {
+      if (ev.type === "start") staleProgress.value = { done: 0, total: ev.total };
+      else if (ev.type === "progress") {
+        staleProgress.value = { done: ev.done, total: ev.total };
+        emit("changed");
+      } else if (ev.type === "done") {
+        written = ev.written;
+        errors = ev.errors;
+        staleProgress.value = { done: staleProgress.value.total, total: staleProgress.value.total };
+        emit("changed");
+      }
+    }
+    if (errors.length) toast.error(errors[0]?.error ?? "Translation failed");
+    else toast.success(`Re-translated ${written} stale value${written === 1 ? "" : "s"}`);
   } catch (e) {
     toast.error(`Translate failed: ${(e as Error).message}`);
   } finally {
@@ -125,11 +147,24 @@ async function retranslateStale() {
 
 async function translateMissing() {
   translatingMissing.value = true;
+  missingProgress.value = { done: 0, total: missingLocales.value.length };
+  let written = 0;
+  let errors: TranslateError[] = [];
   try {
-    const res = await translate({ onlyMissing: true, keyGlob: props.keyName });
-    if (res.errors?.length) toast.error(res.errors[0]?.error ?? "Translation failed");
-    else toast.success(`Translated ${res.written} missing value${res.written === 1 ? "" : "s"}`);
-    emit("changed");
+    for await (const ev of translateStream(undefined, [props.keyName], undefined, { onlyMissing: true })) {
+      if (ev.type === "start") missingProgress.value = { done: 0, total: ev.total };
+      else if (ev.type === "progress") {
+        missingProgress.value = { done: ev.done, total: ev.total };
+        emit("changed");
+      } else if (ev.type === "done") {
+        written = ev.written;
+        errors = ev.errors;
+        missingProgress.value = { done: missingProgress.value.total, total: missingProgress.value.total };
+        emit("changed");
+      }
+    }
+    if (errors.length) toast.error(errors[0]?.error ?? "Translation failed");
+    else toast.success(`Translated ${written} missing value${written === 1 ? "" : "s"}`);
   } catch (e) {
     toast.error(`Translate failed: ${(e as Error).message}`);
   } finally {
@@ -410,45 +445,58 @@ async function doClear() {
           </Tooltip>
         </div>
 
-        <!-- Inline Translate-missing; doubles as the in-flight indicator (testid flips). -->
-        <Tooltip v-if="missingLocales.length > 0">
+        <!-- Inline Translate-missing; doubles as the in-flight indicator (testid flips).
+             Stays mounted while a run is in flight even after the last missing cell
+             fills (missingLocales → 0), so its in-button progress bar survives to 100%. -->
+        <Tooltip v-if="missingLocales.length > 0 || translatingMissing">
           <TooltipTrigger as-child>
             <button
               type="button"
               :data-testid="translatingMissing ? 'translating-missing' : 'translate-missing-btn'"
               :disabled="translatingMissing"
-              class="ml-6 mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-primary-border bg-primary-soft px-2.5 py-1.5 text-[11.5px] font-semibold text-primary transition hover:brightness-95 disabled:opacity-80"
+              class="relative ml-6 mt-2.5 inline-flex items-center gap-1.5 overflow-hidden rounded-lg border border-primary-border bg-primary-soft px-2.5 py-1.5 text-[11.5px] font-semibold text-primary transition hover:brightness-95 disabled:opacity-80"
               @click.stop="translateMissing"
             >
               <LoaderCircle v-if="translatingMissing" class="size-3 animate-spin" />
               <Sparkles v-else class="size-3" />
-              {{ translatingMissing ? "Translating…" : `Translate ${missingLocales.length} missing` }}
+              {{ translatingMissing ? (missingProgress.total ? `Translating ${missingProgress.done}/${missingProgress.total}…` : "Translating…") : `Translate ${missingLocales.length} missing` }}
+              <!-- In-button progress bar (grows left→right as each language lands), echoing the toast timer bar. -->
+              <span
+                v-if="translatingMissing"
+                data-testid="translate-missing-progress"
+                class="pointer-events-none absolute inset-x-0 bottom-0 h-[3px] origin-left bg-primary transition-transform duration-300 ease-out"
+                :style="{ transform: `scaleX(${missingFraction})` }"
+                aria-hidden="true"
+              />
             </button>
           </TooltipTrigger>
           <TooltipContent>Translate the {{ missingLocales.length }} missing language{{ missingLocales.length > 1 ? "s" : "" }} for this key</TooltipContent>
         </Tooltip>
-        <!-- In-flight feedback when nothing is "missing" by the prop's measure. -->
-        <span
-          v-else-if="translatingMissing"
-          data-testid="translating-missing"
-          class="ml-6 mt-2.5 inline-flex items-center gap-1 text-[11px] text-primary"
-        >
-          <LoaderCircle class="size-3 animate-spin" /> Translating…
-        </span>
 
-        <!-- Re-translate stale: shown when the source changed and targets need re-review. -->
-        <Tooltip v-if="staleLocales.length > 0">
+        <!-- Re-translate stale: shown when the source changed and targets need re-review.
+             Like translate-missing, it stays mounted for the whole run — a force
+             re-translation flips needs-review → machine on the first reload, emptying
+             staleLocales, and the in-button progress bar must not vanish with it. -->
+        <Tooltip v-if="staleLocales.length > 0 || retranslatingStale">
           <TooltipTrigger as-child>
             <button
               type="button"
               data-testid="retranslate-stale-btn"
               :disabled="retranslatingStale"
-              class="ml-6 mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-[11.5px] font-semibold text-amber-700 transition hover:brightness-95 disabled:opacity-80 dark:text-amber-300"
+              class="relative ml-6 mt-2.5 inline-flex items-center gap-1.5 overflow-hidden rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-[11.5px] font-semibold text-amber-700 transition hover:brightness-95 disabled:opacity-80 dark:text-amber-300"
               @click.stop="retranslateStale"
             >
               <LoaderCircle v-if="retranslatingStale" class="size-3 animate-spin" />
               <RefreshCw v-else class="size-3" />
-              {{ retranslatingStale ? "Re-translating…" : `Re-translate ${staleLocales.length} stale` }}
+              {{ retranslatingStale ? (staleProgress.total ? `Re-translating ${staleProgress.done}/${staleProgress.total}…` : "Re-translating…") : `Re-translate ${staleLocales.length} stale` }}
+              <!-- In-button progress bar, matching the translate-missing affordance. -->
+              <span
+                v-if="retranslatingStale"
+                data-testid="retranslate-stale-progress"
+                class="pointer-events-none absolute inset-x-0 bottom-0 h-[3px] origin-left bg-amber-500 transition-transform duration-300 ease-out"
+                :style="{ transform: `scaleX(${staleFraction})` }"
+                aria-hidden="true"
+              />
             </button>
           </TooltipTrigger>
           <TooltipContent>Re-translate the {{ staleLocales.length }} stale language{{ staleLocales.length > 1 ? "s" : "" }} for this key</TooltipContent>

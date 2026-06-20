@@ -1037,6 +1037,25 @@ describe("POST /translate/stream (SSE progress stream)", () => {
     expect(saved.keys.k1.values.fr).toMatchObject({ value: "Salut" });
     expect(saved.keys.k2.values?.fr).toBeUndefined();
   });
+
+  it("re-translates and overwrites an existing value only when force=true (onlyMissing=false)", async () => {
+    const { app, file } = setupWithBatchProvider();
+    const headers = { "content-type": "application/json" };
+    await app.request("/keys", { method: "POST", headers, body: JSON.stringify({ key: "k1", value: "Hi" }) });
+    // Give fr an existing value so it is no longer "missing" — the inline
+    // re-translate-stale path drives exactly this onlyMissing:false + force flow.
+    await app.request("/keys/k1/values/fr", { method: "PUT", headers, body: JSON.stringify({ value: "Hola" }) });
+
+    // onlyMissing:false alone leaves the existing value untouched — nothing written.
+    const noForce = await collectSSE(await streamReq(app, { keys: ["k1"], locales: ["fr"], onlyMissing: false }));
+    expect((noForce.find((e) => e.event === "done")?.data as { written: number }).written).toBe(0);
+    expect(JSON.parse(readFileSync(file, "utf8")).keys.k1.values.fr).toMatchObject({ value: "Hola" });
+
+    // force:true overwrites it with a fresh machine translation.
+    const forced = await collectSSE(await streamReq(app, { keys: ["k1"], locales: ["fr"], onlyMissing: false, force: true }));
+    expect((forced.find((e) => e.event === "done")?.data as { written: number }).written).toBe(1);
+    expect(JSON.parse(readFileSync(file, "utf8")).keys.k1.values.fr).toMatchObject({ value: "Salut" });
+  });
 });
 
 describe("GET /export/preview", () => {

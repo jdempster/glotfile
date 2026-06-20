@@ -155,13 +155,17 @@ export async function* chatStream(message: string, signal?: AbortSignal, selecte
   }
 }
 
-export async function* translateStream(signal?: AbortSignal, keys?: string[], locales?: string[]): AsyncGenerator<TranslateEvent> {
+export async function* translateStream(signal?: AbortSignal, keys?: string[], locales?: string[], opts?: { onlyMissing?: boolean; force?: boolean }): AsyncGenerator<TranslateEvent> {
   let res: Response;
   // Scope goes in the POST body, never the URL: a large filtered key set pushed
   // the GET request line past Node's 16KB header limit → HTTP 431.
-  const body: { keys?: string[]; locales?: string[] } = {};
+  const body: { keys?: string[]; locales?: string[]; onlyMissing?: boolean; force?: boolean } = {};
   if (keys?.length) body.keys = keys;
   if (locales?.length) body.locales = locales;
+  // Omit when default (onlyMissing) so the existing bulk callers send the same
+  // body they always have; only the inline re-translate-stale path flips these.
+  if (opts?.onlyMissing === false) body.onlyMissing = false;
+  if (opts?.force) body.force = true;
   try {
     res = await fetch("/api/translate/stream", {
       method: "POST",

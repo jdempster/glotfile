@@ -1186,9 +1186,14 @@ export function createApi(deps: ApiDeps): Hono {
     const body = await c.req.json().catch(() => ({}));
     const keys = Array.isArray(body.keys) && body.keys.length ? (body.keys as string[]).filter(Boolean) : undefined;
     const locales = Array.isArray(body.locales) && body.locales.length ? (body.locales as string[]).filter(Boolean) : undefined;
+    // Default to filling only missing targets; force=true (with onlyMissing=false)
+    // re-translates and overwrites existing values — the inline "re-translate
+    // stale" path mirrors the blocking /translate endpoint's force semantics.
+    const onlyMissing = body.onlyMissing !== false;
+    const force = body.force === true;
     return streamSSE(c, (stream) => withTranslateLock(async () => {
       const s = load();
-      const reqs = selectRequests(s, { onlyMissing: true, keys, locales });
+      const reqs = selectRequests(s, { onlyMissing, keys, locales });
 
       if (!reqs.length) {
         await stream.writeSSE({ event: "done", data: JSON.stringify({ written: 0, errors: [] }) });
@@ -1236,7 +1241,7 @@ export function createApi(deps: ApiDeps): Hono {
           // Re-load from disk so any user edits made during the translation
           // (value changes, context updates, saves) are not overwritten.
           const fresh = load();
-          const { written, errors } = applyResults(fresh, reqs, batchResults);
+          const { written, errors } = applyResults(fresh, reqs, batchResults, force);
           persist(fresh);
           totalWritten += written;
           allErrors.push(...errors);
