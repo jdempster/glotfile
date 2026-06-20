@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, shallowRef, computed, watch, onMounted, onUnmounted } from "vue";
 import { useVirtualizer } from "@tanstack/vue-virtual";
-import { Search, Plus, ListFilter, FileDown, Sparkles, X, TriangleAlert, ScanSearch, Loader2, Check, Minus, CircleQuestionMark, PanelRight } from "lucide-vue-next";
+import { Search, Plus, ListFilter, FileDown, Sparkles, X, TriangleAlert, ScanSearch, Loader2, Check, Minus, CircleQuestionMark, PanelRight, ArrowUpDown } from "lucide-vue-next";
 import type { State, Issue } from "@/types.js";
 import { filterKeys, type KeyFilter } from "@/filter.js";
 import { filterFromUrl, filterToUrl, type SortMode } from "@/filterUrl.js";
@@ -502,7 +502,7 @@ async function onCreated(key: string) {
             ref="searchInput"
             v-model="filter.text"
             placeholder="Search… try key:, value:, context:, /regex/"
-            class="h-8 w-72 pl-8 pr-14"
+            class="h-8 w-72 pl-8 pr-14 text-xs shadow-none"
             @keydown.esc="filter.text = ''"
           />
           <button
@@ -585,7 +585,8 @@ async function onCreated(key: string) {
         </Button>
 
         <Select v-model="sort">
-          <SelectTrigger class="h-8 w-[160px]">
+          <SelectTrigger class="h-8 w-auto gap-1.5 bg-background text-xs font-medium shadow-none hover:bg-accent hover:text-accent-foreground">
+            <ArrowUpDown class="size-4 opacity-60" />
             <SelectValue placeholder="Sort" />
           </SelectTrigger>
           <SelectContent>
@@ -613,17 +614,6 @@ async function onCreated(key: string) {
           </Button>
           <Button size="sm" @click="addOpen = true">
             <Plus class="size-4" /> Add key
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            class="w-8 px-0 max-[1080px]:hidden"
-            role="switch"
-            :aria-checked="detailPanelOpen"
-            :aria-label="detailPanelOpen ? 'Hide key details' : 'Show key details'"
-            @click="detailPanelToggle.toggle()"
-          >
-            <PanelRight class="size-4" :class="detailPanelOpen ? '' : 'text-muted-foreground'" />
           </Button>
         </div>
       </div>
@@ -714,6 +704,22 @@ async function onCreated(key: string) {
           @translate="translateOpen = true"
           @build-context="contextOpen = true"
         />
+        <Button
+          size="sm"
+          variant="ghost"
+          role="switch"
+          :aria-checked="detailPanelOpen"
+          :aria-label="detailPanelOpen ? 'Hide key details' : 'Show key details'"
+          :class="[
+            'ml-auto w-8 px-0 max-[1080px]:hidden',
+            detailPanelOpen
+              ? 'bg-accent text-foreground shadow-[inset_0_1px_2px_rgb(0_0_0/0.25)] hover:bg-accent'
+              : 'text-muted-foreground',
+          ]"
+          @click="detailPanelToggle.toggle()"
+        >
+          <PanelRight class="size-4" />
+        </Button>
       </div>
 
       <!-- Body: virtualized list + detail panel -->

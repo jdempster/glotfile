@@ -214,7 +214,9 @@ const localeSummary = computed(() => {
                 :aria-label="chatOpen ? 'Close Lingo' : 'Open Lingo'"
                 :class="[
                   'flex size-8 items-center justify-center rounded-md transition-colors',
-                  chatOpen ? 'bg-primary text-primary-foreground' : 'bg-primary/15 text-primary hover:bg-primary/25',
+                  chatOpen
+                    ? 'bg-accent text-primary shadow-[inset_0_1px_2px_rgb(0_0_0/0.25)] hover:bg-accent'
+                    : 'text-primary hover:bg-accent',
                 ]"
                 @click="toggleChat"
               >
