@@ -156,10 +156,8 @@ onMounted(() => {
           :class="i === 0 ? '' : (m.role === 'user' || messages[i - 1].role === 'user' ? 'mt-3' : 'mt-1.5')"
         />
         <div v-if="thinking" data-thinking class="mt-2 flex justify-start">
-          <div class="flex items-center gap-1 rounded-lg border border-border bg-muted px-3 py-3" aria-label="Lingo is thinking">
-            <span class="size-1.5 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.3s]" />
-            <span class="size-1.5 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.15s]" />
-            <span class="size-1.5 animate-bounce rounded-full bg-muted-foreground/60" />
+          <div class="flex items-center rounded-lg border border-border bg-muted px-3 py-2.5" role="status" aria-label="Lingo is thinking">
+            <span class="loader text-muted-foreground/70" />
           </div>
         </div>
       </div>
@@ -189,3 +187,31 @@ onMounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Three-dot "wave" thinking loader (adapted from css-loaders.com l3).
+   currentColor lets it inherit the theme via a text-* utility on the element. */
+.loader {
+  display: inline-block;
+  width: 34px;
+  aspect-ratio: 2;
+  --_g: no-repeat radial-gradient(circle closest-side, currentColor 90%, transparent);
+  background:
+    var(--_g) 0% 50%,
+    var(--_g) 50% 50%,
+    var(--_g) 100% 50%;
+  background-size: calc(100% / 3) 50%;
+  animation: lingo-thinking 1s infinite linear;
+}
+
+@keyframes lingo-thinking {
+  20% { background-position: 0% 0%, 50% 50%, 100% 50%; }
+  40% { background-position: 0% 100%, 50% 0%, 100% 50%; }
+  60% { background-position: 0% 50%, 50% 100%, 100% 0%; }
+  80% { background-position: 0% 50%, 50% 50%, 100% 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loader { animation: none; }
+}
+</style>
