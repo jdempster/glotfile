@@ -10,7 +10,7 @@ import { fetchState, fetchChecks, usedKeys } from "@/api.js";
 import { onExternalChange } from "@/liveReload";
 import { activeKey } from "@/chat";
 import { pendingFilter, pendingKey } from "@/drilldown.js";
-import { nextRowIndex } from "./keyNav.js";
+import { nextRowIndex, scrollAlignForRow } from "./keyNav.js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -377,19 +377,45 @@ function visibleRowIndices(): number[] {
 }
 
 // Keep the selected row on screen whenever the selection changes — arrow-key
-// nav, a row click, AND Lingo's select_key all set selectedKey, so routing the
-// scroll through one watcher means every path reliably "focuses" its key.
-// align "auto" is a no-op when the row is already visible, so visible
-// selections never jump. flush "post" runs it after the row list has rendered.
+// nav, Lingo's select_key, and drilldown navigation all set selectedKey, so
+// routing the scroll through one watcher means every path reliably "focuses"
+// its key. A fully-visible row stays put (no jump); otherwise we anchor its top
+// to the viewport top so the key name is visible even for rows taller than the
+// viewport. flush "post" runs it after the row list has rendered.
+//
+// Clicking a row is the exception: the row is already under the cursor, so
+// selectKey() sets this flag to skip the scroll once and avoid yanking the list.
+let suppressScrollOnce = false;
 function scrollSelectedIntoView() {
+  if (suppressScrollOnce) {
+    suppressScrollOnce = false;
+    return;
+  }
   const key = selectedKey.value;
   if (!key) return;
   const idx = rows.value.indexOf(key);
-  if (idx !== -1) virtualizer.value.scrollToIndex(idx, { align: "auto" });
+  if (idx === -1) return;
+  const el = parent.value;
+  const item = el ? virtualizer.value.getVirtualItems().find((it) => it.index === idx) : undefined;
+  // When the row is offscreen (not currently rendered) we have no measurement —
+  // bring it in top-aligned. Otherwise decide from its measured position.
+  const align =
+    el && item
+      ? scrollAlignForRow({
+          start: item.start,
+          size: item.size,
+          scrollTop: el.scrollTop,
+          viewport: el.clientHeight,
+        })
+      : "start";
+  if (align) virtualizer.value.scrollToIndex(idx, { align });
 }
 watch(selectedKey, scrollSelectedIntoView, { flush: "post" });
 
 function selectKey(key: string) {
+  // No-op if unchanged, so the flag is only armed when the watcher will fire.
+  if (selectedKey.value === key) return;
+  suppressScrollOnce = true;
   selectedKey.value = key;
 }
 

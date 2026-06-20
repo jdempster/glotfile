@@ -24,3 +24,25 @@ export function nextRowIndex(opts: {
   // No selection and no viewport info: start at the end nearest the direction.
   return down ? 0 : count - 1;
 }
+
+// How to scroll the selected row into view. Returns null to leave the scroll
+// alone (the row is already fully on screen, so selecting it shouldn't jump),
+// or "start" to anchor the row's top to the viewport top.
+//
+// We deliberately never use the virtualizer's "auto" alignment: auto snaps a
+// not-fully-visible row to the *nearest* edge, which is the bottom when you
+// move down — leaving the row's top mid-viewport. And a row taller than the
+// viewport can never satisfy auto, so it scrolls past the row's top entirely,
+// hiding the key name. Always anchoring the top keeps the key name visible.
+export function scrollAlignForRow(opts: {
+  // Row top offset and height, from the virtualizer's measurements.
+  start: number;
+  size: number;
+  // Current scroll position and viewport height of the scroll container.
+  scrollTop: number;
+  viewport: number;
+}): "start" | null {
+  const { start, size, scrollTop, viewport } = opts;
+  const fullyVisible = start >= scrollTop && start + size <= scrollTop + viewport;
+  return fullyVisible ? null : "start";
+}

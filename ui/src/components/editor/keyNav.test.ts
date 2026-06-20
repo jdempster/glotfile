@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { nextRowIndex } from "./keyNav.js";
+import { nextRowIndex, scrollAlignForRow } from "./keyNav.js";
 
 describe("nextRowIndex", () => {
   // List of 10 rows; viewport currently shows rows 3..6.
@@ -48,5 +48,34 @@ describe("nextRowIndex", () => {
 
   it("returns -1 for an empty list", () => {
     expect(nextRowIndex({ down: true, cur: -1, visible: [], count: 0 })).toBe(-1);
+  });
+});
+
+describe("scrollAlignForRow", () => {
+  // Viewport: 200px..900px (scrollTop 200, clientHeight 700).
+  const view = { scrollTop: 200, viewport: 700 };
+
+  it("leaves a fully-visible row alone", () => {
+    expect(scrollAlignForRow({ start: 300, size: 100, ...view })).toBe(null);
+  });
+
+  it("top-aligns a row below the viewport", () => {
+    expect(scrollAlignForRow({ start: 1000, size: 100, ...view })).toBe("start");
+  });
+
+  it("top-aligns a row above the viewport", () => {
+    expect(scrollAlignForRow({ start: 50, size: 100, ...view })).toBe("start");
+  });
+
+  it("top-aligns a row partially clipped at the bottom edge", () => {
+    // start visible, but its bottom (start+size) spills past the viewport bottom.
+    expect(scrollAlignForRow({ start: 850, size: 200, ...view })).toBe("start");
+  });
+
+  it("top-aligns a row taller than the viewport instead of showing its bottom", () => {
+    // The regression: a 1070px row in a 732px viewport can never be fully
+    // visible. "auto" used to resolve to the bottom edge and scroll past the
+    // row's top; we always anchor its top so the key name stays on screen.
+    expect(scrollAlignForRow({ start: 0, size: 1070, scrollTop: 0, viewport: 732 })).toBe("start");
   });
 });
