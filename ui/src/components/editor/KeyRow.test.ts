@@ -4,7 +4,7 @@ import { h, nextTick } from "vue";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import KeyRow from "./KeyRow.vue";
 import TranslationRow from "./TranslationRow.vue";
-import { translate, bulkMeta } from "@/api.js";
+import { translate, bulkMeta, bulkClear, bulkState } from "@/api.js";
 import { copyText } from "@/lib/utils";
 import type { Issue, KeyEntry } from "@/types.js";
 
@@ -22,6 +22,8 @@ vi.mock("@/api.js", () => ({
   setState: vi.fn(() => Promise.resolve({})),
   translate: vi.fn(() => Promise.resolve({ requested: 0, written: 0, errors: [] })),
   bulkMeta: vi.fn(() => Promise.resolve({ updated: 1 })),
+  bulkClear: vi.fn(() => Promise.resolve({ updated: 1 })),
+  bulkState: vi.fn(() => Promise.resolve({ updated: 1 })),
 }));
 
 vi.mock("@/components/ui/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -247,6 +249,35 @@ describe("KeyRow copy key", () => {
   });
 });
 
+describe("KeyRow focus key", () => {
+  const baseProps = {
+    keyName: "home.title",
+    entry,
+    sourceLocale: "en",
+    locales: ["en", "fr", "de"],
+    selected: false,
+    issues: [] as Issue[],
+  };
+
+  it("emits focus-key with the key name when the inline focus button is clicked", async () => {
+    const w = mountInProvider(baseProps);
+    const btn = w.find('[data-testid="focus-key"]');
+    expect(btn.exists()).toBe(true);
+    await btn.trigger("click");
+    const ev = w.findComponent(KeyRow).emitted("focus-key");
+    expect(ev).toBeTruthy();
+    expect(ev![0]).toEqual(["home.title"]);
+  });
+
+  it("does not select or toggle the row when the focus button is clicked", async () => {
+    const w = mountInProvider(baseProps);
+    await w.find('[data-testid="focus-key"]').trigger("click");
+    const row = w.findComponent(KeyRow);
+    expect(row.emitted("select")).toBeFalsy();
+    expect(row.emitted("toggle-select")).toBeFalsy();
+  });
+});
+
 describe("KeyRow skip-translate", () => {
   const baseProps = {
     keyName: "home.title",
@@ -279,5 +310,49 @@ describe("KeyRow skip-translate", () => {
     await flushPromises();
     expect(bulkMeta).toHaveBeenCalledWith(["home.title"], { skipTranslate: true });
     expect(w.findComponent(KeyRow).emitted("changed")).toBeTruthy();
+  });
+});
+
+describe("KeyRow row-level status & clear actions", () => {
+  const baseProps = {
+    keyName: "home.title",
+    entry,
+    sourceLocale: "en",
+    locales: ["en", "fr", "de"],
+    selected: false,
+    issues: [] as Issue[],
+    // Multilingual scope: both targets, source excluded — mirrors the editor's bulk scope.
+    scopeLocales: ["fr", "de"],
+    scopeLabel: "all 2 targets",
+  };
+
+  it("exposes Mark reviewed, Mark needs-review and Clear translations in the row menu", async () => {
+    const w = mount(TooltipProvider, {
+      attachTo: document.body,
+      slots: { default: () => h(KeyRow, baseProps) },
+    });
+    await w.get('[aria-label="Key actions"]').trigger("click");
+    await nextTick();
+    expect(document.querySelector('[data-testid="row-mark-reviewed"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="row-mark-needs-review"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="row-clear"]')).not.toBeNull();
+  });
+
+  it("marks the key's scope locales reviewed, then reloads", async () => {
+    const w = mountInProvider(baseProps);
+    const row = w.findComponent(KeyRow);
+    await (row.vm as unknown as { markState: (s: string) => Promise<void> }).markState("reviewed");
+    await flushPromises();
+    expect(bulkState).toHaveBeenCalledWith(["home.title"], ["fr", "de"], "reviewed");
+    expect(row.emitted("changed")).toBeTruthy();
+  });
+
+  it("clears translations for the key's scope locales, then reloads", async () => {
+    const w = mountInProvider(baseProps);
+    const row = w.findComponent(KeyRow);
+    await (row.vm as unknown as { doClear: () => Promise<void> }).doClear();
+    await flushPromises();
+    expect(bulkClear).toHaveBeenCalledWith(["home.title"], ["fr", "de"]);
+    expect(row.emitted("changed")).toBeTruthy();
   });
 });

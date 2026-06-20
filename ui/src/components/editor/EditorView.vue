@@ -420,6 +420,14 @@ function selectKey(key: string) {
   selectedKey.value = key;
 }
 
+// "Focus key" (row menu): isolate one key in the list — clear every filter facet
+// and search its name only — then select it. Reuses applyDrilldown's reset-from-
+// defaults so no stale facet survives.
+function focusKey(key: string) {
+  applyDrilldown({ text: `key:${key}` });
+  selectKey(key);
+}
+
 // The search box, focused by the "/" hotkey.
 const searchInput = ref<{ $el: HTMLInputElement } | null>(null);
 function focusSearch() {
@@ -754,10 +762,13 @@ async function onCreated(key: string) {
                   :selected="selectedKey === rows[vitem.index]"
                   :issues="issuesByKey.get(rows[vitem.index]!) ?? []"
                   :checked="selection.has(rows[vitem.index]!)"
+                  :scope-locales="scopeLocales"
+                  :scope-label="scopeLabel"
                   @select="selectKey(rows[vitem.index]!)"
                   @changed="reload"
                   @renamed="(to: string) => onRenamed(rows[vitem.index]!, to)"
                   @filter-tag="(t: string) => (filter.text = t)"
+                  @focus-key="(k: string) => focusKey(k)"
                   @toggle-select="(p: { shift: boolean }) => onRowToggle(rows[vitem.index]!, p.shift)"
                 />
               </div>
@@ -800,6 +811,7 @@ async function onCreated(key: string) {
           :usage-revision="usageRevision"
           :style="{ width: `${detailPanelWidth}px` }"
           @changed="reload"
+          @focus-key="(k: string) => focusKey(k)"
         />
       </div>
 

@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import {
-  MoreVertical, Image as ImageIcon, Pencil, Trash2, AlertTriangle, Sparkles, Tag, LoaderCircle, RefreshCw, Check, Languages, Copy,
+  MoreVertical, Image as ImageIcon, Pencil, Trash2, AlertTriangle, Sparkles, Tag, LoaderCircle, RefreshCw, Check, CheckCheck, Languages, Copy, Crosshair, Eraser, RotateCcw,
 } from "lucide-vue-next";
 import type { Issue, KeyEntry } from "@/types.js";
-import { bulkMeta, deleteKey, patchKey, translate } from "@/api.js";
+import { bulkClear, bulkMeta, bulkState, deleteKey, patchKey, translate } from "@/api.js";
 import { missingTargetLocales, staleTargetLocales } from "@/missing.js";
 import { toast } from "@/components/ui/toast";
 import {
@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   Dialog,
@@ -28,7 +29,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import TranslationRow from "./TranslationRow.vue";
 import { cn, copyText } from "@/lib/utils";
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   keyName: string;
   entry: KeyEntry;
   sourceLocale: string;
@@ -37,7 +38,15 @@ const props = defineProps<{
   selected: boolean;
   checked?: boolean;
   issues?: Issue[];
-}>();
+  // Target locales the row's Clear / Mark-state actions apply to, plus a label —
+  // mirrors the editor's bulk-selection scope (the bilingual target, or all
+  // targets in multilingual view) so a single-row action matches the bulk bar.
+  scopeLocales?: string[];
+  scopeLabel?: string;
+}>(), {
+  scopeLocales: () => [],
+  scopeLabel: "",
+});
 
 const keyNameHtml = computed(() => {
   const escaped = props.keyName.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -74,11 +83,13 @@ const emit = defineEmits<{
   (e: "toggle-select", payload: { shift: boolean }): void;
   (e: "renamed", to: string): void;
   (e: "filter-tag", tag: string): void;
+  (e: "focus-key", key: string): void;
 }>();
 
 const renaming = ref(false);
 const renameDraft = ref("");
 const confirmingDelete = ref(false);
+const confirmingClear = ref(false);
 const busy = ref(false);
 const translatingMissing = ref(false);
 const retranslatingStale = ref(false);
@@ -189,12 +200,41 @@ async function doDelete() {
     busy.value = false;
   }
 }
+
+// Status + clear act on the same scope the bulk bar would for this one key:
+// the bilingual target, or all targets in multilingual view.
+async function markState(state: "reviewed" | "needs-review") {
+  busy.value = true;
+  try {
+    await bulkState([props.keyName], props.scopeLocales, state);
+    toast.success(`Marked ${state}${props.scopeLabel ? ` · ${props.scopeLabel}` : ""}`);
+    emit("changed");
+  } catch (e) {
+    toast.error(`Update failed: ${(e as Error).message}`);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function doClear() {
+  busy.value = true;
+  try {
+    await bulkClear([props.keyName], props.scopeLocales);
+    confirmingClear.value = false;
+    toast.success("Cleared translations");
+    emit("changed");
+  } catch (e) {
+    toast.error(`Clear failed: ${(e as Error).message}`);
+  } finally {
+    busy.value = false;
+  }
+}
 </script>
 
 <template>
   <div
     :class="cn(
-      'group relative flex border-b-2 border-border bg-card',
+      'group/key relative flex border-b-2 border-border bg-card',
       selected && 'z-[1]',
     )"
     role="button"
@@ -251,11 +291,26 @@ async function doDelete() {
               >
                 <Sparkles class="size-4" /> Translate missing ({{ missingLocales.length }})
               </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+              <DropdownMenuItem data-testid="row-mark-reviewed" :disabled="busy" @select="markState('reviewed')">
+                <CheckCheck class="size-4" /> Mark reviewed
+              </DropdownMenuItem>
+              <DropdownMenuItem data-testid="row-mark-needs-review" :disabled="busy" @select="markState('needs-review')">
+                <RotateCcw class="size-4" /> Mark needs-review
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
               <DropdownMenuItem @select="openRename">
                 <Pencil class="size-4" /> Rename
               </DropdownMenuItem>
               <DropdownMenuItem data-testid="toggle-skip" :disabled="busy" @select="toggleSkip">
                 <Languages class="size-4" /> {{ entry.skipTranslate ? "Include in translation" : "Skip translation" }}
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+              <DropdownMenuItem data-testid="row-clear" :disabled="busy" @select="confirmingClear = true">
+                <Eraser class="size-4" /> Clear translations
               </DropdownMenuItem>
               <DropdownMenuItem class="text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive" @select="confirmingDelete = true">
                 <Trash2 class="size-4" /> Delete
@@ -267,12 +322,12 @@ async function doDelete() {
         <div
           class="break-words pl-6 pr-7 font-mono text-[13.5px] font-semibold tracking-tight cursor-pointer"
           @click.stop="onCheckboxClick($event)"
-        ><span v-html="keyNameHtml" /><ImageIcon v-if="entry.screenshot" class="ml-1.5 inline size-3.5 align-[-2px] text-muted-foreground" aria-label="Has screenshot" /><Tooltip disable-closing-trigger>
+        ><span v-html="keyNameHtml" /><Tooltip disable-closing-trigger>
           <TooltipTrigger as-child>
             <button
               type="button"
               data-testid="copy-key"
-              class="ml-1.5 inline-flex size-4 items-center justify-center rounded align-[-3px] text-muted-foreground opacity-0 transition hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100"
+              class="ml-1.5 inline-flex size-4 items-center justify-center rounded align-[-3px] text-muted-foreground opacity-0 transition hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/key:opacity-100"
               :aria-label="keyCopied ? 'Copied' : 'Copy key'"
               @click.stop="copyKeyName"
             >
@@ -281,10 +336,23 @@ async function doDelete() {
             </button>
           </TooltipTrigger>
           <TooltipContent>{{ keyCopied ? "Copied" : "Copy key" }}</TooltipContent>
+        </Tooltip><Tooltip>
+          <TooltipTrigger as-child>
+            <button
+              type="button"
+              data-testid="focus-key"
+              class="ml-0.5 inline-flex size-4 items-center justify-center rounded align-[-3px] text-muted-foreground opacity-0 transition hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/key:opacity-100"
+              aria-label="Focus key"
+              @click.stop="emit('focus-key', keyName)"
+            >
+              <Crosshair class="size-3" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Focus — show only this key</TooltipContent>
         </Tooltip></div>
 
         <div
-          v-if="entry.plural || entry.skipTranslate || (issues?.length ?? 0) > 0"
+          v-if="entry.plural || entry.skipTranslate || entry.screenshot || (issues?.length ?? 0) > 0"
           class="mt-1.5 flex flex-wrap items-center gap-1.5 pl-6"
         >
           <span
@@ -292,6 +360,18 @@ async function doDelete() {
             class="inline-flex items-center gap-1 rounded-md border border-primary-border bg-primary/[0.09] px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-primary"
             >PLURAL<span class="font-medium normal-case text-muted-foreground">· {{ entry.plural.arg }}</span></span
           >
+          <Tooltip v-if="entry.screenshot">
+            <TooltipTrigger as-child>
+              <span
+                data-testid="screenshot-badge"
+                class="inline-flex items-center justify-center rounded-md border border-border-soft bg-muted px-1.5 py-0.5 text-muted-foreground"
+                aria-label="Has screenshot"
+              >
+                <ImageIcon class="size-3" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Has screenshot</TooltipContent>
+          </Tooltip>
           <Tooltip v-if="entry.skipTranslate">
             <TooltipTrigger as-child>
               <span
@@ -423,6 +503,22 @@ async function doDelete() {
         <DialogFooter>
           <Button variant="outline" :disabled="busy" @click="confirmingDelete = false">Cancel</Button>
           <Button variant="destructive" :disabled="busy" @click="doDelete">Delete</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog v-model:open="confirmingClear">
+      <DialogContent class="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Clear translations</DialogTitle>
+          <DialogDescription>
+            Clear translations for <code class="break-all rounded bg-muted px-1 py-0.5 font-mono text-sm">{{ keyName }}</code>
+            in {{ scopeLabel }}? The source string is kept. This cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" :disabled="busy" @click="confirmingClear = false">Cancel</Button>
+          <Button variant="destructive" :disabled="busy" data-testid="row-clear-confirm" @click="doClear">Clear translations</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

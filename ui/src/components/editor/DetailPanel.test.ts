@@ -65,6 +65,20 @@ describe("DetailPanel plural conversion", () => {
   });
 });
 
+describe("DetailPanel focus button", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("emits focus-key with the key name when the Focus button is clicked", async () => {
+    const w = mountPanel({ keyName: "home.title", entry: scalarEntry });
+    const focusBtn = w.find('[data-testid="focus-key"]');
+    expect(focusBtn.exists()).toBe(true);
+    await focusBtn.trigger("click");
+    const ev = w.emitted("focus-key");
+    expect(ev).toBeTruthy();
+    expect(ev![0]).toEqual(["home.title"]);
+  });
+});
+
 describe("DetailPanel usage links", () => {
   beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); });
 

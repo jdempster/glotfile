@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, watch, computed } from "vue";
-import { FileText, Image as ImageIcon, Upload, Trash2, AlertTriangle, RefreshCw, Sparkles, Code2, ExternalLink, Asterisk, Info, Tags, Ruler, Folder, BellOff } from "lucide-vue-next";
+import { FileText, Image as ImageIcon, Upload, Trash2, AlertTriangle, RefreshCw, Sparkles, Code2, ExternalLink, Asterisk, Info, Tags, Ruler, Folder, BellOff, Crosshair } from "lucide-vue-next";
 import type { Issue, KeyEntry } from "@/types.js";
 import { patchKey, uploadScreenshot, deleteScreenshot, convertToPlural, convertToScalar, buildContextStream, keyUsage, suppressFinding, type KeyUsage, type KeyUsageRef } from "@/api.js";
 import { buildOpenUrl } from "@/editor.js";
@@ -27,7 +27,7 @@ const props = defineProps<{
   // panel to re-fetch the selected key's usage even though its key name is unchanged.
   usageRevision?: number;
 }>();
-const emit = defineEmits<{ (e: "changed"): void }>();
+const emit = defineEmits<{ (e: "changed"): void; (e: "focus-key", key: string): void }>();
 
 const fmtDate = (iso?: string) => (iso ? new Date(iso).toLocaleString() : "—");
 
@@ -306,7 +306,22 @@ async function save() {
     <div v-else class="flex flex-col gap-4 px-5 pb-10 pt-[18px]">
       <!-- Key identity -->
       <div class="flex flex-col gap-0.5">
-        <span class="text-[10.5px] font-bold uppercase tracking-wide text-muted-foreground">Key</span>
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-[10.5px] font-bold uppercase tracking-wide text-muted-foreground">Key</span>
+          <Tooltip>
+            <TooltipTrigger as-child>
+              <button
+                type="button"
+                data-testid="focus-key"
+                class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] font-semibold text-primary transition-colors hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                @click="emit('focus-key', keyName!)"
+              >
+                <Crosshair class="size-3.5" /> Focus
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Show only this key — clears the other filters</TooltipContent>
+          </Tooltip>
+        </div>
         <Tooltip disable-closing-trigger>
           <TooltipTrigger as-child>
             <span
