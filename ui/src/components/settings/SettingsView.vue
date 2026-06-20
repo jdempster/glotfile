@@ -27,6 +27,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import LanguageLabel from "@/components/lang/LanguageLabel.vue";
+import { compareByLanguageName } from "@/languages.js";
 import OutputEditor from "./OutputEditor.vue";
 import ScanListField from "./ScanListField.vue";
 import SyncWizard from "@/components/sync/SyncWizard.vue";
@@ -613,8 +614,11 @@ function removeLocale(loc: string) {
 }
 
 // ── Translation guidance ─────────────────────────────────────────────────────
-// Per-locale rules apply to the languages we translate INTO (everything but the source).
-const targetLocales = computed(() => draft.locales.filter((l) => l !== draft.sourceLocale));
+// Per-locale rules apply to the languages we translate INTO (everything but the
+// source), listed A-Z by language name to match the editor and locale picker.
+const targetLocales = computed(() =>
+  draft.locales.filter((l) => l !== draft.sourceLocale).sort(compareByLanguageName),
+);
 
 function setLocaleInstruction(loc: string, value: string) {
   const next = { ...draft.localeInstructions };

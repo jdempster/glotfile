@@ -14,8 +14,13 @@ export interface KeyFilter {
   needsAttention: boolean;
   // Show only keys whose source-locale value is blank or absent.
   emptySource: boolean;
-  // When set, state facets and issue facets are scoped to this one locale.
+  // When set, state facets and issue facets are scoped to this one locale
+  // (the bilingual target).
   locale?: string;
+  // When set, state + issue facets are scoped to this set of locales (the
+  // multilingual view's selected subset). Takes precedence over `locale`; an
+  // empty/absent value means "every locale", the cross-all default.
+  locales?: string[];
   // Show only keys whose context was AI-generated and not yet manually reviewed.
   aiContextUnreviewed: boolean;
   // Show only keys with no code references in the last scan (the `usedKeys` set
@@ -36,12 +41,20 @@ function isMissing(entry: KeyEntry, locale: string): boolean {
     : (lv.value ?? "").trim() === "";
 }
 
-function matchesState(state: State, entry: KeyEntry, facet: StateFacet, locale?: string): boolean {
+// The locales a facet is scoped to: an explicit subset (multilingual), a single
+// target (bilingual), or null for the cross-all default.
+function scopeOf(filter: KeyFilter): string[] | null {
+  if (filter.locales && filter.locales.length) return filter.locales;
+  if (filter.locale) return [filter.locale];
+  return null;
+}
+
+function matchesState(state: State, entry: KeyEntry, facet: StateFacet, scope: string[] | null): boolean {
   if (facet === "missing") {
-    if (locale) return isMissing(entry, locale);
+    if (scope) return scope.some((l) => isMissing(entry, l));
     return state.config.locales.some((l) => l !== state.config.sourceLocale && isMissing(entry, l));
   }
-  if (locale) return entry.values[locale]?.state === facet;
+  if (scope) return scope.some((l) => entry.values[l]?.state === facet);
   return Object.values(entry.values).some((v) => v.state === facet);
 }
 
@@ -116,6 +129,9 @@ function matchesText(key: string, entry: KeyEntry, q: ParsedSearch): boolean {
 export function filterKeys(state: State, filter: KeyFilter, issuesByKey?: Map<string, Issue[]>, usedKeys?: Set<string>): string[] {
   // Parse the text query once, not per key.
   const search = filter.text.trim() ? parseSearch(filter.text) : null;
+  // Resolve the facet scope once: subset > single target > all locales.
+  const scope = scopeOf(filter);
+  const scopeSet = scope ? new Set(scope) : null;
 
   return Object.keys(state.keys).sort().filter((key) => {
     const entry = state.keys[key]!;
@@ -132,12 +148,12 @@ export function filterKeys(state: State, filter: KeyFilter, issuesByKey?: Map<st
       if (!filter.plurality.includes(kind)) return false;
     }
 
-    if (filter.states.length && !filter.states.some((s) => matchesState(state, entry, s, filter.locale))) {
+    if (filter.states.length && !filter.states.some((s) => matchesState(state, entry, s, scope))) {
       return false;
     }
 
     if (filter.issues.length) {
-      const relevant = (issuesByKey?.get(key) ?? []).filter((i) => !filter.locale || i.locale === filter.locale);
+      const relevant = (issuesByKey?.get(key) ?? []).filter((i) => !scopeSet || scopeSet.has(i.locale));
       const checks = new Set(relevant.map((i) => i.check));
       if (!filter.issues.some((c) => checks.has(c))) return false;
     }

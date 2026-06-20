@@ -17,7 +17,9 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import LanguageLabel from "@/components/lang/LanguageLabel.vue";
 
-const props = defineProps<{ state: State | null; filteredKeys?: string[]; targetLocale?: string }>();
+// targetLocales: the subset of target locales to translate; undefined/empty = all
+// targets. Scopes the missing count, estimate, stream and batch to those locales.
+const props = defineProps<{ state: State | null; filteredKeys?: string[]; targetLocales?: string[] }>();
 const open = defineModel<boolean>("open", { required: true });
 const emit = defineEmits<{ (e: "changed"): void; (e: "batch-submitted"): void }>();
 
@@ -44,16 +46,16 @@ const sortedRows = computed(() =>
 );
 const statusIcon = (status: LocaleStatus) => (status === "active" ? LoaderCircle : status === "done" ? Check : Circle);
 
-const targetLocales = computed(() => {
+const effectiveTargets = computed(() => {
   const s = props.state;
   if (!s) return [];
-  if (props.targetLocale) return [props.targetLocale];
+  if (props.targetLocales?.length) return props.targetLocales;
   return s.config.locales.filter((l) => l !== s.config.sourceLocale);
 });
 
 // Mirror the server's selectRequests({ onlyMissing: true }) counting: skip
 // skipTranslate keys, then count target pairs that isTargetMissing flags (which
-// handles both scalar values and plural forms). Scoped to filteredKeys/targetLocale when set.
+// handles both scalar values and plural forms). Scoped to filteredKeys/targetLocales when set.
 const missingCount = computed(() => {
   const s = props.state;
   if (!s) return 0;
@@ -62,7 +64,7 @@ const missingCount = computed(() => {
   for (const [key, entry] of Object.entries(s.keys)) {
     if (keySet && !keySet.has(key)) continue;
     if (entry.skipTranslate) continue;
-    for (const locale of targetLocales.value) {
+    for (const locale of effectiveTargets.value) {
       if (isTargetMissing(entry, locale, s.config.sourceLocale)) count++;
     }
   }
@@ -96,7 +98,7 @@ async function runBatch() {
   try {
     const res = await batchSubmit({
       keys: props.filteredKeys?.length ? props.filteredKeys : undefined,
-      locales: props.targetLocale ? [props.targetLocale] : undefined,
+      locales: props.targetLocales?.length ? props.targetLocales : undefined,
     });
     toast.success(`Batch of ${res.total.toLocaleString()} strings submitted — results apply when processing finishes (usually under an hour).`);
     emit("batch-submitted");
@@ -127,7 +129,7 @@ async function loadEstimate() {
   try {
     estimate.value = await translateEstimate({
       keys: props.filteredKeys?.length ? props.filteredKeys : undefined,
-      locales: props.targetLocale ? [props.targetLocale] : undefined,
+      locales: props.targetLocales?.length ? props.targetLocales : undefined,
     });
   } catch {
     // Leave estimate null; the dialog simply shows no preview line.
@@ -164,7 +166,7 @@ async function run() {
     const signal = abortController.signal;
     let written = 0;
     const keys = props.filteredKeys?.length ? props.filteredKeys : undefined;
-    const locales = props.targetLocale ? [props.targetLocale] : undefined;
+    const locales = props.targetLocales?.length ? props.targetLocales : undefined;
     const streamArgs: Parameters<typeof translateStream> = locales
       ? [signal, keys, locales]
       : keys ? [signal, keys] : [signal];
@@ -216,7 +218,7 @@ async function run() {
           <template v-if="displayCount === 0">Nothing missing — all translations are filled.</template>
           <template v-else>
             Translate {{ displayCount.toLocaleString() }} missing string{{ displayCount === 1 ? "" : "s" }}
-            across {{ targetLocales.length }} language{{ targetLocales.length === 1 ? "" : "s" }} with Claude?
+            across {{ effectiveTargets.length }} language{{ effectiveTargets.length === 1 ? "" : "s" }} with Claude?
             This sends source strings + context to the AI provider.
           </template>
         </DialogDescription>

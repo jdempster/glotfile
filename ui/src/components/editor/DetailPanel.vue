@@ -20,7 +20,7 @@ const props = defineProps<{
   entry: KeyEntry | null;
   issues?: Issue[];
   // All configured locales + the source locale, so "untranslated" reflects true
-  // completeness regardless of the editor's bilingual/multilingual view.
+  // completeness regardless of which locales the editor currently shows.
   locales?: string[];
   sourceLocale?: string;
   // Increments when a scan refreshes the editor's scan-derived data; signals this

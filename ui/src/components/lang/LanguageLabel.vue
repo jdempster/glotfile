@@ -24,14 +24,18 @@ const resolved = computed(() => resolveLanguage(props.code, props.override));
 </script>
 
 <template>
-  <!-- Stacked: code over name, used in the redesigned row identity. -->
+  <!-- Stacked: language name over code, used in the row identity. -->
   <Tooltip v-if="layout === 'stacked'">
     <TooltipTrigger as-child>
       <span class="inline-flex min-w-0 items-start gap-2">
         <Flag :code="code" :override="override" :size="size" class="mt-0.5 shrink-0" />
         <span class="flex min-w-0 flex-col leading-tight">
+          <span v-if="showName" class="truncate text-[13px] font-semibold">{{ resolved.name }}</span>
           <span class="flex items-center gap-1.5">
-            <span class="font-mono text-[11.5px] font-semibold tracking-wide">{{ code.toUpperCase() }}</span>
+            <span
+              class="font-mono tracking-wide"
+              :class="showName ? 'text-[11px] text-muted-foreground' : 'text-[11.5px] font-semibold'"
+            >{{ code.toUpperCase() }}</span>
             <Tooltip v-if="resolved.rtl">
               <TooltipTrigger as-child>
                 <span class="rounded border border-border px-1 text-[9px] font-bold uppercase tracking-wide text-muted-foreground">RTL</span>
@@ -39,7 +43,6 @@ const resolved = computed(() => resolveLanguage(props.code, props.override));
               <TooltipContent>Right-to-left</TooltipContent>
             </Tooltip>
           </span>
-          <span v-if="showName" class="truncate text-[11px] text-muted-foreground">{{ resolved.name }}</span>
         </span>
       </span>
     </TooltipTrigger>

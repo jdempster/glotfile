@@ -4,7 +4,7 @@ import { useVirtualizer } from "@tanstack/vue-virtual";
 import { Search, Plus, ListFilter, FileDown, Sparkles, X, TriangleAlert, ScanSearch, Loader2, Check, Minus, CircleQuestionMark, PanelRight } from "lucide-vue-next";
 import type { State, Issue } from "@/types.js";
 import { filterKeys, type KeyFilter } from "@/filter.js";
-import { filterFromUrl, filterToUrl, type SortMode, type ViewMode } from "@/filterUrl.js";
+import { filterFromUrl, filterToUrl, type SortMode } from "@/filterUrl.js";
 import { getHashSearch, setHashSearch } from "@/router.js";
 import { fetchState, fetchChecks, usedKeys } from "@/api.js";
 import { onExternalChange } from "@/liveReload";
@@ -20,7 +20,6 @@ import {
   SelectItem,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import FilterMenu from "./FilterMenu.vue";
@@ -32,13 +31,14 @@ import type { StateFacet, PluralityFacet } from "@/filter.js";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { scanInfo, runScan, scanPending } from "@/scanStatus.js";
 import KeyRow from "./KeyRow.vue";
+import MultilingualLocalePicker from "./MultilingualLocalePicker.vue";
+import { multilingualLocales, setMultilingualLocales, multilingualVisible } from "@/multilingualLocales.js";
 import DetailPanel from "./DetailPanel.vue";
 import AddKeyDialog from "./AddKeyDialog.vue";
 import ExportDialog from "./ExportDialog.vue";
 import TranslateDialog from "./TranslateDialog.vue";
 import ContextDialog from "./ContextDialog.vue";
 import BatchBanner from "./BatchBanner.vue";
-import LocaleCombobox from "@/components/lang/LocaleCombobox.vue";
 import ResizeHandle from "@/components/ResizeHandle.vue";
 import { keyColumn, detailPanel, detailPanelToggle } from "@/panel-widths.js";
 
@@ -51,9 +51,14 @@ const detailPanelOpen = detailPanelToggle.open;
 // replaces this wholesale. Deep reactivity would Proxy-wrap and dep-track every
 // nested value, making filter/sort/search ~8× slower for no benefit.
 const state = shallowRef<State | null>(null);
-const { filter: _urlFilter, sort: _urlSort, view: _urlView, locale: _urlLocale } = filterFromUrl(getHashSearch());
+const { filter: _urlFilter, sort: _urlSort, locales: _urlLocales } = filterFromUrl(getHashSearch());
 const filter = ref<KeyFilter>(_urlFilter);
 const selection = useSelection();
+
+// A locale subset in the URL wins over the per-checkout remembered default (which
+// hydrateMultilingualLocales skips when the param is present), so a refresh or a
+// deep link restores exactly the locales that were on screen.
+if (_urlLocales) multilingualLocales.value = _urlLocales;
 
 const STORAGE_KEY = "glotfile:enabledChecks";
 function loadEnabled(): CheckId[] {
@@ -124,15 +129,13 @@ watch(enabledChecks, (v) => {
 }, { deep: true });
 
 const sort = ref<SortMode>(_urlSort);
-const view = ref<ViewMode>(_urlView);
-const selectedTarget = ref<string>(_urlLocale);
 
 let textDebounce: ReturnType<typeof setTimeout> | null = null;
 
 watch(
-  [sort, view, selectedTarget, () => ({ ...filter.value, text: undefined })],
+  [sort, multilingualLocales, () => ({ ...filter.value, text: undefined })],
   () => {
-    setHashSearch(filterToUrl({ filter: filter.value, sort: sort.value, view: view.value, locale: selectedTarget.value }));
+    setHashSearch(filterToUrl({ filter: filter.value, sort: sort.value, locales: multilingualLocales.value }));
   },
   { deep: true },
 );
@@ -142,7 +145,7 @@ watch(
   () => {
     if (textDebounce) clearTimeout(textDebounce);
     textDebounce = setTimeout(() => {
-      setHashSearch(filterToUrl({ filter: filter.value, sort: sort.value, view: view.value, locale: selectedTarget.value }));
+      setHashSearch(filterToUrl({ filter: filter.value, sort: sort.value, locales: multilingualLocales.value }));
     }, 300);
   },
 );
@@ -177,17 +180,17 @@ function removePlurality(p: PluralityFacet) {
 // chat assistant (Lingo's filter_view tool). Replaces the whole filter from
 // defaults so omitted facets reset.
 function applyDrilldown(pf: Partial<KeyFilter>) {
-  filter.value = { text: "", states: [], issues: [], plurality: [], tag: "", needsAttention: false, emptySource: false, aiContextUnreviewed: false, noUsages: false, skipTranslate: false, ...pf };
+  // `locale` isn't a filter field here — it focuses the view on one locale below.
+  const { locale, ...rest } = pf;
+  filter.value = { text: "", states: [], issues: [], plurality: [], tag: "", needsAttention: false, emptySource: false, aiContextUnreviewed: false, noUsages: false, skipTranslate: false, ...rest };
   // A drilled issue filter is useless unless its check is fetched — checks the
   // user has toggled off (e.g. spelling, off by default) are re-enabled here.
   if (pf.issues?.length) {
     const want = new Set([...enabledChecks.value, ...pf.issues]);
     enabledChecks.value = ALL_CHECKS.filter((c) => want.has(c));
   }
-  if (pf.locale) {
-    view.value = "bilingual";
-    selectedTarget.value = pf.locale;
-  }
+  // Focus the view on a single locale — the old "bilingual" target.
+  if (locale) setMultilingualLocales([locale]);
 }
 // EditorView is remounted on route change, so the setup-time read covers arriving
 // with a pending filter (drilled from Analytics, or navigated by Lingo from
@@ -260,33 +263,26 @@ const sourceLocale = computed(() => state.value?.config.sourceLocale ?? "");
 const allLocales = computed(() => state.value?.config.locales ?? []);
 const targetLocales = computed(() => allLocales.value.filter((l) => l !== sourceLocale.value));
 
-// Default the bilingual target to the first non-source locale once state loads.
-watch(
-  targetLocales,
-  (locs) => {
-    if (!selectedTarget.value && locs.length > 0) selectedTarget.value = locs[0]!;
-  },
-  { immediate: true },
+// Locales rendered per row: source first, then the chosen targets — the
+// remembered subset, or every target when none is set. Picking a single target
+// is the old "bilingual" view (source + one).
+const visibleLocales = computed(() =>
+  multilingualVisible(sourceLocale.value, allLocales.value, multilingualLocales.value),
 );
 
-// Locales rendered per row: all (source first) in multilingual, source + target in bilingual.
-const visibleLocales = computed(() => {
-  if (view.value === "bilingual") {
-    return selectedTarget.value
-      ? [sourceLocale.value, selectedTarget.value]
-      : [sourceLocale.value];
-  }
-  const rest = allLocales.value.filter((l) => l !== sourceLocale.value);
-  return [sourceLocale.value, ...rest];
-});
+// The target locales currently on screen (source excluded). The single source of
+// truth for facet scoping and bulk-action scope: undefined when showing every
+// locale (the cross-all default), the chosen subset otherwise.
+const targetScope = computed<string[] | undefined>(() =>
+  multilingualLocales.value ? visibleLocales.value.filter((l) => l !== sourceLocale.value) : undefined,
+);
 
 const filteredKeys = computed(() => {
   const s = state.value;
   if (!s) return [] as string[];
-  // In bilingual view, state/issue facets are scoped to the target being viewed:
-  // "Missing" means missing in that locale, not missing in any locale.
-  const locale = view.value === "bilingual" && selectedTarget.value ? selectedTarget.value : undefined;
-  return filterKeys(s, { ...filter.value, locale }, issuesByKey.value, usedKeySet.value ?? undefined);
+  // Facets follow the locales on screen: "Missing" means missing in one of the
+  // chosen locales, not in any locale. Undefined scope = every locale.
+  return filterKeys(s, { ...filter.value, locales: targetScope.value }, issuesByKey.value, usedKeySet.value ?? undefined);
 });
 
 const rows = computed<string[]>(() => {
@@ -304,16 +300,16 @@ const rows = computed<string[]>(() => {
   return keys;
 });
 
-const scopeLocales = computed(() =>
-  view.value === "bilingual"
-    ? (selectedTarget.value ? [selectedTarget.value] : [])
-    : targetLocales.value,
-);
-const scopeLabel = computed(() =>
-  view.value === "bilingual"
-    ? (selectedTarget.value || "—")
-    : `all ${targetLocales.value.length} targets`,
-);
+// Bulk + single-row actions act on the targets on screen (the remembered subset,
+// or all of them).
+const scopeLocales = computed(() => visibleLocales.value.filter((l) => l !== sourceLocale.value));
+const scopeLabel = computed(() => {
+  const shown = scopeLocales.value.length;
+  const total = targetLocales.value.length;
+  if (shown === total) return `all ${total} targets`;
+  if (shown === 1) return scopeLocales.value[0]!;
+  return `${shown} of ${total} targets`;
+});
 const selectedKeys = computed(() => selection.keys());
 const selectedCount = computed(() => selection.count.value);
 const allRowsSelected = computed(() => selection.allSelected(rows.value));
@@ -599,14 +595,11 @@ async function onCreated(key: string) {
           </SelectContent>
         </Select>
 
-        <Tabs v-model="view">
-          <TabsList class="h-8">
-            <TabsTrigger value="bilingual" class="text-xs">Bilingual</TabsTrigger>
-            <TabsTrigger value="multilingual" class="text-xs">Multilingual</TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        <LocaleCombobox v-if="view === 'bilingual'" v-model="selectedTarget" :locales="targetLocales" class="h-8 w-[170px]" />
+        <MultilingualLocalePicker
+          :targets="targetLocales"
+          :selected="multilingualLocales"
+          @update:selected="setMultilingualLocales"
+        />
 
         <div class="ml-auto flex items-center gap-2">
           <span class="mr-1 text-xs text-muted-foreground tabular-nums">{{ rows.length.toLocaleString() }} keys</span>
@@ -816,7 +809,7 @@ async function onCreated(key: string) {
 
       <AddKeyDialog v-model:open="addOpen" @created="onCreated" />
       <ExportDialog v-model:open="exportOpen" :export-locales="state?.config.exportLocales ?? []" />
-      <TranslateDialog v-model:open="translateOpen" :state="state" :filtered-keys="selectedKeys" :target-locale="view === 'bilingual' ? selectedTarget : undefined" @changed="reload" @batch-submitted="translateBanner?.refresh()" />
+      <TranslateDialog v-model:open="translateOpen" :state="state" :filtered-keys="selectedKeys" :target-locales="targetScope" @changed="reload" @batch-submitted="translateBanner?.refresh()" />
       <ContextDialog v-model:open="contextOpen" :state="state" :keys="selectedKeys" @changed="reload" @batch-submitted="contextBanner?.refresh()" />
     </div>
   </TooltipProvider>

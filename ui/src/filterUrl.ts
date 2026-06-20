@@ -3,10 +3,8 @@ import type { CheckId } from "./types.js";
 import { ALL_CHECKS, ALL_STATES, ALL_PLURALITY } from "./checks.js";
 
 export type SortMode = "key-asc" | "key-desc" | "created";
-export type ViewMode = "multilingual" | "bilingual";
 
 const ALL_SORTS: SortMode[] = ["key-asc", "key-desc", "created"];
-const ALL_VIEWS: ViewMode[] = ["multilingual", "bilingual"];
 
 export const EMPTY_FILTER: KeyFilter = {
   text: "",
@@ -24,8 +22,9 @@ export const EMPTY_FILTER: KeyFilter = {
 export interface UrlState {
   filter: KeyFilter;
   sort: SortMode;
-  view: ViewMode;
-  locale: string;
+  // Editor locale selection: a subset of target locales, or null for "show all".
+  // Lives in the URL like the filters so a refresh restores it.
+  locales: string[] | null;
 }
 
 export function filterFromUrl(params: URLSearchParams): UrlState {
@@ -50,10 +49,13 @@ export function filterFromUrl(params: URLSearchParams): UrlState {
   const rawSort = params.get("sort") ?? "";
   const sort: SortMode = (ALL_SORTS as string[]).includes(rawSort) ? (rawSort as SortMode) : "key-asc";
 
-  const rawView = params.get("view") ?? "";
-  const view: ViewMode = (ALL_VIEWS as string[]).includes(rawView) ? (rawView as ViewMode) : "multilingual";
-
-  const locale = params.get("locale") ?? "";
+  const rawLocales = params.get("locales");
+  const locales = rawLocales === null
+    ? null
+    : (() => {
+        const list = rawLocales.split(",").map((l) => l.trim().toLowerCase()).filter(Boolean);
+        return list.length ? [...new Set(list)] : null;
+      })();
 
   return {
     filter: {
@@ -70,14 +72,13 @@ export function filterFromUrl(params: URLSearchParams): UrlState {
       skipTranslate: params.get("skipTranslate") === "1",
     },
     sort,
-    view,
-    locale,
+    locales,
   };
 }
 
 export function filterToUrl(state: UrlState): URLSearchParams {
   const p = new URLSearchParams();
-  const { filter, sort, view, locale } = state;
+  const { filter, sort, locales } = state;
 
   if (filter.text) p.set("q", filter.text);
   if (filter.tag) p.set("tag", filter.tag);
@@ -90,8 +91,7 @@ export function filterToUrl(state: UrlState): URLSearchParams {
   if (filter.noUsages) p.set("noUsages", "1");
   if (filter.skipTranslate) p.set("skipTranslate", "1");
   if (sort !== "key-asc") p.set("sort", sort);
-  if (view !== "multilingual") p.set("view", view);
-  if (view === "bilingual" && locale) p.set("locale", locale);
+  if (locales && locales.length) p.set("locales", locales.join(","));
 
   return p;
 }

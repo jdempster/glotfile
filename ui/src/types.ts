@@ -66,7 +66,7 @@ export interface ScanConfig {
 // AI settings live in local (per-developer, gitignored) settings, not the committed
 // config — see LocalSettings / the /local-settings API.
 export interface AiSettings { provider: string; model: string; endpoint: string | null; region?: string | null; batchSize: number; concurrency?: number; vision?: boolean; promptStyle?: string; contextBatchSize?: number; contextConcurrency?: number; inputPricePerMTok?: number; outputPricePerMTok?: number; }
-export interface LocalSettings { ai: AiSettings; editor: string; profiles?: Record<string, AiSettings>; activeProfile?: string | null }
+export interface LocalSettings { ai: AiSettings; editor: string; profiles?: Record<string, AiSettings>; activeProfile?: string | null; multilingualLocales?: string[] | null }
 
 export interface LocaleEstimate { locale: string; requests: number; batches: number; inputTokens: number; outputTokens: number }
 export interface TranslateEstimate {

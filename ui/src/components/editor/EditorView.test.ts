@@ -4,6 +4,7 @@ import { nextTick } from "vue";
 import EditorView from "./EditorView.vue";
 import SelectionBar from "./SelectionBar.vue";
 import TranslateDialog from "./TranslateDialog.vue";
+import { multilingualLocales } from "@/multilingualLocales.js";
 import type { State } from "@/types.js";
 
 vi.mock("@/api.js", () => ({
@@ -112,11 +113,11 @@ describe("EditorView '/' search hotkey", () => {
   });
 });
 
-describe("EditorView bilingual locale-scoped filtering", () => {
+describe("EditorView single-locale focused facet scoping", () => {
   beforeEach(() => vi.clearAllMocks());
-  afterEach(() => { location.hash = ""; });
+  afterEach(() => { location.hash = ""; multilingualLocales.value = null; });
 
-  it("scopes the missing facet to the selected bilingual target", async () => {
+  it("scopes the missing facet to a single focused locale (the old bilingual view)", async () => {
     // "a" is translated in fr but missing in de; "b" is the reverse.
     const threeLocaleState = {
       ...emptyState,
@@ -128,12 +129,14 @@ describe("EditorView bilingual locale-scoped filtering", () => {
     } as unknown as State;
     vi.mocked(fetchState).mockResolvedValue(threeLocaleState);
 
-    location.hash = "#/?view=bilingual&locale=fr&states=missing";
+    // Focusing the view on fr alone is now what "bilingual" used to be.
+    multilingualLocales.value = ["fr"];
+    location.hash = "#/?states=missing";
     const w = mountEditor();
     await flushPromises();
 
     // Viewing fr: only the key missing in fr should match, not keys missing
-    // elsewhere (de) that are complete in the visible target.
+    // elsewhere (de) that are complete in the visible locale.
     await w.get('[data-testid="select-all"]').trigger("click");
     expect(w.findComponent(SelectionBar).props("keys")).toEqual(["b"]);
   });
