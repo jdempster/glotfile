@@ -60,6 +60,22 @@ const thinking = computed(() => {
   return !last.tools.some((t) => t.status === "running" || t.status === "pending-confirm");
 });
 
+// The reel flips through these scripts (Latin, Japanese, Arabic, Devanagari,
+// Han). We shuffle the order each time the indicator appears so it never reads
+// the same twice, then repeat the first glyph at the end so the 6-step reel
+// animation loops seamlessly.
+const REEL_GLYPHS = ["A", "あ", "ع", "क", "文"];
+const reelGlyphs = ref<string[]>([]);
+watch(thinking, (on) => {
+  if (!on) return;
+  const g = [...REEL_GLYPHS];
+  for (let i = g.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [g[i], g[j]] = [g[j], g[i]];
+  }
+  reelGlyphs.value = [...g, g[0]];
+}, { immediate: true });
+
 async function submit() {
   const text = draft.value;
   if (!text.trim() || isSending.value) return;
@@ -162,12 +178,7 @@ onMounted(() => {
           <div class="flex items-center gap-2.5 py-0.5" role="status" aria-label="Lingo is thinking">
             <span class="lf-reel" aria-hidden="true">
               <span class="lf-reel-strip">
-                <span class="lf-glyph">A</span>
-                <span class="lf-glyph">あ</span>
-                <span class="lf-glyph">ع</span>
-                <span class="lf-glyph">क</span>
-                <span class="lf-glyph">文</span>
-                <span class="lf-glyph">A</span>
+                <span v-for="(g, i) in reelGlyphs" :key="i" class="lf-glyph">{{ g }}</span>
               </span>
             </span>
             <span class="flex gap-[5px]">
