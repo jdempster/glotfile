@@ -25,14 +25,14 @@ Lingo opens beside your work, and remembers the layout you last used:
 - **Read your codebase** — search and read files (your README, components, locale files) to learn what your product actually is. This is **read-only** and scoped to your project directory.
 - **Author guidance** — write your project context and per-language rules for you, so the AI translator has the background it needs. See How Translation Works.
 - **Build your glossary** — add terms that must translate consistently or stay verbatim, and accept or dismiss suggested terms.
-- **Sharpen each string** — write the per-key context that disambiguates a key, set tags and a length budget, fix or reword source text, and add new keys.
+- **Sharpen each string** — write the per-key context that disambiguates a key, set tags and a length budget, fix or reword source text, and add or delete keys.
 
 **What Lingo won't do:** Lingo never writes or reviews translations — single or bulk. When you want strings translated or a whole language reviewed, run it from the app's own translate/review controls; Lingo's job is to make that run come out better, not to do it for you.
 
 ## How Lingo works with you
 
-> **Lingo proposes, then waits**
-> Lingo shows you the change it intends to make and waits for you to approve or adjust it before writing anything — it won't silently rewrite your config. Larger or bulk actions ask for an explicit confirmation first.
+> **Lingo proposes, you approve**
+> Before any edit is written, Lingo lists what it's about to change and shows an **Approve** button — nothing touches your config until you click it (no need to type "yes"). When a task takes several edits, they're grouped behind a **single** Approve, so you green-light the whole job at once rather than one edit at a time. Click **Skip** to decline. Reading your project and codebase, and filtering or opening keys in the editor, happen freely — only edits ask for approval.
 
 Every change Lingo makes is written straight to `glotfile.json` — so it shows up as an ordinary git diff you can review or revert — and is recorded in the AI Log alongside your translation runs.
 

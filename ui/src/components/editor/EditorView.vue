@@ -3,7 +3,7 @@ import { ref, shallowRef, computed, watch, onMounted, onUnmounted } from "vue";
 import { useVirtualizer } from "@tanstack/vue-virtual";
 import { Search, Plus, ListFilter, FileDown, Sparkles, X, TriangleAlert, ScanSearch, Loader2, Check, Minus, CircleQuestionMark, PanelRight, ArrowUpDown } from "lucide-vue-next";
 import type { State, Issue } from "@/types.js";
-import { filterKeys, type KeyFilter } from "@/filter.js";
+import { filterKeys, exactKeyQuery, type KeyFilter } from "@/filter.js";
 import { filterFromUrl, filterToUrl, type SortMode } from "@/filterUrl.js";
 import { getHashSearch, setHashSearch } from "@/router.js";
 import { fetchState, fetchChecks, usedKeys } from "@/api.js";
@@ -491,10 +491,12 @@ async function onRenamed(from: string, to: string) {
 async function onCreated(key: string) {
   await reload();
   selectedKey.value = key;
-  // Narrow the list to just the new key with an exact-match ("…") search rather
-  // than scrolling the virtual list to it — the single resulting row is steadier
-  // and cheaper than driving scrollToIndex over thousands of keys.
-  filter.value.text = `"${key}"`;
+  // Narrow the list to just the new key rather than scrolling the virtual list to
+  // it — the single resulting row is steadier and cheaper than driving
+  // scrollToIndex over thousands of keys. Uses an anchored key-regex query
+  // (exactKeyQuery): the old `"key"` form matched nothing, so the new key stayed
+  // hidden until a refresh cleared the filter.
+  filter.value.text = exactKeyQuery(key);
 }
 
 </script>

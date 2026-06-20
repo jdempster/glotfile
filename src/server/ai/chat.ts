@@ -13,9 +13,10 @@ export interface ChatTurnDeps {
   context?: string;
   // Emit a progress event to the caller (forwarded over SSE to the UI).
   onEvent(event: ChatStreamEvent): void;
-  // Resolve whether a confirm-gated tool may run. The caller (API) wires this to
-  // the UI's Apply/Skip card via /chat/confirm.
-  confirm(req: { toolUseId: string; name: string; input: unknown; humanSummary: string }): Promise<boolean>;
+  // Resolve whether a batch of confirm-gated edits may run. The caller (API) wires
+  // this to the UI's Approve/Skip card via /chat/confirm; one answer covers the
+  // whole batch.
+  confirm(req: { batchId: string; items: { id: string; name: string; humanSummary: string; input: unknown }[] }): Promise<boolean>;
   signal?: AbortSignal;
 }
 
@@ -67,7 +68,20 @@ export async function runChatTurn(history: ChatMessage[], userText: string, deps
         return messages;
       }
 
-      // --- run each requested tool, gating confirm tools ---
+      // --- run each requested tool ---
+      // Confirm-gated edits are batched behind ONE approval: a whole agreed task
+      // (which may be several edits) needs a single green light, not one click per
+      // edit. Read/navigate tools are never gated and run regardless of the answer.
+      const gated = toolUses.filter((c) => byName.get(c.name)?.confirm);
+      let approved = true;
+      if (gated.length) {
+        const items = gated.map((c) => ({
+          id: c.id, name: c.name, humanSummary: safeSummary(byName.get(c.name)!, c.input), input: c.input,
+        }));
+        deps.onEvent({ type: "confirm-required", batchId: gated[0]!.id, items });
+        approved = await deps.confirm({ batchId: gated[0]!.id, items });
+      }
+
       const results: ChatContentBlock[] = [];
       for (const call of toolUses) {
         const tool = byName.get(call.name);
@@ -75,18 +89,14 @@ export async function runChatTurn(history: ChatMessage[], userText: string, deps
           results.push({ type: "tool_result", toolUseId: call.id, content: `Unknown tool "${call.name}".`, isError: true });
           continue;
         }
-        const humanSummary = safeSummary(tool, call.input);
-
-        if (tool.confirm) {
-          deps.onEvent({ type: "confirm-required", id: call.id, name: call.name, humanSummary, input: call.input });
-          const approved = await deps.confirm({ toolUseId: call.id, name: call.name, input: call.input, humanSummary });
-          if (!approved) {
-            deps.onEvent({ type: "tool-end", id: call.id, result: { declined: true } });
-            results.push({ type: "tool_result", toolUseId: call.id, content: "The user declined to run this action.", isError: false });
-            continue;
-          }
+        // A gated edit the user skipped: report it declined and move on. Ungated
+        // read/navigate tools still run so the model can react to the decision.
+        if (tool.confirm && !approved) {
+          deps.onEvent({ type: "tool-end", id: call.id, result: { declined: true } });
+          results.push({ type: "tool_result", toolUseId: call.id, content: "The user declined to run this action.", isError: false });
+          continue;
         }
-
+        const humanSummary = safeSummary(tool, call.input);
         deps.onEvent({ type: "tool-start", id: call.id, name: call.name, humanSummary });
         try {
           const result = await tool.run(call.input, deps.ctx);

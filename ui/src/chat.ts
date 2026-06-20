@@ -1,6 +1,7 @@
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import { chatStream, getChat, clearChat as apiClearChat, confirmChatTool, getLocalSettings } from "./api";
-import { drillTo, selectKey } from "./drilldown";
+import { drillTo, drillToKey, selectKey } from "./drilldown";
+import { addKnownKey } from "./keyIndex";
 import type { ChatStreamEvent, ChatMessage } from "./types";
 import type { KeyFilter } from "./filter";
 
@@ -23,6 +24,9 @@ export interface UiMessage {
   text: string;
   tools: UiToolCall[];
   error?: string;
+  // Set while a batch of confirm-gated edits awaits the user's Approve/Skip; its
+  // batchId resolves the whole batch. Cleared once they answer.
+  pendingConfirm?: { batchId: string } | null;
 }
 
 // --- pure reducer (unit-tested) ---
@@ -33,6 +37,12 @@ function currentAssistant(messages: UiMessage[]): UiMessage {
   const msg: UiMessage = { role: "assistant", text: "", tools: [] };
   messages.push(msg);
   return msg;
+}
+
+// A confirm-gated edit the user skipped comes back as a non-error result carrying
+// `declined: true` (the loop reports it instead of running the tool).
+function isDeclined(result: unknown): boolean {
+  return !!result && typeof result === "object" && (result as { declined?: unknown }).declined === true;
 }
 
 function upsertTool(msg: UiMessage, id: string, patch: Partial<UiToolCall> & { name?: string; humanSummary?: string }): UiToolCall {
@@ -66,10 +76,20 @@ export function applyEvent(messages: UiMessage[], event: ChatStreamEvent): void 
       upsertTool(msg, event.id, { progress: { done: event.done, total: event.total, detail: event.detail } });
       break;
     case "tool-end":
-      upsertTool(msg, event.id, event.error ? { status: "error", error: event.error } : { status: "done", result: event.result });
+      // A skipped edit comes back as a (non-error) declined result — render it as
+      // declined, not done, or a skipped action reads as if it had been applied.
+      upsertTool(msg, event.id,
+        event.error ? { status: "error", error: event.error }
+          : isDeclined(event.result) ? { status: "declined", result: event.result }
+            : { status: "done", result: event.result });
       break;
     case "confirm-required":
-      upsertTool(msg, event.id, { name: event.name, humanSummary: event.humanSummary, status: "pending-confirm", input: event.input });
+      // One approval gates the whole batch: render a pending row per edit and flag
+      // the message so the panel shows a single Approve/Skip card below them.
+      for (const item of event.items) {
+        upsertTool(msg, item.id, { name: item.name, humanSummary: item.humanSummary, status: "pending-confirm", input: item.input });
+      }
+      msg.pendingConfirm = { batchId: event.batchId };
       break;
     case "error":
       msg.error = event.error;
@@ -103,6 +123,17 @@ export function selectKeyFromEvent(event: ChatStreamEvent): string | null {
   return typeof k === "string" ? k : null;
 }
 
+// The `add_key` tool creates a new key; like select_key its UI effect lives
+// outside the reducer. Returns the new key to DRILL to — filter the list to it
+// and open it, so a fresh key isn't lost under the current filter — or null.
+export function drillKeyFromEvent(event: ChatStreamEvent): string | null {
+  if (event.type !== "tool-end" || event.error) return null;
+  const result = event.result;
+  if (!result || typeof result !== "object") return null;
+  const k = (result as { drillToKey?: unknown }).drillToKey;
+  return typeof k === "string" ? k : null;
+}
+
 // Rebuild the UI message list from a persisted transcript (on reload). tool_use
 // blocks become tool rows; the following user message's tool_result blocks
 // resolve them by id.
@@ -123,7 +154,13 @@ export function transcriptToUi(messages: ChatMessage[]): UiMessage[] {
       for (const r of results) {
         for (let i = out.length - 1; i >= 0; i--) {
           const tool = out[i]!.tools.find((t) => t.id === r.toolUseId);
-          if (tool) { tool.status = r.isError ? "error" : "done"; tool.result = r.content; break; }
+          if (tool) {
+            // A skipped edit persists as the (non-error) "declined to run" result —
+            // restore it as declined so a reloaded transcript matches the live view.
+            tool.status = r.isError ? "error" : /declined to run/i.test(r.content) ? "declined" : "done";
+            tool.result = r.content;
+            break;
+          }
         }
       }
       if (textBlocks.length) out.push({ role: "user", text: textBlocks.map((b) => b.text).join(""), tools: [] });
@@ -135,6 +172,16 @@ export function transcriptToUi(messages: ChatMessage[]): UiMessage[] {
 // --- reactive store ---
 
 export const messages = ref<UiMessage[]>([]);
+// The batch of edits currently awaiting Approve/Skip, if any — only the latest
+// assistant turn can have one. Lets the panel offer an A/S keyboard shortcut and
+// react (drop composer focus) when the card appears.
+export const pendingConfirm = computed<{ batchId: string } | null>(() => {
+  for (let i = messages.value.length - 1; i >= 0; i--) {
+    const pc = messages.value[i]!.pendingConfirm;
+    if (pc) return pc;
+  }
+  return null;
+});
 export const isOpen = ref(false);     // panel visibility
 export const expanded = ref(false);   // expanded (over-content) vs docked side column
 export const isSending = ref(false);
@@ -191,6 +238,11 @@ export async function send(text: string): Promise<void> {
       if (vf) drillTo(vf);
       const sk = selectKeyFromEvent(event);
       if (sk) selectKey(sk);
+      // A newly created key: register it so Lingo's mention of it links right away
+      // (the turn-end reload would otherwise be the first time it's "known"), and
+      // jump to it so the user sees what was added.
+      const dk = drillKeyFromEvent(event);
+      if (dk) { addKnownKey(dk); drillToKey(dk); }
     }
   } catch (e) {
     applyEvent(messages.value, { type: "error", error: (e as Error).message });
@@ -205,14 +257,17 @@ export function cancel(): void {
   isSending.value = false;
 }
 
-export async function respondConfirm(toolUseId: string, approved: boolean): Promise<void> {
-  // Optimistically reflect the choice on the tool row; the ensuing
-  // tool-start/tool-end events refine it.
+export async function respondConfirm(batchId: string, approved: boolean): Promise<void> {
+  // Optimistically reflect the choice across the whole batch and dismiss the card;
+  // the ensuing tool-start/tool-end events refine each row.
   for (const m of messages.value) {
-    const tool = m.tools.find((t) => t.id === toolUseId);
-    if (tool && tool.status === "pending-confirm") tool.status = approved ? "running" : "declined";
+    if (m.pendingConfirm?.batchId !== batchId) continue;
+    for (const tool of m.tools) {
+      if (tool.status === "pending-confirm") tool.status = approved ? "running" : "declined";
+    }
+    m.pendingConfirm = null;
   }
-  await confirmChatTool(toolUseId, approved);
+  await confirmChatTool(batchId, approved);
 }
 
 export function open(): void { isOpen.value = true; }

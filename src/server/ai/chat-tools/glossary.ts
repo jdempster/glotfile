@@ -4,10 +4,11 @@ import type { ChatTool, ToolContext } from "../chat-types.js";
 
 // Author the glossary — terms that must translate consistently or stay verbatim.
 // Each tool loads the full state, mutates only the glossary, and persists the
-// WHOLE state (the Settings round-trip gotcha). Single, reversible edits, so no
-// confirm gate: the conversational propose-then-wait already covers approval.
+// WHOLE state (the Settings round-trip gotcha). All confirm-gated: the user
+// approves the batch (the chat's Approve card) before any edit runs.
 
 const setGlossaryTerm: ChatTool = {
+  confirm: true,
   def: {
     name: "set_glossary_term",
     description: "Add or update a glossary term. Use for product names, brand terms, or domain words that must translate consistently — or stay verbatim across every language. Re-using an existing term updates it.",
@@ -52,6 +53,7 @@ const setGlossaryTerm: ChatTool = {
 };
 
 const removeGlossaryTerm: ChatTool = {
+  confirm: true,
   def: {
     name: "remove_glossary_term",
     strict: true,
@@ -74,6 +76,7 @@ const removeGlossaryTerm: ChatTool = {
 };
 
 const acceptGlossarySuggestion: ChatTool = {
+  confirm: true,
   def: {
     name: "accept_glossary_suggestion",
     description: "Promote a pending glossary suggestion (see read_guidance) into a real glossary entry. Carries over its do-not-translate flag and rationale unless you override them.",
@@ -114,6 +117,7 @@ const acceptGlossarySuggestion: ChatTool = {
 };
 
 const dismissSuggestion: ChatTool = {
+  confirm: true,
   def: {
     name: "dismiss_glossary_suggestion",
     strict: true,

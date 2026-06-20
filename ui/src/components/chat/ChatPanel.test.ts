@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { nextTick } from "vue";
 import { mount } from "@vue/test-utils";
 import ChatPanel from "./ChatPanel.vue";
-import { messages, isSending, loaded, expanded } from "@/chat";
+import { messages, isSending, loaded, expanded, type UiMessage } from "@/chat";
 
 beforeEach(() => {
   // Skip the on-mount history fetch (no server in tests).
@@ -58,6 +59,61 @@ describe("ChatPanel thinking indicator", () => {
     isSending.value = false;
     const wrapper = mount(ChatPanel);
     expect(wrapper.find("[data-thinking]").exists()).toBe(false);
+  });
+});
+
+describe("ChatPanel approve/skip keyboard shortcut", () => {
+  const pendingMsgs = (): UiMessage[] => [
+    { role: "user", text: "set it up", tools: [] },
+    {
+      role: "assistant", text: "I'll add context.",
+      tools: [{ id: "t1", name: "set_key_context", humanSummary: "set context for plant.feed", status: "pending-confirm", input: {} }],
+      pendingConfirm: { batchId: "t1" },
+    },
+  ];
+
+  it("A approves the pending batch", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
+    messages.value = pendingMsgs();
+    mount(ChatPanel);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "a" }));
+    await nextTick();
+    expect(messages.value[1]!.pendingConfirm).toBeNull();
+    expect(messages.value[1]!.tools[0]!.status).toBe("running");
+    vi.unstubAllGlobals();
+  });
+
+  it("S skips the pending batch (rows go declined, not done)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
+    messages.value = pendingMsgs();
+    mount(ChatPanel);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "s" }));
+    await nextTick();
+    expect(messages.value[1]!.tools[0]!.status).toBe("declined");
+    vi.unstubAllGlobals();
+  });
+
+  it("ignores the shortcut while the user is typing in the composer", async () => {
+    messages.value = pendingMsgs();
+    const wrapper = mount(ChatPanel);
+    // A keystroke originating in the textarea must type, not approve.
+    wrapper.find("textarea").element.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
+    await nextTick();
+    expect(messages.value[1]!.pendingConfirm).toEqual({ batchId: "t1" });
+  });
+
+  it("blocks the composer while a decision is outstanding", () => {
+    messages.value = pendingMsgs();
+    const wrapper = mount(ChatPanel);
+    expect(wrapper.find("textarea").attributes("disabled")).toBeDefined();
+  });
+
+  it("leaves the composer enabled when nothing is awaiting a decision", () => {
+    messages.value = [
+      { role: "assistant", text: "done", tools: [{ id: "t1", name: "set_key_context", humanSummary: "x", status: "done" }], pendingConfirm: null },
+    ];
+    const wrapper = mount(ChatPanel);
+    expect(wrapper.find("textarea").attributes("disabled")).toBeUndefined();
   });
 });
 

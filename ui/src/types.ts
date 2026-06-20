@@ -195,7 +195,7 @@ export type ChatStreamEvent =
   | { type: "tool-start"; id: string; name: string; humanSummary: string }
   | { type: "tool-end"; id: string; result?: unknown; error?: string }
   | { type: "tool-progress"; id: string; done: number; total: number; detail?: string }
-  | { type: "confirm-required"; id: string; name: string; humanSummary: string; input: unknown }
+  | { type: "confirm-required"; batchId: string; items: { id: string; name: string; humanSummary: string; input: unknown }[] }
   | { type: "done" }
   | { type: "error"; error: string };
 

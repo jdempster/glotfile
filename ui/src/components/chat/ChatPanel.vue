@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, watch, onMounted } from "vue";
+import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from "vue";
 import { Pencil, ArrowUp, Sparkles, X, Maximize2, Minimize2 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import ChatMessage from "./ChatMessage.vue";
-import { messages, isSending, loaded, expanded, focusNonce, inputFocused, send, cancel, clear, loadHistory, toggleExpanded } from "@/chat";
+import { messages, isSending, loaded, expanded, focusNonce, inputFocused, send, cancel, clear, loadHistory, toggleExpanded, pendingConfirm, respondConfirm } from "@/chat";
 
 // `dock` shows a close affordance in the header for the floating panel.
 defineProps<{ dock?: boolean }>();
@@ -34,6 +34,11 @@ const starters = [
 ];
 
 const isEmpty = computed(() => messages.value.length === 0);
+
+// While a batch awaits Approve/Skip the composer is blocked — you answer the card
+// (click or A/S) before typing again — so the prompt nudges toward that decision.
+const composerPlaceholder = computed(() =>
+  pendingConfirm.value ? "Approve or skip the changes above to continue…" : "Message Lingo…");
 
 // Rotate Lingo's greeting through languages on each open — a little flourish.
 const GREETINGS = [
@@ -103,13 +108,49 @@ function focus() {
 // Focus when the composer mounts (panel opened) and whenever a focus is requested.
 watch(focusNonce, () => nextTick(focus));
 
+// Keyboard shortcut for the Approve card: while a batch awaits a decision, A
+// approves it and S skips it. Guarded so it never fires while the user is typing a
+// reply in the composer or using a modifier combo.
+function onConfirmKey(e: KeyboardEvent) {
+  const p = pendingConfirm.value;
+  if (!p || e.metaKey || e.ctrlKey || e.altKey) return;
+  const el = e.target as HTMLElement | null;
+  if (el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT" || el.isContentEditable)) return;
+  const k = e.key.toLowerCase();
+  if (k === "a") { e.preventDefault(); void respondConfirm(p.batchId, true); }
+  else if (k === "s") { e.preventDefault(); void respondConfirm(p.batchId, false); }
+}
+onMounted(() => window.addEventListener("keydown", onConfirmKey));
+onBeforeUnmount(() => window.removeEventListener("keydown", onConfirmKey));
+
+// When the card appears, drop focus from the composer so the A/S keys reach the
+// handler (a focused textarea would just type them); restore focus for typing
+// once the user has answered.
+watch(pendingConfirm, (p, prev) => {
+  if (p && !prev) textarea.value?.blur();
+  else if (!p && prev) void nextTick(focus);
+});
+
 function runStarter(text: string) {
   draft.value = "";
   void send(text);
 }
 
-// Keep the view pinned to the latest message as a turn streams in.
-watch(() => [messages.value.length, isSending.value, messages.value[messages.value.length - 1]?.text], async () => {
+// Keep the view pinned to the latest message as a turn streams in. Track not just
+// the streamed text but the last message's tool rows and its pending-confirm flag
+// too — otherwise the Approve card (which appears via added tool rows + that flag,
+// changing none of the text) lands below the fold without scrolling into view.
+watch(() => {
+  const last = messages.value[messages.value.length - 1];
+  return [
+    messages.value.length,
+    isSending.value,
+    last?.text,
+    last?.tools.length,
+    last?.tools[last.tools.length - 1]?.status,
+    !!last?.pendingConfirm,
+  ];
+}, async () => {
   await nextTick();
   if (scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight;
 }, { deep: true });
@@ -199,8 +240,9 @@ onMounted(() => {
           ref="textarea"
           v-model="draft"
           rows="1"
-          placeholder="Message Lingo…"
-          class="block max-h-40 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-1.5 text-[14.5px] leading-snug text-foreground outline-none placeholder:text-muted-foreground"
+          :placeholder="composerPlaceholder"
+          :disabled="!!pendingConfirm"
+          class="block max-h-40 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-1.5 text-[14.5px] leading-snug text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
           @input="autosize"
           @keydown="onKeydown"
           @focus="inputFocused = true"

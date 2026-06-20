@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { filterKeys, type KeyFilter } from "./filter.js";
+import { filterKeys, exactKeyQuery, type KeyFilter } from "./filter.js";
 import { useSelection } from "./selection.js";
 import type { Config, Issue, State } from "./types.js";
 
@@ -24,6 +24,20 @@ const f = (over: Partial<KeyFilter> = {}): KeyFilter =>
 describe("filterKeys", () => {
   it("no facets → every key, sorted", () => {
     expect(filterKeys(state, f())).toEqual(["a.key", "b.key", "c.key"]);
+  });
+  it("exactKeyQuery narrows to exactly one key, excluding descendants (regression: a quoted search matched nothing)", () => {
+    const tree: State = {
+      version: 1,
+      config: { sourceLocale: "en", locales: ["en"], ...baseConfig },
+      keys: {
+        "home.title": { values: { en: { value: "Home", state: "source" } } },
+        "home.title.sub": { values: { en: { value: "Sub", state: "source" } } },
+      },
+    };
+    expect(filterKeys(tree, f({ text: exactKeyQuery("home.title") }))).toEqual(["home.title"]);
+    // The old onCreated form was a literal substring INCLUDING the quotes, so it
+    // matched nothing and the freshly-added key stayed hidden until a refresh.
+    expect(filterKeys(tree, f({ text: `"home.title"` }))).toEqual([]);
   });
   it("needsAttention → only keys that have at least one issue", () => {
     const byKey = new Map<string, Issue[]>([

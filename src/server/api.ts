@@ -1651,11 +1651,12 @@ export function createApi(deps: ApiDeps): Hono {
     return c.json({ ok: true });
   });
 
-  // Resolve a pending confirm-gated tool (the UI's Apply/Skip card posts here).
+  // Resolve a pending batch of confirm-gated edits (the UI's Approve/Skip card
+  // posts here); one answer covers the whole batch.
   app.post("/chat/confirm", async (c) => {
     const body = await c.req.json().catch(() => ({}));
-    const toolUseId = typeof body.toolUseId === "string" ? body.toolUseId : "";
-    const resolver = pendingConfirms.get(toolUseId);
+    const batchId = typeof body.batchId === "string" ? body.batchId : "";
+    const resolver = pendingConfirms.get(batchId);
     if (!resolver) return c.json({ error: "No pending confirmation for that action." }, 404);
     resolver(!!body.approved);
     return c.json({ ok: true });
@@ -1714,10 +1715,10 @@ export function createApi(deps: ApiDeps): Hono {
           context,
           onEvent: (e) => { void stream.writeSSE({ event: e.type, data: JSON.stringify(e) }); },
           confirm: (req) => new Promise<boolean>((resolve) => {
-            turnConfirmIds.add(req.toolUseId);
-            pendingConfirms.set(req.toolUseId, (approved) => { pendingConfirms.delete(req.toolUseId); resolve(approved); });
+            turnConfirmIds.add(req.batchId);
+            pendingConfirms.set(req.batchId, (approved) => { pendingConfirms.delete(req.batchId); resolve(approved); });
             signal?.addEventListener("abort", () => {
-              if (pendingConfirms.delete(req.toolUseId)) resolve(false);
+              if (pendingConfirms.delete(req.batchId)) resolve(false);
             }, { once: true });
           }),
           signal,

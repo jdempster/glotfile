@@ -117,6 +117,16 @@ export function parseSearch(text: string): ParsedSearch {
   return { scope, mode: "substring", needle: rest.toLowerCase(), regex: null };
 }
 
+// A search-box query that matches EXACTLY one key by path — used to narrow the
+// list to a single key (e.g. right after creating it) without scrolling the
+// virtual list. Anchors a regex on the key scope so only this exact path matches;
+// a plain `"key"` substring would either over-match descendants or, when wrapped
+// in quotes, match nothing (quotes aren't a search operator).
+export function exactKeyQuery(key: string): string {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return `key:/^${escaped}$/`;
+}
+
 function matchesText(key: string, entry: KeyEntry, q: ParsedSearch): boolean {
   switch (q.mode) {
     case "none": return true;

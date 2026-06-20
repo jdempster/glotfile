@@ -101,11 +101,11 @@ export const glossarySuggestBatchCancel = () =>
 
 export const getChat = () => fetch("/api/chat").then((r) => json<ChatTranscript>(r));
 export const clearChat = () => fetch("/api/chat", { method: "DELETE" }).then(json);
-export const confirmChatTool = (toolUseId: string, approved: boolean) =>
+export const confirmChatTool = (batchId: string, approved: boolean) =>
   fetch("/api/chat/confirm", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ toolUseId, approved }),
+    body: JSON.stringify({ batchId, approved }),
   }).then(json);
 
 // Stream one assistant turn. Unlike translateStream, an "error" event is yielded

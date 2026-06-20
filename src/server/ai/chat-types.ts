@@ -75,6 +75,9 @@ export type ChatStreamEvent =
   | { type: "tool-start"; id: string; name: string; humanSummary: string }
   | { type: "tool-end"; id: string; result?: unknown; error?: string }
   | { type: "tool-progress"; id: string; done: number; total: number; detail?: string }
-  | { type: "confirm-required"; id: string; name: string; humanSummary: string; input: unknown }
+  // A batch of confirm-gated edits awaiting ONE approval (the UI's Approve/Skip
+  // card). batchId resolves the whole batch via /chat/confirm; items are the
+  // pending edit rows to render.
+  | { type: "confirm-required"; batchId: string; items: { id: string; name: string; humanSummary: string; input: unknown }[] }
   | { type: "done" }
   | { type: "error"; error: string };

@@ -1,15 +1,16 @@
-import { setMetadata, setSourceValue, createKey } from "../../state.js";
+import { setMetadata, setSourceValue, createKey, deleteKey } from "../../state.js";
 import type { ChatTool, ToolContext } from "../chat-types.js";
 
 // Per-key writes: source text, context, tags, and length budget — the per-string
 // guidance the assistant authors. Lingo never writes translations itself (that's
 // the app's own translate/review controls), and it has no access to the human
 // Notes field (that's for the developer's own annotations); these tools only
-// shape the SOURCE and the guidance around it. All single, reversible edits, so
-// no confirm gate (the conversational propose-then-wait covers approval). Each
-// loads, mutates, persists the WHOLE state.
+// shape the SOURCE and the guidance around it. Each is confirm-gated: the user
+// approves the batch of edits (the chat's Approve card) before any of them run.
+// Each loads, mutates, persists the WHOLE state.
 
 const setKeyContext: ChatTool = {
+  confirm: true,
   def: {
     name: "set_key_context",
     strict: true,
@@ -35,6 +36,7 @@ const setKeyContext: ChatTool = {
 };
 
 const addKeyTag: ChatTool = {
+  confirm: true,
   def: {
     name: "add_key_tag",
     strict: true,
@@ -66,6 +68,7 @@ const addKeyTag: ChatTool = {
 };
 
 const removeKeyTag: ChatTool = {
+  confirm: true,
   def: {
     name: "remove_key_tag",
     strict: true,
@@ -96,6 +99,7 @@ const removeKeyTag: ChatTool = {
 };
 
 const setMaxLength: ChatTool = {
+  confirm: true,
   def: {
     name: "set_max_length",
     strict: true,
@@ -125,6 +129,7 @@ const setMaxLength: ChatTool = {
 };
 
 const setSourceText: ChatTool = {
+  confirm: true,
   def: {
     name: "set_source_text",
     strict: true,
@@ -150,6 +155,7 @@ const setSourceText: ChatTool = {
 };
 
 const addKey: ChatTool = {
+  confirm: true,
   def: {
     name: "add_key",
     strict: true,
@@ -170,8 +176,35 @@ const addKey: ChatTool = {
     const s = ctx.load();
     createKey(s, key, value);
     ctx.persist(s);
-    return { ok: true, key, source: value.trim() };
+    // drillToKey drives the UI to jump to the new key (filter the list to it and
+    // open it) — a fresh key is otherwise easy to miss under the current filter.
+    return { ok: true, key, source: value.trim(), drillToKey: key };
   },
 };
 
-export const keyWriteTools: ChatTool[] = [setKeyContext, addKeyTag, removeKeyTag, setMaxLength, setSourceText, addKey];
+const deleteKeyTool: ChatTool = {
+  confirm: true,
+  def: {
+    name: "delete_key",
+    strict: true,
+    description: "Delete ONE key from the catalog — its source text and every translation in every language. Use only for a key that's genuinely unwanted (a duplicate, a leftover, a mistake). This is destructive and does NOT remove references to the key in the user's code, so only delete a key the code no longer uses — when unsure, look up its usage first. Fails if the key doesn't exist.",
+    schema: {
+      type: "object",
+      properties: {
+        key: { type: "string", description: "The key path to delete (e.g. \"plant.repot\")." },
+      },
+      required: ["key"],
+      additionalProperties: false,
+    },
+  },
+  humanSummary: (input) => `delete key ${(input as { key?: string }).key ?? ""}`,
+  run: async (input, ctx: ToolContext) => {
+    const { key } = input as { key: string };
+    const s = ctx.load();
+    deleteKey(s, key);
+    ctx.persist(s);
+    return { ok: true, key, deleted: true };
+  },
+};
+
+export const keyWriteTools: ChatTool[] = [setKeyContext, addKeyTag, removeKeyTag, setMaxLength, setSourceText, addKey, deleteKeyTool];

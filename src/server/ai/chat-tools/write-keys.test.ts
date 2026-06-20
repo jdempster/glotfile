@@ -84,4 +84,23 @@ describe("key write tools", () => {
   it("add_key rejects a key that already exists", async () => {
     await expect(tool("add_key").run({ key: "plant.feed", value: "x" }, ctx)).rejects.toThrow(/exist/i);
   });
+
+  it("add_key returns drillToKey so the UI jumps to the new key", async () => {
+    const res = await tool("add_key").run({ key: "plant.repot", value: "Repot" }, ctx) as { drillToKey: string };
+    expect(res.drillToKey).toBe("plant.repot");
+  });
+
+  it("delete_key removes the key and its translations entirely", async () => {
+    const res = await tool("delete_key").run({ key: "plant.feed" }, ctx) as { ok: boolean; key: string };
+    expect(res).toMatchObject({ ok: true, key: "plant.feed" });
+    expect(state.keys["plant.feed"]).toBeUndefined();
+  });
+
+  it("delete_key rejects a key that doesn't exist", async () => {
+    await expect(tool("delete_key").run({ key: "nope.missing" }, ctx)).rejects.toThrow();
+  });
+
+  it("every key-write tool is confirm-gated — edits run only after the user approves", () => {
+    expect(keyWriteTools.every((t) => t.confirm === true)).toBe(true);
+  });
 });

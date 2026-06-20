@@ -25,10 +25,11 @@ describe("chat system prompt", () => {
     expect(projectSnapshot(s)).toContain("Project context: NOT set");
   });
 
-  it("system prompt explains the role and the agree-the-task-then-carry-it-out behaviour", () => {
+  it("system prompt explains the role and the propose-then-approve behaviour", () => {
     const prompt = buildChatSystemPrompt();
     expect(prompt).toContain("Lingo");
-    expect(prompt).toContain("agree the task");
+    // Edits are gated behind the UI's Approve button, not a typed "yes".
+    expect(prompt).toContain("Approve button");
     expect(prompt.toLowerCase()).toContain("green light");
     // Approval is per-task, so a multi-step task runs without re-asking per edit.
     expect(prompt).toContain("not fresh approval for each individual edit");

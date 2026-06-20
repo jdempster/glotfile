@@ -17,25 +17,24 @@ const escapeHtml = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const renderer = new marked.Renderer();
 renderer.html = ({ text }) => escapeHtml(text);
-import { Check, X, Loader2, AlertTriangle, ChevronRight } from "lucide-vue-next";
+import { Check, X, Loader2, AlertTriangle, ChevronRight, SkipForward } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { respondConfirm, type UiMessage, type UiToolCall } from "@/chat";
-import { knownKeys } from "@/keyIndex";
-import { drillToKey } from "@/drilldown";
+import { classifyToken, applyChatLink } from "@/chatLinks";
 
 const props = defineProps<{ message: UiMessage }>();
 
-// Lingo cites keys in backticks (so they arrive as <code> spans). Tag the ones
-// that are real keys in the project with `gf-key` so they read and behave as
-// links; source strings, locale codes, and other code spans stay inert. Operates
-// on already-sanitized HTML, only ADDING attributes, so it can't reintroduce XSS.
-function tagKeyCodes(sanitized: string): string {
-  const keys = knownKeys.value;
-  if (!keys.size || !sanitized.includes("<code")) return sanitized;
+// Lingo cites things in backticks (so they arrive as <code> spans). Tag the ones
+// that classify as an editor action — a real key, a review state, a target locale
+// — with `gf-key` so they read and behave as links; source strings and other code
+// spans stay inert. Operates on already-sanitized HTML, only ADDING attributes, so
+// it can't reintroduce XSS.
+function tagChatLinks(sanitized: string): string {
+  if (!sanitized.includes("<code")) return sanitized;
   const tpl = document.createElement("template");
   tpl.innerHTML = sanitized;
   for (const code of Array.from(tpl.content.querySelectorAll("code"))) {
-    if (keys.has(code.textContent ?? "")) {
+    if (classifyToken(code.textContent ?? "")) {
       code.classList.add("gf-key");
       code.setAttribute("role", "button");
       code.setAttribute("tabindex", "0");
@@ -49,31 +48,33 @@ function tagKeyCodes(sanitized: string): string {
 // markdown, then sanitize the HTML before v-html to strip <script>, inline event
 // handlers, and javascript:/data: URLs.
 const html = computed(() =>
-  props.message.text ? tagKeyCodes(purifier.sanitize(marked.parse(props.message.text, { async: false, renderer }) as string)) : "",
+  props.message.text ? tagChatLinks(purifier.sanitize(marked.parse(props.message.text, { async: false, renderer }) as string)) : "",
 );
 
-// A key path Lingo mentioned was clicked/activated → jump to the editor, filter
-// the list down to that key, and open its detail panel.
-function activateKey(target: EventTarget | null): boolean {
+// A reference Lingo mentioned (a key, a review state, a locale) was clicked/
+// activated → drive the editor to it (open the key, or filter to the state/locale).
+function activate(target: EventTarget | null): boolean {
   const el = (target as HTMLElement | null)?.closest?.("code.gf-key");
-  const key = el?.textContent ?? "";
-  if (!el || !knownKeys.value.has(key)) return false;
-  drillToKey(key);
+  const link = el ? classifyToken(el.textContent ?? "") : null;
+  if (!link) return false;
+  applyChatLink(link);
   return true;
 }
-function onKeyClick(e: MouseEvent) {
-  if (activateKey(e.target)) e.preventDefault();
+function onLinkClick(e: MouseEvent) {
+  if (activate(e.target)) e.preventDefault();
 }
-function onKeyDown(e: KeyboardEvent) {
-  if ((e.key === "Enter" || e.key === " ") && activateKey(e.target)) e.preventDefault();
+function onLinkKeydown(e: KeyboardEvent) {
+  if ((e.key === "Enter" || e.key === " ") && activate(e.target)) e.preventDefault();
 }
 
 // Per-tool expand state (reveals the applied change / raw result).
 const expanded = ref<Record<string, boolean>>({});
 const toggle = (id: string) => { expanded.value[id] = !expanded.value[id]; };
 
-// A row has something to reveal — and so is clickable — once it's resolved.
-const expandable = (tool: UiToolCall) => tool.status === "done" || tool.status === "error";
+// A row has something to reveal — and so is clickable — once it's resolved. A
+// skipped (declined) row counts too: it reads like a done row (collapsed, with a
+// chevron) and expands to show what the edit would have been.
+const expandable = (tool: UiToolCall) => tool.status === "done" || tool.status === "error" || tool.status === "declined";
 
 // Coerce a tool result/input (which may arrive as a JSON string on reload) to a
 // plain object, or null if it isn't one.
@@ -165,8 +166,8 @@ function detail(tool: UiToolCall): string {
     <div
       v-if="html"
       class="prose prose-sm dark:prose-invert max-w-none break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 prose-strong:text-foreground prose-em:text-muted-foreground prose-a:text-primary prose-code:rounded prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:font-mono prose-code:text-[0.85em] prose-code:font-normal prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-hr:my-3 prose-hr:border-border [&_code.gf-key]:cursor-pointer [&_code.gf-key]:underline [&_code.gf-key]:decoration-dotted [&_code.gf-key]:decoration-primary/40 [&_code.gf-key]:underline-offset-[3px] [&_code.gf-key:hover]:bg-primary-soft [&_code.gf-key:hover]:decoration-solid [&_code.gf-key:hover]:decoration-primary"
-      @click="onKeyClick"
-      @keydown="onKeyDown"
+      @click="onLinkClick"
+      @keydown="onLinkKeydown"
       v-html="html"
     />
 
@@ -195,13 +196,15 @@ function detail(tool: UiToolCall): string {
               'bg-success-bg text-success': tool.status === 'done',
               'bg-destructive-soft text-destructive': tool.status === 'error',
               'bg-primary-soft text-primary': tool.status === 'pending-confirm',
-              'text-muted-foreground': tool.status === 'running' || tool.status === 'declined',
+              'bg-muted text-muted-foreground': tool.status === 'declined',
+              'text-muted-foreground': tool.status === 'running',
             }"
           >
             <Loader2 v-if="tool.status === 'running'" class="size-3.5 animate-spin" />
             <Check v-else-if="tool.status === 'done'" class="size-3" :stroke-width="3" />
             <AlertTriangle v-else-if="tool.status === 'error'" class="size-3" />
             <span v-else-if="tool.status === 'pending-confirm'" class="size-1.5 rounded-full bg-current" />
+            <SkipForward v-else-if="tool.status === 'declined'" class="size-3" :stroke-width="2.5" />
             <X v-else class="size-3" />
           </span>
 
@@ -215,18 +218,9 @@ function detail(tool: UiToolCall): string {
           />
         </component>
 
-        <!-- Confirm card for a gated tool awaiting approval -->
-        <div v-if="tool.status === 'pending-confirm'" class="flex flex-col gap-2 px-3 pb-3 pl-[42px]">
-          <pre class="overflow-x-auto rounded-md bg-muted p-2 font-mono text-[11px] text-foreground">{{ JSON.stringify(tool.input, null, 2) }}</pre>
-          <div class="flex gap-2">
-            <Button size="sm" class="h-7 gap-1" @click="respondConfirm(tool.id, true)"><Check class="size-3.5" />Apply</Button>
-            <Button size="sm" variant="outline" class="h-7 gap-1" @click="respondConfirm(tool.id, false)"><X class="size-3.5" />Skip</Button>
-          </div>
-        </div>
-        <div v-else-if="tool.status === 'declined'" class="px-3 pb-2.5 pl-[42px] text-[12px] text-muted-foreground">Skipped.</div>
-
-        <!-- Expanded detail: the applied value for edits, else the raw result. -->
-        <div v-else-if="expanded[tool.id]" class="px-3 pb-3 pl-[42px]">
+        <!-- Expanded detail: the applied (or, for a skipped row, the would-be)
+             value for edits, else the raw result. -->
+        <div v-if="expanded[tool.id]" class="px-3 pb-3 pl-[42px]">
           <div v-if="appliedValue(tool) !== null" class="flex flex-col gap-1.5">
             <span v-if="toolKey(tool)" class="break-all font-mono text-[11px] text-muted-foreground">{{ toolKey(tool) }}</span>
             <div class="flex items-start gap-1.5 text-[13px] leading-snug">
@@ -237,6 +231,19 @@ function detail(tool: UiToolCall): string {
           <pre v-else class="max-h-[32rem] overflow-auto rounded-md bg-muted p-2.5 font-mono text-[11px] leading-relaxed text-foreground">{{ detail(tool) }}</pre>
         </div>
       </template>
+
+      <!-- One Approve/Skip governs the whole batch of pending edits above, so an
+           agreed task is approved with a single click rather than one per edit. -->
+      <div v-if="message.pendingConfirm" class="flex items-center gap-2 px-3 py-2.5 pl-[42px]">
+        <Button size="sm" class="h-7 gap-1" @click="message.pendingConfirm && respondConfirm(message.pendingConfirm.batchId, true)">
+          <Check class="size-3.5" />Approve
+          <kbd class="ml-0.5 rounded border border-primary-foreground/40 px-1 text-[10px] font-medium leading-none">A</kbd>
+        </Button>
+        <Button size="sm" variant="outline" class="h-7 gap-1" @click="message.pendingConfirm && respondConfirm(message.pendingConfirm.batchId, false)">
+          <X class="size-3.5" />Skip
+          <kbd class="ml-0.5 rounded border px-1 text-[10px] font-medium leading-none text-muted-foreground">S</kbd>
+        </Button>
+      </div>
     </div>
   </div>
 </template>

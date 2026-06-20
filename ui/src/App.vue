@@ -28,7 +28,7 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/comp
 import { useRoute, navigate } from "@/router";
 import { startLiveReload, onExternalChange, refreshing } from "@/liveReload";
 import { scanLabel, scanDetail, scanPending, refreshScanSummary } from "@/scanStatus.js";
-import { syncKnownKeys } from "@/keyIndex.js";
+import { syncKnownKeys, syncKnownLocales } from "@/keyIndex.js";
 
 const route = useRoute();
 // One global keydown listener for the g-chord view switching + ? overlay.
@@ -51,8 +51,10 @@ const wizardRef = ref<InstanceType<typeof ImportWizard> | null>(null);
 // The header still shows the project's locale context; the editor owns its own state.
 async function reload() {
   state.value = await fetchState();
-  // Keep the key index current so Lingo's chat can make real keys clickable.
+  // Keep the chat-link vocab current so Lingo's mentions of keys, review states,
+  // and locales render as clickable editor filters.
   syncKnownKeys(state.value);
+  syncKnownLocales(state.value);
 }
 // Refresh the header's locale context when the file changes on disk out of band;
 // each view subscribes its own refresh too.

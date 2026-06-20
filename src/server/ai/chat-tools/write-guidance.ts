@@ -4,9 +4,11 @@ import type { ChatTool, ToolContext } from "../chat-types.js";
 // Write the project's translation guidance — the interview's payoff. Both tools
 // load the full state, mutate only the guidance field, and persist the WHOLE
 // state, so no other config.* section is clobbered (the Settings round-trip
-// gotcha). The values feed buildSystemPrompt for every future translation.
+// gotcha). The values feed buildSystemPrompt for every future translation. Both
+// are confirm-gated: the user approves the batch (the chat's Approve card) first.
 
 const setProjectContext: ChatTool = {
+  confirm: true,
   def: {
     name: "set_project_context",
     strict: true,
@@ -29,6 +31,7 @@ const setProjectContext: ChatTool = {
 };
 
 const setLocaleInstruction: ChatTool = {
+  confirm: true,
   def: {
     name: "set_locale_instruction",
     strict: true,

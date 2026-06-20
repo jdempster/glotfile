@@ -2,12 +2,13 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import ChatMessage from "./ChatMessage.vue";
 import type { UiMessage } from "@/chat";
-import { knownKeys } from "@/keyIndex";
+import { knownKeys, knownLocales } from "@/keyIndex";
 import * as drilldown from "@/drilldown";
 
 describe("ChatMessage", () => {
   beforeEach(() => {
     knownKeys.value = new Set();
+    knownLocales.value = new Set();
     vi.restoreAllMocks();
   });
   it("renders assistant markdown as HTML", () => {
@@ -52,15 +53,51 @@ describe("ChatMessage", () => {
     expect(pre.classes()).toContain("font-mono");
   });
 
-  it("shows Apply/Skip buttons for a pending-confirm tool", () => {
+  it("shows one Approve/Skip card with a row per pending edit in the batch", () => {
     const message: UiMessage = {
-      role: "assistant", text: "",
-      tools: [{ id: "t1", name: "run_translation", humanSummary: "translate 40 strings", status: "pending-confirm", input: { locales: ["de"] } }],
+      role: "assistant", text: "I'll add context to both keys and a glossary note.",
+      tools: [
+        { id: "t1", name: "set_key_context", humanSummary: "set context for plant.feed.cta", status: "pending-confirm", input: {} },
+        { id: "t2", name: "set_glossary_term", humanSummary: "add glossary term \"feed\"", status: "pending-confirm", input: {} },
+      ],
+      pendingConfirm: { batchId: "t1" },
     };
     const wrapper = mount(ChatMessage, { props: { message } });
+    // Each pending edit is listed…
+    expect(wrapper.text()).toContain("set context for plant.feed.cta");
+    expect(wrapper.text()).toContain('add glossary term "feed"');
+    // …under a single Approve/Skip control for the whole batch.
     const labels = wrapper.findAll("button").map((b) => b.text());
-    expect(labels.some((t) => t.includes("Apply"))).toBe(true);
+    expect(labels.filter((t) => t.includes("Approve"))).toHaveLength(1);
     expect(labels.some((t) => t.includes("Skip"))).toBe(true);
+  });
+
+  it("renders a skipped row like a resolved row — collapsed, expandable, no 'Skipped.' line", async () => {
+    const message: UiMessage = {
+      role: "assistant", text: "",
+      tools: [{ id: "t1", name: "set_key_context", humanSummary: "set context for plant.feed", status: "declined", input: { key: "plant.feed", context: "Fertilise the plant." } }],
+      pendingConfirm: null,
+    };
+    const wrapper = mount(ChatMessage, { props: { message } });
+    // No standalone "Skipped." line — it reads like an approved/done row.
+    expect(wrapper.text()).not.toContain("Skipped.");
+    // Collapsed but expandable: the row is a button that starts collapsed…
+    const row = wrapper.find("button");
+    expect(row.exists()).toBe(true);
+    expect(wrapper.text()).not.toContain("Fertilise the plant.");
+    // …and expands to reveal what the edit would have been.
+    await row.trigger("click");
+    expect(wrapper.text()).toContain("Fertilise the plant.");
+  });
+
+  it("hides the Approve card once the batch is resolved", () => {
+    const message: UiMessage = {
+      role: "assistant", text: "",
+      tools: [{ id: "t1", name: "set_key_context", humanSummary: "set context for plant.feed.cta", status: "done" }],
+      pendingConfirm: null,
+    };
+    const wrapper = mount(ChatMessage, { props: { message } });
+    expect(wrapper.findAll("button").map((b) => b.text()).some((t) => t.includes("Approve"))).toBe(false);
   });
 
   it("does not render raw HTML from assistant markdown as live nodes (XSS)", () => {
@@ -92,12 +129,33 @@ describe("ChatMessage", () => {
   it("leaves backticked non-keys inert", async () => {
     knownKeys.value = new Set(["plant.water"]);
     const spy = vi.spyOn(drilldown, "drillToKey").mockImplementation(() => {});
-    // `de` is a locale code, not a key — it should not become a link.
-    const message: UiMessage = { role: "assistant", text: "Translate into `de`.", tools: [] };
+    // A source string, not a key/state/locale — it should not become a link.
+    const message: UiMessage = { role: "assistant", text: "It says `Water your plant`.", tools: [] };
     const wrapper = mount(ChatMessage, { props: { message } });
     expect(wrapper.find("code.gf-key").exists()).toBe(false);
     await wrapper.find("code").trigger("click");
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("makes a backticked review state clickable and filters the editor to it", async () => {
+    const spy = vi.spyOn(drilldown, "drillTo").mockImplementation(() => {});
+    const message: UiMessage = { role: "assistant", text: "You have 3 keys in `needs-review`.", tools: [] };
+    const wrapper = mount(ChatMessage, { props: { message } });
+    const code = wrapper.find("code.gf-key");
+    expect(code.exists()).toBe(true);
+    await code.trigger("click");
+    expect(spy).toHaveBeenCalledWith({ states: ["needs-review"] });
+  });
+
+  it("makes a backticked project locale clickable and focuses it", async () => {
+    knownLocales.value = new Set(["de"]);
+    const spy = vi.spyOn(drilldown, "drillTo").mockImplementation(() => {});
+    const message: UiMessage = { role: "assistant", text: "Let's look at `de`.", tools: [] };
+    const wrapper = mount(ChatMessage, { props: { message } });
+    const code = wrapper.find("code.gf-key");
+    expect(code.exists()).toBe(true);
+    await code.trigger("click");
+    expect(spy).toHaveBeenCalledWith({ locale: "de" });
   });
 
   it("focuses a key on Enter for keyboard users", async () => {

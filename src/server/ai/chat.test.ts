@@ -107,6 +107,68 @@ describe("runChatTurn", () => {
     expect(events.some((e) => e.type === "tool-start")).toBe(true);
   });
 
+  it("batches several confirm tools in one turn behind a SINGLE approval", async () => {
+    const ran: string[] = [];
+    const editTool = (name: string): ChatTool => ({
+      def: { name, description: "edit", schema: { type: "object" } },
+      confirm: true,
+      humanSummary: () => `do ${name}`,
+      run: async () => { ran.push(name); return { ok: true }; },
+    });
+    const provider = scriptedProvider([
+      [{ type: "turn_end", stopReason: "tool_use", content: [
+        { type: "tool_use", id: "a", name: "edit_a", input: {} },
+        { type: "tool_use", id: "b", name: "edit_b", input: {} },
+        { type: "tool_use", id: "c", name: "edit_c", input: {} },
+      ] }],
+      [{ type: "text", delta: "All done." }, { type: "turn_end", stopReason: "end_turn", content: [{ type: "text", text: "All done." }] }],
+    ]);
+    const state = sproutState();
+    const events: ChatStreamEvent[] = [];
+    let confirmCalls = 0;
+    await runChatTurn([], "set it all up", {
+      provider, tools: [editTool("edit_a"), editTool("edit_b"), editTool("edit_c")],
+      ctx: ctxFor(provider, state), system: "sys",
+      onEvent: (e) => events.push(e),
+      confirm: async () => { confirmCalls++; return true; },
+    });
+
+    // One approval covers the whole batch — not one per edit.
+    expect(confirmCalls).toBe(1);
+    const confirms = events.filter((e) => e.type === "confirm-required");
+    expect(confirms).toHaveLength(1);
+    expect(confirms[0]!.type === "confirm-required" && confirms[0]!.items.map((i) => i.id)).toEqual(["a", "b", "c"]);
+    // …and all three edits ran once approved.
+    expect(ran).toEqual(["edit_a", "edit_b", "edit_c"]);
+  });
+
+  it("declining a batch skips the gated edits but still runs ungated read/nav tools", async () => {
+    const ran: string[] = [];
+    const editTool: ChatTool = {
+      def: { name: "edit", description: "edit", schema: { type: "object" } },
+      confirm: true,
+      humanSummary: () => "edit", run: async () => { ran.push("edit"); return { ok: true }; },
+    };
+    const navTool: ChatTool = {
+      def: { name: "nav", description: "navigate", schema: { type: "object" } },
+      humanSummary: () => "nav", run: async () => { ran.push("nav"); return { ok: true }; },
+    };
+    const provider = scriptedProvider([
+      [{ type: "turn_end", stopReason: "tool_use", content: [
+        { type: "tool_use", id: "e", name: "edit", input: {} },
+        { type: "tool_use", id: "n", name: "nav", input: {} },
+      ] }],
+      [{ type: "text", delta: "Okay." }, { type: "turn_end", stopReason: "end_turn", content: [{ type: "text", text: "Okay." }] }],
+    ]);
+    const state = sproutState();
+    await runChatTurn([], "do it", {
+      provider, tools: [editTool, navTool], ctx: ctxFor(provider, state), system: "sys",
+      onEvent: () => {}, confirm: async () => false,
+    });
+    // The gated edit was skipped; the ungated nav still ran so the model can react.
+    expect(ran).toEqual(["nav"]);
+  });
+
   it("an unknown tool yields an error result rather than throwing", async () => {
     const provider = scriptedProvider([
       [{ type: "turn_end", stopReason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "nope", input: {} }] }],
