@@ -53,11 +53,11 @@ const resolved = computed(() => resolveLanguage(props.code, props.override));
   <Tooltip v-else>
     <TooltipTrigger as-child>
       <span class="inline-flex min-w-0 items-center gap-1.5">
-        <Flag :code="code" :override="override" :size="size" />
+        <Flag :code="code" :override="override" :size="size" class="shrink-0" />
         <span v-if="showName" class="truncate">{{ resolved.name }}</span>
         <span
           v-if="showCode"
-          class="font-mono text-xs"
+          class="shrink-0 whitespace-nowrap font-mono text-xs"
           :style="codeMinChars != null ? { minWidth: `${codeMinChars}ch` } : undefined"
         >{{ code.toUpperCase() }}</span>
       </span>
