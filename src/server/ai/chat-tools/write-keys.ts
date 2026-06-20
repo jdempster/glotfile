@@ -200,7 +200,7 @@ const setMaxLength: ChatTool = {
       type: "object",
       properties: {
         key: { type: "string" },
-        maxLength: { type: "integer", minimum: 0, description: "Character cap; 0 clears it." },
+        maxLength: { type: "integer", description: "Non-negative character cap; 0 clears it." },
       },
       required: ["key", "maxLength"],
       additionalProperties: false,
