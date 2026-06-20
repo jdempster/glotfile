@@ -54,6 +54,43 @@ async function collectSSE(res: Response): Promise<Array<{ event: string; data: u
 const post = (app: ReturnType<typeof createApi>, path: string, body: unknown) =>
   app.request(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
+// Like collectSSE, but consumes the stream incrementally so it can answer the
+// confirm-required prompt mid-turn (write tools are confirm-gated): on the first
+// confirm-required it POSTs an Approve/Skip on a separate request, letting the
+// suspended turn finish. Without this a gated turn would block forever.
+async function collectSSEAnswering(
+  res: Response,
+  app: ReturnType<typeof createApi>,
+  approve = true,
+): Promise<Array<{ event: string; data: unknown }>> {
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  const events: Array<{ event: string; data: unknown }> = [];
+  let buf = "";
+  let currentEvent = "message";
+  let answered = false;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop() ?? "";
+    for (const line of lines) {
+      if (line.startsWith("event:")) currentEvent = line.slice(6).trim();
+      else if (line.startsWith("data:")) {
+        const data = JSON.parse(line.slice(5).trim());
+        events.push({ event: currentEvent, data });
+        if (currentEvent === "confirm-required" && !answered) {
+          answered = true;
+          void post(app, "/chat/confirm", { batchId: (data as { batchId: string }).batchId, approved: approve });
+        }
+        currentEvent = "message";
+      }
+    }
+  }
+  return events;
+}
+
 describe("chat endpoints", () => {
   it("GET /chat returns an empty transcript for a fresh project", async () => {
     const { app } = setup();
@@ -96,19 +133,36 @@ describe("chat endpoints", () => {
     expect(events[events.length - 1]!.event).toBe("done");
   });
 
-  it("broadcasts state-changed after a turn that writes state so the UI reloads", async () => {
-    const { app, broadcasts, file } = setup({
+  it("broadcasts state-changed after an APPROVED turn that writes state so the UI reloads", async () => {
+    const { app, broadcasts } = setup({
       chatTurns: [
         [{ type: "turn_end", stopReason: "tool_use", content: [{ type: "tool_use", id: "g1", name: "set_glossary_term", input: { term: "Sprout", doNotTranslate: true } }] }],
         [{ type: "text", delta: "Added Sprout to the glossary." }, { type: "turn_end", stopReason: "end_turn", content: [{ type: "text", text: "Added Sprout to the glossary." }] }],
       ],
     });
-    await collectSSE(await post(app, "/chat/stream", { message: "add Sprout to the glossary" }));
+    // The write tool is confirm-gated, so approve the batch mid-stream.
+    const events = await collectSSEAnswering(await post(app, "/chat/stream", { message: "add Sprout to the glossary" }), app, true);
+    expect(events.some((e) => e.event === "confirm-required")).toBe(true);
     // The tool persisted the change to disk...
     const state = await (await app.request("/state")).json();
     expect(state.glossary.some((g: { term: string }) => g.term === "Sprout")).toBe(true);
     // ...and the UI was told to reload it.
     expect(broadcasts).toContain("state-changed");
+  });
+
+  it("a SKIPPED write turn leaves state untouched and broadcasts nothing", async () => {
+    const { app, broadcasts } = setup({
+      chatTurns: [
+        [{ type: "turn_end", stopReason: "tool_use", content: [{ type: "tool_use", id: "g1", name: "set_glossary_term", input: { term: "Sprout", doNotTranslate: true } }] }],
+        [{ type: "text", delta: "Okay, left it." }, { type: "turn_end", stopReason: "end_turn", content: [{ type: "text", text: "Okay, left it." }] }],
+      ],
+    });
+    const events = await collectSSEAnswering(await post(app, "/chat/stream", { message: "add Sprout to the glossary" }), app, false);
+    expect(events.some((e) => e.event === "confirm-required")).toBe(true);
+    expect(events[events.length - 1]!.event).toBe("done");
+    const state = await (await app.request("/state")).json();
+    expect(state.glossary.some((g: { term: string }) => g.term === "Sprout")).toBe(false);
+    expect(broadcasts).not.toContain("state-changed");
   });
 
   it("does not broadcast state-changed for a read-only turn", async () => {
@@ -130,7 +184,7 @@ describe("chat endpoints", () => {
 
   it("POST /chat/confirm returns 404 when nothing is pending", async () => {
     const { app } = setup();
-    const res = await post(app, "/chat/confirm", { toolUseId: "nope", approved: true });
+    const res = await post(app, "/chat/confirm", { batchId: "nope", approved: true });
     expect(res.status).toBe(404);
   });
 });

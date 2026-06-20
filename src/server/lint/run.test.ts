@@ -56,6 +56,12 @@ describe("runLint", () => {
       { loadSpeller: async () => { called = true; return null; }, ...quiet });
     expect(called).toBe(false);
   });
+
+  it("does not load a speller by default — spelling is off unless opted in", async () => {
+    let called = false;
+    await runLint(state(), { loadSpeller: async () => { called = true; return null; }, ...quiet });
+    expect(called).toBe(false);
+  });
 });
 
 describe("sortFindings / countSeverities", () => {

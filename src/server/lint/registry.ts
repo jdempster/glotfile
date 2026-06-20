@@ -37,5 +37,8 @@ export const DEFAULT_SEVERITY: Record<RuleId, Severity> = {
   "max-length": "warn",
   "identical-to-source": "warn",
   "whitespace": "warn",
-  "spelling": "warn",
+  // Spelling is OFF by default: it's noisy on real translation text (brand terms,
+  // proper nouns, loanwords) and needs the optional dictionary deps. Opt in via
+  // config `rules.spelling` to turn it on.
+  "spelling": "off",
 };

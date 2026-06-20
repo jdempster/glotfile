@@ -15,15 +15,17 @@ describe("lint registry", () => {
       "whitespace",
     ]);
   });
-  it("has a default severity for every rule id", () => {
-    for (const id of RULE_IDS) expect(["error", "warn"]).toContain(DEFAULT_SEVERITY[id]);
+  it("has a valid default severity for every rule id", () => {
+    for (const id of RULE_IDS) expect(["error", "warn", "off"]).toContain(DEFAULT_SEVERITY[id]);
   });
   it("defaults correctness rules to error and advisory rules to warn", () => {
     expect(DEFAULT_SEVERITY["placeholder-mismatch"]).toBe("error");
     expect(DEFAULT_SEVERITY["empty-translation"]).toBe("error");
     expect(DEFAULT_SEVERITY["glossary-violation"]).toBe("error");
-    expect(DEFAULT_SEVERITY["spelling"]).toBe("warn");
     expect(DEFAULT_SEVERITY["max-length"]).toBe("warn");
+  });
+  it("defaults spelling to off — it's opt-in (noisy on real text, optional deps)", () => {
+    expect(DEFAULT_SEVERITY["spelling"]).toBe("off");
   });
 });
 
