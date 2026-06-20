@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onMounted } from "vue";
-import { Send, Square, Trash2, Sparkles, X, Maximize2, Minimize2 } from "lucide-vue-next";
+import { Pencil, ArrowUp, Sparkles, X, Maximize2, Minimize2 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import ChatMessage from "./ChatMessage.vue";
 import { messages, isSending, loaded, expanded, focusNonce, inputFocused, send, cancel, clear, loadHistory, toggleExpanded } from "@/chat";
@@ -109,27 +109,27 @@ onMounted(() => {
 <template>
   <div class="flex h-full min-h-0 flex-col">
     <!-- Header (h-12 to line up with the app header bar) -->
-    <div class="flex h-12 shrink-0 items-center justify-between border-b px-4">
-      <div class="flex items-center gap-1.5 text-sm font-medium">
-        <Sparkles class="size-4 text-primary" />
-        Lingo
+    <div class="flex h-12 shrink-0 items-center justify-between border-b pl-5 pr-3">
+      <div class="flex items-center gap-2.5">
+        <Sparkles class="size-[18px] text-primary" />
+        <span class="text-base font-bold tracking-tight text-foreground">Lingo</span>
       </div>
-      <div class="flex items-center gap-1">
-        <Button v-if="!isEmpty" variant="ghost" size="sm" class="h-7 gap-1 text-muted-foreground" @click="clear">
-          <Trash2 class="size-3.5" />New chat
+      <div class="flex items-center gap-0.5">
+        <Button v-if="!isEmpty" variant="ghost" size="sm" class="h-7 gap-1.5 text-muted-foreground" @click="clear">
+          <Pencil class="size-3.5" />New chat
         </Button>
-        <Button v-if="dock" variant="ghost" size="icon" class="size-7 text-muted-foreground" :aria-label="expanded ? 'Collapse to side panel' : 'Expand over content'" @click="toggleExpanded">
+        <Button v-if="dock" variant="ghost" size="icon" class="size-8 text-muted-foreground" :aria-label="expanded ? 'Collapse to side panel' : 'Expand over content'" @click="toggleExpanded">
           <Minimize2 v-if="expanded" class="size-4" />
           <Maximize2 v-else class="size-4" />
         </Button>
-        <Button v-if="dock" variant="ghost" size="icon" class="size-7 text-muted-foreground" aria-label="Close" @click="emit('close')">
+        <Button v-if="dock" variant="ghost" size="icon" class="size-8 text-muted-foreground" aria-label="Close" @click="emit('close')">
           <X class="size-4" />
         </Button>
       </div>
     </div>
 
     <!-- Messages -->
-    <div ref="scroller" class="flex-1 overflow-y-auto px-4 py-3">
+    <div ref="scroller" class="flex-1 overflow-y-auto px-[26px] pb-2 pt-6">
       <div v-if="isEmpty" class="mx-auto flex max-w-[40rem] flex-col items-center gap-4 py-10 text-center">
         <Sparkles class="size-8 text-primary/70" />
         <div class="text-sm text-muted-foreground">
@@ -140,7 +140,7 @@ onMounted(() => {
             v-for="s in starters"
             :key="s"
             type="button"
-            class="rounded-md border px-3 py-2 text-left text-sm transition-colors hover:bg-muted/60"
+            class="rounded-xl border px-3.5 py-2.5 text-left text-sm transition-colors hover:border-primary-border hover:bg-primary-soft/50"
             @click="runStarter(s)"
           >
             {{ s }}
@@ -156,65 +156,67 @@ onMounted(() => {
           v-for="(m, i) in messages"
           :key="i"
           :message="m"
-          :class="i === 0 ? '' : (m.role === 'user' || messages[i - 1].role === 'user' ? 'mt-3' : 'mt-1.5')"
+          :class="i === 0 ? '' : (m.role === 'user' || messages[i - 1].role === 'user' ? 'mt-5' : 'mt-2')"
         />
-        <div v-if="thinking" data-thinking class="mt-2 flex justify-start">
-          <div class="flex items-center rounded-lg border border-border bg-muted px-3 py-2.5" role="status" aria-label="Lingo is thinking">
-            <span class="loader text-muted-foreground/70" />
+        <div v-if="thinking" data-thinking class="mt-3 flex">
+          <div class="flex items-center gap-1.5 py-0.5" role="status" aria-label="Lingo is thinking">
+            <span class="lf-dot" /><span class="lf-dot" /><span class="lf-dot" />
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Composer -->
-    <div class="shrink-0 border-t p-3">
-      <div class="flex items-end gap-2">
+    <!-- Composer: the textarea and a round send/stop button share one rounded
+         field. Laid out as a flex row with items-end so the 34px button sets the
+         resting height (button stays centered at one line) and stays pinned to
+         the bottom as the textarea grows. -->
+    <div class="shrink-0 px-5 pb-[18px] pt-3.5">
+      <div class="flex items-end gap-2 rounded-2xl border border-input bg-background py-1.5 pl-4 pr-2 transition-colors focus-within:border-ring">
         <textarea
           ref="textarea"
           v-model="draft"
           rows="1"
           placeholder="Message the assistant…"
-          class="block max-h-40 w-full flex-1 resize-none overflow-y-auto rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-5 shadow-sm transition-colors outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+          class="block max-h-40 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-1.5 text-[14.5px] leading-snug text-foreground outline-none placeholder:text-muted-foreground"
           @input="autosize"
           @keydown="onKeydown"
           @focus="inputFocused = true"
           @blur="inputFocused = false"
         />
-        <Button v-if="isSending" variant="outline" size="icon" class="size-10 shrink-0" aria-label="Stop" @click="cancel">
-          <Square class="size-4" />
-        </Button>
-        <Button v-else size="icon" class="size-10 shrink-0" aria-label="Send" :disabled="!draft.trim()" @click="submit">
-          <Send class="size-4" />
-        </Button>
+        <button
+          type="button"
+          :aria-label="isSending ? 'Stop' : 'Send'"
+          :disabled="!isSending && !draft.trim()"
+          class="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
+          @click="isSending ? cancel() : submit()"
+        >
+          <span v-if="isSending" class="size-[11px] rounded-[2px] bg-primary-foreground" />
+          <ArrowUp v-else class="size-[18px]" :stroke-width="2.2" />
+        </button>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* Three-dot "wave" thinking loader (adapted from css-loaders.com l3).
-   currentColor lets it inherit the theme via a text-* utility on the element. */
-.loader {
-  display: inline-block;
-  width: 34px;
-  aspect-ratio: 2;
-  --_g: no-repeat radial-gradient(circle closest-side, currentColor 90%, transparent);
-  background:
-    var(--_g) 0% 50%,
-    var(--_g) 50% 50%,
-    var(--_g) 100% 50%;
-  background-size: calc(100% / 3) 50%;
-  animation: lingo-thinking 1s infinite linear;
+/* Three pulsing dots — Lingo's "thinking" indicator, shown until the user's turn
+   returns. Each dot fades and lifts on a staggered cycle. */
+.lf-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--primary);
+  animation: lf-pulse 1.3s ease-in-out infinite;
 }
+.lf-dot:nth-child(2) { animation-delay: 0.16s; }
+.lf-dot:nth-child(3) { animation-delay: 0.32s; }
 
-@keyframes lingo-thinking {
-  20% { background-position: 0% 0%, 50% 50%, 100% 50%; }
-  40% { background-position: 0% 100%, 50% 0%, 100% 50%; }
-  60% { background-position: 0% 50%, 50% 100%, 100% 0%; }
-  80% { background-position: 0% 50%, 50% 50%, 100% 100%; }
+@keyframes lf-pulse {
+  0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-2px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .loader { animation: none; }
+  .lf-dot { animation: none; opacity: 0.6; }
 }
 </style>

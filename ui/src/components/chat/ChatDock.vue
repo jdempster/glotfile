@@ -25,7 +25,7 @@ const chatWidth = chatPanel.width;
       @commit="chatPanel.commit"
       @reset="chatPanel.reset"
     />
-    <aside class="flex shrink-0 flex-col border-l bg-background" :style="{ width: `${chatWidth}px` }">
+    <aside class="flex shrink-0 flex-col border-l bg-background shadow-[-14px_0_44px_rgba(20,16,45,0.06)]" :style="{ width: `${chatWidth}px` }">
       <ChatPanel dock @close="toggleOpen" />
     </aside>
   </template>

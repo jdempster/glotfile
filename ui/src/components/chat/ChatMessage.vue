@@ -17,7 +17,7 @@ const escapeHtml = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const renderer = new marked.Renderer();
 renderer.html = ({ text }) => escapeHtml(text);
-import { Wrench, Search, FileText, Check, X, Loader2, AlertTriangle, ChevronRight } from "lucide-vue-next";
+import { Check, X, Loader2, AlertTriangle, ChevronRight } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { respondConfirm, type UiMessage, type UiToolCall } from "@/chat";
 
@@ -31,23 +31,73 @@ const html = computed(() =>
   props.message.text ? purifier.sanitize(marked.parse(props.message.text, { async: false, renderer }) as string) : "",
 );
 
-// Only render the message bubble when there's something to say. Turns that only
-// call tools (no narration) shouldn't leave an empty bubble behind.
-const hasBody = computed(() => !!props.message.text || !!props.message.error);
-
-// Per-tool expand state (show the raw result/input).
+// Per-tool expand state (reveals the applied change / raw result).
 const expanded = ref<Record<string, boolean>>({});
 const toggle = (id: string) => { expanded.value[id] = !expanded.value[id]; };
 
 // A row has something to reveal — and so is clickable — once it's resolved.
 const expandable = (tool: UiToolCall) => tool.status === "done" || tool.status === "error";
 
-const iconFor = (name: string) => {
-  if (name === "grep_codebase" || name === "search_keys") return Search;
-  if (name === "read_file" || name === "read_key" || name === "read_guidance") return FileText;
-  if (name === "find_files") return FileText;
-  return Wrench;
-};
+// Coerce a tool result/input (which may arrive as a JSON string on reload) to a
+// plain object, or null if it isn't one.
+function asObject(raw: unknown): Record<string, unknown> | null {
+  if (raw && typeof raw === "object") return raw as Record<string, unknown>;
+  if (typeof raw === "string") {
+    try { const o = JSON.parse(raw); return o && typeof o === "object" ? (o as Record<string, unknown>) : null; }
+    catch { return null; }
+  }
+  return null;
+}
+
+// The full key a tool acted on, for the expanded detail line.
+function toolKey(tool: UiToolCall): string {
+  const k = asObject(tool.result)?.key ?? asObject(tool.input)?.key;
+  return typeof k === "string" ? k : "";
+}
+
+// A compact identifier shown at the row's right edge: the key's last segment, a
+// glossary term, a locale, or the primary search argument — whichever the tool
+// carries. Keeps the row scannable as an activity log.
+function shortLabel(tool: UiToolCall): string {
+  const r = asObject(tool.result) ?? {};
+  const i = asObject(tool.input) ?? {};
+  const key = r.key ?? i.key;
+  if (typeof key === "string") { const p = key.split("."); return p[p.length - 1] || key; }
+  const term = r.term ?? i.term; if (typeof term === "string") return term;
+  const locale = r.locale ?? i.locale; if (typeof locale === "string") return locale;
+  const q = i.query ?? i.pattern ?? i.glob ?? i.path; if (typeof q === "string") return q;
+  return "";
+}
+
+// Tools whose effect is setting a single text value. For these the expanded view
+// shows the applied value rather than a raw JSON dump.
+const EDIT_TOOLS = new Set([
+  "set_source_text", "add_key", "set_translation",
+  "set_key_context", "set_project_context", "set_locale_instruction",
+]);
+
+// The value an edit tool applied (its "after"). The backend doesn't return the
+// previous value, so we surface only what the string is now set to. Read tools
+// (and anything we can't read a value from) return null and fall back to detail().
+function appliedValue(tool: UiToolCall): string | null {
+  if (!EDIT_TOOLS.has(tool.name)) return null;
+  const r = asObject(tool.result);
+  if (r) {
+    if (tool.name === "set_source_text" && typeof r.source === "string") return r.source;
+    if (tool.name === "add_key" && typeof r.source === "string") return r.source;
+    if (tool.name === "set_translation" && typeof r.value === "string") return r.value;
+    if (tool.name === "set_key_context" && typeof r.context === "string") return r.context;
+    if (tool.name === "set_project_context" && typeof r.projectContext === "string") return r.projectContext;
+    if (tool.name === "set_locale_instruction" && typeof r.instruction === "string") return r.instruction;
+  }
+  const i = asObject(tool.input);
+  if (i) {
+    if (typeof i.value === "string") return i.value;
+    if (typeof i.context === "string") return i.context;
+    if (typeof i.text === "string") return i.text;
+  }
+  return null;
+}
 
 function detail(tool: UiToolCall): string {
   if (tool.status === "error") return tool.error ?? "error";
@@ -65,70 +115,90 @@ function detail(tool: UiToolCall): string {
 </script>
 
 <template>
-  <div :class="message.role === 'user' ? 'flex justify-end' : 'flex flex-col gap-1.5'">
-    <!-- Message body first — the model narrates what it's about to do ("here's
-         what I'll do"), then the tool rows below show it happening. Only render
-         when there's text or an error, so tool-only turns don't leave an empty
-         bubble behind. -->
+  <!-- User: a lavender pill, right-aligned, with an asymmetric tail. -->
+  <div v-if="message.role === 'user'" class="flex justify-end">
     <div
-      v-if="hasBody"
-      :class="[
-        'rounded-lg px-3 py-2 text-sm',
-        message.role === 'user'
-          ? 'max-w-[44rem] border border-primary-border bg-primary-soft text-foreground'
-          : 'w-full border border-border bg-muted',
-      ]"
-    >
-      <div
-        v-if="message.role === 'assistant' && html"
-        class="prose prose-sm dark:prose-invert max-w-none break-words prose-hr:my-3 prose-hr:border-border"
-        v-html="html"
-      />
-      <div v-else-if="message.text" class="whitespace-pre-wrap break-words">{{ message.text }}</div>
+      class="max-w-[82%] whitespace-pre-wrap break-words bg-primary-soft px-3.5 py-2 text-[14.5px] leading-normal text-foreground"
+      style="border-radius: 16px 16px 5px 16px"
+    >{{ message.text }}</div>
+  </div>
 
-      <div v-if="message.error" class="mt-1 flex items-start gap-1.5 text-xs text-destructive">
-        <AlertTriangle class="mt-0.5 size-3.5 shrink-0" />
-        <span>{{ message.error }}</span>
-      </div>
+  <!-- Assistant: text flows on the panel (no bubble); tool calls render below as
+       a quiet activity card. -->
+  <div v-else class="flex flex-col gap-2.5">
+    <div
+      v-if="html"
+      class="prose prose-sm dark:prose-invert max-w-none break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 prose-strong:text-foreground prose-em:text-muted-foreground prose-a:text-primary prose-code:rounded prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:font-mono prose-code:text-[0.85em] prose-code:font-normal prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-hr:my-3 prose-hr:border-border"
+      v-html="html"
+    />
+
+    <div v-if="message.error" class="flex items-start gap-1.5 text-xs text-destructive">
+      <AlertTriangle class="mt-0.5 size-3.5 shrink-0" />
+      <span>{{ message.error }}</span>
     </div>
 
-    <!-- Tool activity (assistant): quiet rows, deliberately NOT wrapped in a
-         bubble — they read as a subtle activity log, not a stack of cards. -->
-    <div v-if="message.tools.length" class="flex flex-col gap-0.5 pl-2 text-xs text-muted-foreground">
-      <div v-for="tool in message.tools" :key="tool.id">
+    <!-- Tool activity card: each call a row with a status disc, a summary, and a
+         compact key; resolved rows expand to the applied value or raw result. -->
+    <div v-if="message.tools.length" class="overflow-hidden rounded-xl border border-border bg-muted/40">
+      <template v-for="(tool, i) in message.tools" :key="tool.id">
+        <div v-if="i > 0" class="h-px bg-border" />
+
         <component
           :is="expandable(tool) ? 'button' : 'div'"
           :type="expandable(tool) ? 'button' : undefined"
-          class="flex w-full items-center gap-1.5 py-px text-left"
-          :class="expandable(tool) ? 'hover:text-foreground' : ''"
+          class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors"
+          :class="expandable(tool) ? 'hover:bg-background' : ''"
           :aria-expanded="expandable(tool) ? expanded[tool.id] : undefined"
           @click="expandable(tool) && toggle(tool.id)"
         >
-          <Loader2 v-if="tool.status === 'running'" class="size-3.5 shrink-0 animate-spin" />
-          <Check v-else-if="tool.status === 'done'" class="size-3.5 shrink-0 text-emerald-500" />
-          <AlertTriangle v-else-if="tool.status === 'error'" class="size-3.5 shrink-0 text-destructive" />
-          <component :is="iconFor(tool.name)" v-else class="size-3.5 shrink-0" />
-          <span class="truncate">{{ tool.humanSummary || tool.name }}</span>
-          <span v-if="tool.progress" class="opacity-70">· {{ tool.progress.done }}/{{ tool.progress.total }}</span>
+          <span
+            class="flex size-[18px] shrink-0 items-center justify-center rounded-full"
+            :class="{
+              'bg-success-bg text-success': tool.status === 'done',
+              'bg-destructive-soft text-destructive': tool.status === 'error',
+              'bg-primary-soft text-primary': tool.status === 'pending-confirm',
+              'text-muted-foreground': tool.status === 'running' || tool.status === 'declined',
+            }"
+          >
+            <Loader2 v-if="tool.status === 'running'" class="size-3.5 animate-spin" />
+            <Check v-else-if="tool.status === 'done'" class="size-3" :stroke-width="3" />
+            <AlertTriangle v-else-if="tool.status === 'error'" class="size-3" />
+            <span v-else-if="tool.status === 'pending-confirm'" class="size-1.5 rounded-full bg-current" />
+            <X v-else class="size-3" />
+          </span>
+
+          <span class="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{{ tool.humanSummary || tool.name }}</span>
+          <span v-if="tool.progress" class="shrink-0 text-[11px] text-muted-foreground">{{ tool.progress.done }}/{{ tool.progress.total }}</span>
+          <span v-if="shortLabel(tool)" class="max-w-[150px] shrink-0 truncate font-mono text-[11px] text-muted-foreground">{{ shortLabel(tool) }}</span>
           <ChevronRight
             v-if="expandable(tool)"
-            :class="['ml-auto size-3.5 shrink-0 transition-transform', expanded[tool.id] ? 'rotate-90' : '']"
+            class="size-3.5 shrink-0 text-muted-foreground transition-transform"
+            :class="expanded[tool.id] ? 'rotate-90' : ''"
           />
         </component>
 
         <!-- Confirm card for a gated tool awaiting approval -->
-        <div v-if="tool.status === 'pending-confirm'" class="mt-1.5 flex flex-col gap-2">
-          <pre class="overflow-x-auto rounded bg-muted p-1.5 text-[11px] text-foreground">{{ JSON.stringify(tool.input, null, 2) }}</pre>
+        <div v-if="tool.status === 'pending-confirm'" class="flex flex-col gap-2 px-3 pb-3 pl-[42px]">
+          <pre class="overflow-x-auto rounded-md bg-muted p-2 font-mono text-[11px] text-foreground">{{ JSON.stringify(tool.input, null, 2) }}</pre>
           <div class="flex gap-2">
             <Button size="sm" class="h-7 gap-1" @click="respondConfirm(tool.id, true)"><Check class="size-3.5" />Apply</Button>
             <Button size="sm" variant="outline" class="h-7 gap-1" @click="respondConfirm(tool.id, false)"><X class="size-3.5" />Skip</Button>
           </div>
         </div>
+        <div v-else-if="tool.status === 'declined'" class="px-3 pb-2.5 pl-[42px] text-[12px] text-muted-foreground">Skipped.</div>
 
-        <span v-else-if="tool.status === 'declined'" class="block opacity-70">Skipped.</span>
-
-        <pre v-if="expanded[tool.id]" class="mt-1 max-h-[32rem] overflow-auto rounded bg-muted p-2.5 font-mono text-xs leading-relaxed text-foreground">{{ detail(tool) }}</pre>
-      </div>
+        <!-- Expanded detail: the applied value for edits, else the raw result. -->
+        <div v-else-if="expanded[tool.id]" class="px-3 pb-3 pl-[42px]">
+          <div v-if="appliedValue(tool) !== null" class="flex flex-col gap-1.5">
+            <span v-if="toolKey(tool)" class="break-all font-mono text-[11px] text-muted-foreground">{{ toolKey(tool) }}</span>
+            <div class="flex items-start gap-1.5 text-[13px] leading-snug">
+              <span class="shrink-0 text-success">→</span>
+              <span class="font-medium text-success">{{ appliedValue(tool) }}</span>
+            </div>
+          </div>
+          <pre v-else class="max-h-[32rem] overflow-auto rounded-md bg-muted p-2.5 font-mono text-[11px] leading-relaxed text-foreground">{{ detail(tool) }}</pre>
+        </div>
+      </template>
     </div>
   </div>
 </template>
