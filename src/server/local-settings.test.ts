@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   loadLocalSettings, saveLocalSettings, defaultLocalSettings,
-  aiConfigError, isEditorId,
+  aiConfigError, isEditorId, multilingualLocalesError,
 } from "./local-settings.js";
 
 let dir: string;
@@ -58,6 +58,20 @@ describe("loadLocalSettings", () => {
     writeFileSync(settingsFile(), "{ not json");
     expect(loadLocalSettings(dir)).toEqual(defaultLocalSettings());
   });
+
+  it("defaults multilingualLocales to null (= show all)", () => {
+    expect(defaultLocalSettings().multilingualLocales).toBeNull();
+  });
+
+  it("coerces a multilingualLocales array, lowercasing and dropping non-strings", () => {
+    writeSettings({ multilingualLocales: ["FR", "de-DE", 5, "", " es "] });
+    expect(loadLocalSettings(dir).multilingualLocales).toEqual(["fr", "de-de", "es"]);
+  });
+
+  it("treats a non-array multilingualLocales as null", () => {
+    writeSettings({ multilingualLocales: "fr" });
+    expect(loadLocalSettings(dir).multilingualLocales).toBeNull();
+  });
 });
 
 describe("saveLocalSettings", () => {
@@ -82,6 +96,27 @@ describe("saveLocalSettings", () => {
     expect(raw.editor).toBe("phpstorm");
     expect(raw.ai.model).toBe("gpt-4o");
     expect(raw.future).toEqual({ keep: true });
+  });
+
+  it("round-trips multilingualLocales (array and null)", () => {
+    saveLocalSettings(dir, { multilingualLocales: ["fr", "de"] });
+    expect(loadLocalSettings(dir).multilingualLocales).toEqual(["fr", "de"]);
+    saveLocalSettings(dir, { multilingualLocales: null });
+    expect(loadLocalSettings(dir).multilingualLocales).toBeNull();
+  });
+});
+
+describe("multilingualLocalesError", () => {
+  it("accepts null and a string array", () => {
+    expect(multilingualLocalesError(null)).toBeNull();
+    expect(multilingualLocalesError(["fr", "de"])).toBeNull();
+    expect(multilingualLocalesError([])).toBeNull();
+  });
+  it("rejects non-array, non-null values", () => {
+    expect(multilingualLocalesError("fr")).toMatch(/array or null/);
+  });
+  it("rejects an array with a non-string entry", () => {
+    expect(multilingualLocalesError(["fr", 5])).toMatch(/strings/);
   });
 });
 

@@ -110,6 +110,32 @@ describe("filterKeys — locale-scoped facets", () => {
     const keys = filterKeys(mkState(), mkFilter({ states: ["reviewed"] }));
     expect(keys).toEqual(["a", "c"]);
   });
+
+  it("missing facet scoped to a locale subset unions across those locales", () => {
+    // a missing in de; b missing in fr (+de); c missing in fr -> all three.
+    const keys = filterKeys(mkState(), mkFilter({ locales: ["fr", "de"], states: ["missing"] }));
+    expect(keys).toEqual(["a", "b", "c"]);
+  });
+
+  it("reviewed facet scoped to a subset matches any of those locales", () => {
+    const keys = filterKeys(mkState(), mkFilter({ locales: ["fr", "de"], states: ["reviewed"] }));
+    expect(keys).toEqual(["a", "c"]);
+  });
+
+  it("a locales subset takes precedence over a single locale", () => {
+    const keys = filterKeys(mkState(), mkFilter({ locale: "fr", locales: ["de"], states: ["reviewed"] }));
+    expect(keys).toEqual(["c"]);
+  });
+
+  it("issue facets are scoped to the selected subset", () => {
+    const byKey = new Map([
+      ["a", [{ key: "a", locale: "de", check: "placeholder" as const, message: "x" }]],
+      ["b", [{ key: "b", locale: "fr", check: "placeholder" as const, message: "y" }]],
+    ]);
+    // Only de is in scope, so b's fr-only issue drops out.
+    const keys = filterKeys(mkState(), mkFilter({ locales: ["de"], issues: ["placeholder"] }), byKey);
+    expect(keys).toEqual(["a"]);
+  });
 });
 
 // Source "en"; scalar.key has source text, plural.key is a plural with a populated

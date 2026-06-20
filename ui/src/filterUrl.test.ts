@@ -9,8 +9,7 @@ function params(obj: Record<string, string>): URLSearchParams {
 const BASE: UrlState = {
   filter: { ...EMPTY_FILTER },
   sort: "key-asc",
-  view: "multilingual",
-  locale: "",
+  locales: null,
 };
 
 describe("filterFromUrl", () => {
@@ -77,20 +76,18 @@ describe("filterFromUrl", () => {
     expect(result.sort).toBe("key-asc");
   });
 
-  it("parses view and locale", () => {
-    const result = filterFromUrl(params({ view: "bilingual", locale: "fr" }));
-    expect(result.view).toBe("bilingual");
-    expect(result.locale).toBe("fr");
-  });
-
-  it("defaults view to multilingual for unknown value", () => {
-    const result = filterFromUrl(params({ view: "invalid" }));
-    expect(result.view).toBe("multilingual");
-  });
-
   it("parses tag", () => {
     const result = filterFromUrl(params({ tag: "ui" }));
     expect(result.filter.tag).toBe("ui");
+  });
+
+  it("parses a locales subset, lowercased and de-duped", () => {
+    expect(filterFromUrl(params({ locales: "FR,de,fr" })).locales).toEqual(["fr", "de"]);
+  });
+
+  it("treats an absent or empty locales param as null (show all)", () => {
+    expect(filterFromUrl(new URLSearchParams()).locales).toBeNull();
+    expect(filterFromUrl(params({ locales: "" })).locales).toBeNull();
   });
 });
 
@@ -104,19 +101,10 @@ describe("filterToUrl", () => {
     expect(p.has("sort")).toBe(false);
   });
 
-  it("omits default view", () => {
-    const p = filterToUrl({ ...BASE, view: "multilingual" });
-    expect(p.has("view")).toBe(false);
-  });
-
-  it("omits locale when view is multilingual", () => {
-    const p = filterToUrl({ ...BASE, view: "multilingual", locale: "fr" });
-    expect(p.has("locale")).toBe(false);
-  });
-
-  it("includes locale when view is bilingual", () => {
-    const p = filterToUrl({ ...BASE, view: "bilingual", locale: "fr" });
-    expect(p.get("locale")).toBe("fr");
+  it("encodes a locales subset and omits it when null", () => {
+    expect(filterToUrl({ ...BASE, locales: ["fr", "de"] }).get("locales")).toBe("fr,de");
+    expect(filterToUrl({ ...BASE, locales: null }).has("locales")).toBe(false);
+    expect(filterToUrl({ ...BASE, locales: [] }).has("locales")).toBe(false);
   });
 
   it("round-trips the skipTranslate flag", () => {
@@ -171,8 +159,7 @@ describe("filterFromUrl / filterToUrl round-trip", () => {
         skipTranslate: true,
       },
       sort: "created",
-      view: "bilingual",
-      locale: "fr",
+      locales: ["fr", "de"],
     };
     const result = filterFromUrl(filterToUrl(input));
     expect(result).toEqual(input);

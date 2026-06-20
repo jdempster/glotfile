@@ -1728,6 +1728,27 @@ describe("local settings (AI + editor)", () => {
     expect(badEditor.status).toBe(400);
   });
 
+  it("PUT persists multilingualLocales and round-trips through GET", async () => {
+    const { app } = setupLocal();
+    const res = await app.request("/local-settings", {
+      method: "PUT", headers, body: JSON.stringify({ multilingualLocales: ["fr", "de"] }),
+    });
+    expect(res.status).toBe(200);
+    const body = await (await app.request("/local-settings")).json();
+    expect(body.multilingualLocales).toEqual(["fr", "de"]);
+    await app.request("/local-settings", { method: "PUT", headers, body: JSON.stringify({ multilingualLocales: null }) });
+    const cleared = await (await app.request("/local-settings")).json();
+    expect(cleared.multilingualLocales).toBeNull();
+  });
+
+  it("PUT rejects a non-array, non-null multilingualLocales", async () => {
+    const { app } = setupLocal();
+    const res = await app.request("/local-settings", {
+      method: "PUT", headers, body: JSON.stringify({ multilingualLocales: "fr" }),
+    });
+    expect(res.status).toBe(400);
+  });
+
   it("PUT editor-only leaves a previously-saved ai block untouched", async () => {
     const { app } = setupLocal();
     await app.request("/local-settings", { method: "PUT", headers, body: JSON.stringify({ ai: { provider: "openrouter", model: "x", endpoint: null, region: null, batchSize: 3 } }) });

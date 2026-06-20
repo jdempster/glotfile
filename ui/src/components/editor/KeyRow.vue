@@ -39,8 +39,8 @@ const props = withDefaults(defineProps<{
   checked?: boolean;
   issues?: Issue[];
   // Target locales the row's Clear / Mark-state actions apply to, plus a label —
-  // mirrors the editor's bulk-selection scope (the bilingual target, or all
-  // targets in multilingual view) so a single-row action matches the bulk bar.
+  // mirrors the editor's bulk-selection scope (the locales currently on screen)
+  // so a single-row action matches the bulk bar.
   scopeLocales?: string[];
   scopeLabel?: string;
 }>(), {
@@ -237,7 +237,7 @@ async function doDelete() {
 }
 
 // Status + clear act on the same scope the bulk bar would for this one key:
-// the bilingual target, or all targets in multilingual view.
+// the target locales currently on screen.
 async function markState(state: "reviewed" | "needs-review") {
   busy.value = true;
   try {

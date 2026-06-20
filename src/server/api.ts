@@ -54,7 +54,7 @@ import { previewImport, runImport, runSync } from "./import/run.js";
 import { refreshLocationUsage, isLocationScannedState, usageCounts } from "./import/usage.js";
 import { exportToDisk, narrowForExport } from "./export-run.js";
 import { loadUiPrefs, saveUiPrefs, isThemeMode, isPanelWidth, defaultUiPrefsPath, type UiPrefs } from "./ui-prefs.js";
-import { loadLocalSettings, saveLocalSettings, aiConfigError, isEditorId, type LocalSettings } from "./local-settings.js";
+import { loadLocalSettings, saveLocalSettings, aiConfigError, multilingualLocalesError, isEditorId, type LocalSettings } from "./local-settings.js";
 import { writeFileAtomic } from "./atomic-write.js";
 import { createEventHub, type EventHub, type EventSender } from "./events.js";
 import { createStateWatcher, type StateWatcher } from "./watch.js";
@@ -243,8 +243,13 @@ export function createApi(deps: ApiDeps): Hono {
       if (!isEditorId(body.editor)) return c.json({ error: "editor must be one of: vscode, zed, phpstorm" }, 400);
       patch.editor = body.editor;
     }
-    if (patch.ai === undefined && patch.editor === undefined) {
-      return c.json({ error: "provide ai and/or editor" }, 400);
+    if (body.multilingualLocales !== undefined) {
+      const err = multilingualLocalesError(body.multilingualLocales);
+      if (err) return c.json({ error: err }, 400);
+      patch.multilingualLocales = body.multilingualLocales;
+    }
+    if (patch.ai === undefined && patch.editor === undefined && patch.multilingualLocales === undefined) {
+      return c.json({ error: "provide ai, editor and/or multilingualLocales" }, 400);
     }
     saveLocalSettings(projectRoot, patch);
     return c.json({ ok: true });

@@ -54,6 +54,13 @@ export function isRtl(code: string): boolean {
   return RTL_LANGUAGES.has(base);
 }
 
+// Shared A-Z comparator: orders locale codes by their resolved language name, so
+// every locale list (editor columns, the locale picker, the guidance rules) shows
+// the same order. Ties break on the code so it stays deterministic.
+export function compareByLanguageName(a: string, b: string): number {
+  return resolveLanguage(a).name.localeCompare(resolveLanguage(b).name, "en") || a.localeCompare(b);
+}
+
 export function resolveLanguage(code: string, override?: LanguageOverride): ResolvedLanguage {
   const dashed = code.replace(/_/g, "-");
 

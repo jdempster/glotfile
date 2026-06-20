@@ -281,7 +281,7 @@ describe("TranslateDialog", () => {
   it("submits a batch with the dialog's scope and closes", async () => {
     vi.mocked(batchStatus).mockResolvedValueOnce({ supported: true, pending: null });
     const wrapper = mount(TooltipProvider, {
-      slots: { default: () => h(TranslateDialog, { open: true, state, filteredKeys: ["k1"], targetLocale: "fr", "onUpdate:open": vi.fn() }) },
+      slots: { default: () => h(TranslateDialog, { open: true, state, filteredKeys: ["k1"], targetLocales: ["fr"], "onUpdate:open": vi.fn() }) },
     });
     await nextTick();
     await flushPromises();

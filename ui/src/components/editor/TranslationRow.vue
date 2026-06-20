@@ -110,7 +110,7 @@ async function translateCell() {
 <template>
   <div
     :class="cn(
-      'grid grid-cols-[172px_minmax(0,1fr)_232px] items-start gap-[18px] border-b border-border-soft py-[11px] pl-4 pr-[18px] last:border-b-0 max-[1080px]:grid-cols-[150px_minmax(0,1fr)_200px] max-[1080px]:gap-3',
+      'grid grid-cols-[196px_minmax(0,1fr)_232px] items-start gap-[18px] border-b border-border-soft py-[11px] pl-4 pr-[18px] last:border-b-0 max-[1080px]:grid-cols-[168px_minmax(0,1fr)_200px] max-[1080px]:gap-3',
       isSource && 'bg-foreground/[0.015] dark:bg-foreground/[0.025]',
     )"
     :data-state="state"

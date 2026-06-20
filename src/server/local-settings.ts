@@ -19,6 +19,11 @@ export interface LocalSettings {
   editor: EditorId;
   profiles: Record<string, AiConfig>;
   activeProfile: string | null;
+  // Locales the editor's multilingual view shows. null means "all" (the default,
+  // and what new locales fall into); an array is a remembered subset of target
+  // locales. Per-developer, so each person can narrow the view to the locales
+  // they own without touching the shared config.
+  multilingualLocales: string[] | null;
 }
 
 const DEFAULT_AI: AiConfig = {
@@ -31,7 +36,7 @@ const DEFAULT_AI: AiConfig = {
 const DEFAULT_EDITOR: EditorId = "vscode";
 
 export function defaultLocalSettings(): LocalSettings {
-  return { ai: { ...DEFAULT_AI }, editor: DEFAULT_EDITOR, profiles: {}, activeProfile: null };
+  return { ai: { ...DEFAULT_AI }, editor: DEFAULT_EDITOR, profiles: {}, activeProfile: null, multilingualLocales: null };
 }
 
 const settingsPath = (projectRoot: string): string => resolve(projectRoot, ".glotfile", "settings.json");
@@ -67,6 +72,19 @@ function coerceAi(raw: unknown): AiConfig {
   };
 }
 
+// null (or anything that isn't an array) → "show all". An array is normalised the
+// way locales are everywhere else: trimmed, lowercased, blanks/non-strings dropped.
+function coerceMultilingualLocales(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null;
+  const out: string[] = [];
+  for (const v of raw) {
+    if (typeof v !== "string") continue;
+    const code = v.trim().toLowerCase();
+    if (code && !out.includes(code)) out.push(code);
+  }
+  return out;
+}
+
 function coerceProfiles(raw: unknown): Record<string, AiConfig> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const result: Record<string, AiConfig> = {};
@@ -83,7 +101,13 @@ export function loadLocalSettings(projectRoot: string): LocalSettings {
     ? raw.activeProfile : null;
   const baseAi = coerceAi(raw.ai);
   const ai = activeProfile ? profiles[activeProfile]! : baseAi;
-  return { ai, editor: isEditorId(raw.editor) ? raw.editor : DEFAULT_EDITOR, profiles, activeProfile };
+  return {
+    ai,
+    editor: isEditorId(raw.editor) ? raw.editor : DEFAULT_EDITOR,
+    profiles,
+    activeProfile,
+    multilingualLocales: coerceMultilingualLocales(raw.multilingualLocales),
+  };
 }
 
 // Read-modify-write so a partial patch (only `ai` or only `editor`) leaves the
@@ -95,6 +119,7 @@ export function saveLocalSettings(projectRoot: string, patch: Partial<LocalSetti
   if (patch.editor !== undefined) merged.editor = patch.editor;
   if (patch.profiles !== undefined) merged.profiles = patch.profiles;
   if (patch.activeProfile !== undefined) merged.activeProfile = patch.activeProfile;
+  if (patch.multilingualLocales !== undefined) merged.multilingualLocales = patch.multilingualLocales;
   ensureGlotfileDir(projectRoot);
   writeFileAtomic(path, JSON.stringify(merged, null, 2) + "\n");
 }
@@ -116,5 +141,14 @@ export function aiConfigError(ai: unknown): string | null {
     const v = a[f];
     if (!(v === undefined || v === null || (typeof v === "number" && v >= 0))) return `ai.${f} must be a non-negative number`;
   }
+  return null;
+}
+
+// Validates the PUT boundary for the multilingual-view locale subset: null (show
+// all) or an array of locale-code strings. Empty array is valid (source-only view).
+export function multilingualLocalesError(v: unknown): string | null {
+  if (v === null) return null;
+  if (!Array.isArray(v)) return "multilingualLocales must be an array or null";
+  if (!v.every((x) => typeof x === "string")) return "multilingualLocales must contain only strings";
   return null;
 }

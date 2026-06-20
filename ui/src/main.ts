@@ -9,6 +9,7 @@ import "./styles.css";
 import { initTheme, syncFromServer } from "./theme.js";
 import { syncPanelWidths } from "./panel-widths.js";
 import { hydrateEditor } from "./editor.js";
+import { hydrateMultilingualLocales } from "./multilingualLocales.js";
 
 // Paint the cached/system theme synchronously (no flash), then reconcile with the
 // machine-wide pref so a choice made on another port/instance carries over. Panel
@@ -19,3 +20,5 @@ void syncFromServer();
 void syncPanelWidths();
 // Pull the per-project editor preference (gitignored local settings) after mount.
 void hydrateEditor();
+// Same source: the multilingual view's remembered locale subset.
+void hydrateMultilingualLocales();
