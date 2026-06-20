@@ -176,6 +176,11 @@ export interface GlossaryEntry {
   aliases?: string[];
   // Keep the term verbatim in every language (brand/product names, acronyms).
   doNotTranslate?: boolean;
+  // Match (and enforce) only the exact casing of `term`/aliases. For a product
+  // name that collides with a common word — "Sprout" the app vs "sprout" a new
+  // shoot — this protects the capitalized brand while the lowercase word still
+  // translates. Off by default: matching stays case-insensitive.
+  caseSensitive?: boolean;
   // Per-locale fixed translation for a term that DOES translate but must render
   // the same way everywhere. AI-populated — the dev never types a foreign word.
   // Keys are canonical BCP-47 (normalizeState canonicalizes them on load/save).

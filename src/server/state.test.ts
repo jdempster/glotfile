@@ -112,14 +112,14 @@ describe("load/save", () => {
     expect(loaded.glossary[0]!.translations).toEqual({ "pt-br": "alimentar" });
   });
 
-  it("strips legacy/unknown glossary fields on save/load", () => {
+  it("preserves caseSensitive but strips the removed wholeWord flag on save/load", () => {
     const p = join(mkdtempSync(join(tmpdir(), "glot-")), "glotfile.json");
     const s = defaultState();
-    // A hand-written or stale entry carrying the removed flags.
+    // caseSensitive is a supported field again; wholeWord was removed for good.
     s.glossary = [{ term: "API", doNotTranslate: true, caseSensitive: true, wholeWord: false } as any];
     saveState(p, s);
     const loaded = loadState(p);
-    expect(loaded.glossary[0]).toEqual({ term: "API", doNotTranslate: true });
+    expect(loaded.glossary[0]).toEqual({ term: "API", doNotTranslate: true, caseSensitive: true });
   });
 
   it("strips legacy/unknown locale-value fields on save/load", () => {

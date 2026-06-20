@@ -26,6 +26,7 @@ export interface GlossaryEntry {
   term: string;
   aliases?: string[];
   doNotTranslate?: boolean;
+  caseSensitive?: boolean;
   translations?: Record<string, string>;
   notes?: string;
 }

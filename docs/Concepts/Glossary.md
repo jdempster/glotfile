@@ -12,7 +12,7 @@ You don't have to be a translator to use it. Capture what *you* know about a ter
 
 ```json
 "glossary": [
-  { "term": "Sprout", "doNotTranslate": true },
+  { "term": "Sprout", "doNotTranslate": true, "caseSensitive": true },
   {
     "term": "feed",
     "aliases": ["feeding", "feeds", "fed"],
@@ -27,6 +27,7 @@ You don't have to be a translator to use it. Capture what *you* know about a ter
 | `term` | The source-language term to match. Matching is whole-word and case-insensitive — `Pro` applies to `Pro plan` but never to `Process`. |
 | `aliases` | Other source forms of the same term (inflections, plurals, casing) — e.g. `feed` → `feeding`, `feeds`, `fed`. They widen which strings the term governs without loosening matching. Usually AI-suggested. |
 | `doNotTranslate` | Keep the term verbatim in every translation. |
+| `caseSensitive` | Match (and enforce) only the exact casing. For a product name that collides with a common word — `Sprout` the app vs `sprout` a new shoot — this protects the capitalized brand while the lowercase word still translates. Off by default. |
 | `translations` | Pinned output per locale (`{ locale: "translation" }`). Lingo populates these — you never have to type a foreign word. Mutually exclusive with `doNotTranslate`. |
 | `notes` | Meaning / usage guidance, passed to the AI. |
 

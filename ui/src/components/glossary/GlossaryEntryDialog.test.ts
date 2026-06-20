@@ -80,6 +80,29 @@ describe("GlossaryEntryDialog", () => {
     expect(putGlossaryEntry).toHaveBeenCalledWith({ term: "feed", translations: { fr: "nourrir" } });
   });
 
+  it("preserves the case-sensitive flag through an edit", async () => {
+    mountDialog({ open: true, entry: { term: "Sprout", doNotTranslate: true, caseSensitive: true }, targetLocales: ["fr"] });
+    await nextTick();
+
+    await buttonByText("Save").trigger("click");
+    await flushPromises();
+
+    expect(putGlossaryEntry).toHaveBeenCalledWith({ term: "Sprout", doNotTranslate: true, caseSensitive: true });
+  });
+
+  it("sets case-sensitive when the toggle is enabled for a new term", async () => {
+    mountDialog({ open: true, entry: null, targetLocales: ["fr"] });
+    await nextTick();
+
+    await byId("glossary-term").setValue("Sprout");
+    await byId("glossary-case-sensitive").trigger("click");
+
+    await buttonByText("Add term").trigger("click");
+    await flushPromises();
+
+    expect(putGlossaryEntry).toHaveBeenCalledWith({ term: "Sprout", caseSensitive: true });
+  });
+
   it("hides and omits pinned translations for a do-not-translate term", async () => {
     mountDialog({ open: true, entry: { term: "Sprout", doNotTranslate: true, translations: { fr: "x" } }, targetLocales: ["fr"] });
     await nextTick();

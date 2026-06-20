@@ -144,6 +144,42 @@ describe("glossaryViolations", () => {
   });
 });
 
+describe("case-sensitive terms", () => {
+  it("matches only the exact case when caseSensitive is set", () => {
+    const glossary = [{ term: "Sprout", caseSensitive: true }];
+    // The capitalized brand applies...
+    expect(relevantGlossary("Open Sprout", "fr", glossary)).toHaveLength(1);
+    // ...but the lowercase common noun (a new shoot) is a different word-sense — not matched.
+    expect(relevantGlossary("a new sprout appeared", "fr", glossary)).toEqual([]);
+  });
+
+  it("still matches case-insensitively by default", () => {
+    expect(relevantGlossary("a new sprout appeared", "fr", [{ term: "Sprout" }])).toHaveLength(1);
+  });
+
+  it("applies case-sensitivity to aliases too", () => {
+    const glossary = [{ term: "Sprout", aliases: ["Sprouts"], caseSensitive: true }];
+    expect(relevantGlossary("Two Sprouts ready", "fr", glossary)).toHaveLength(1);
+    expect(relevantGlossary("two sprouts ready", "fr", glossary)).toEqual([]);
+  });
+
+  it("enforces the exact case for a case-sensitive do-not-translate term", () => {
+    const glossary = [{ term: "Sprout", doNotTranslate: true, caseSensitive: true }];
+    // Kept verbatim → honored.
+    expect(glossaryViolations("Open Sprout", "Ouvrir Sprout", "fr", glossary)).toEqual([]);
+    // Translated as the common noun → the lowercase form does not satisfy the keep.
+    expect(glossaryViolations("Open Sprout", "Ouvrir la pousse", "fr", glossary)).toEqual([
+      { term: "Sprout", expected: "Sprout", kind: "do-not-translate" },
+    ]);
+  });
+
+  it("does not apply (or flag) the lowercase common-noun sense", () => {
+    const glossary = [{ term: "Sprout", doNotTranslate: true, caseSensitive: true }];
+    // Source is the common noun, so the term must not apply — translating it freely is fine.
+    expect(glossaryViolations("a new sprout appeared", "une nouvelle pousse est apparue", "fr", glossary)).toEqual([]);
+  });
+});
+
 test("sourceKeysForTerm finds keys whose source contains the term (whole-word)", () => {
   const s = defaultState();
   s.config.sourceLocale = "en"; s.config.locales = ["en"];

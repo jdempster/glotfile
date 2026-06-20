@@ -68,8 +68,8 @@ function normalizeState(state: State): void {
     state.config.localeInstructions = remapped;
   }
   // Re-emit each glossary entry and suggestion with ONLY its known fields, so a
-  // saved file never carries stray keys (e.g. a pre-aliases caseSensitive /
-  // wholeWord flag) — the file self-heals on the next save. Forced-translation
+  // saved file never carries stray keys (e.g. the removed wholeWord flag) — the
+  // file self-heals on the next save. Forced-translation
   // locale keys are canonicalized here too, so a value pinned under "pt-BR"
   // still applies (and still enforces) when the target becomes "pt-br".
   // Keep these field lists in sync with GlossaryEntry / GlossarySuggestion.
@@ -77,6 +77,7 @@ function normalizeState(state: State): void {
     const clean: GlossaryEntry = { term: entry.term };
     if (entry.aliases?.length) clean.aliases = entry.aliases;
     if (entry.doNotTranslate) clean.doNotTranslate = true;
+    if (entry.caseSensitive) clean.caseSensitive = true;
     if (entry.translations && Object.keys(entry.translations).length) {
       const remapped: Record<string, string> = {};
       for (const [k, v] of Object.entries(entry.translations)) remapped[canonLocale(k)] = v;

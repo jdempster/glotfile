@@ -214,6 +214,7 @@ async function confirmDelete() {
             <div class="flex flex-wrap items-center gap-2">
               <span class="font-mono text-sm font-medium">{{ entry.term }}</span>
               <Badge v-if="entry.doNotTranslate" variant="secondary">Don't translate</Badge>
+              <Badge v-if="entry.caseSensitive" variant="outline">Case-sensitive</Badge>
               <span v-if="entry.aliases?.length" class="font-mono text-xs text-muted-foreground">+ {{ entry.aliases.join(", ") }}</span>
             </div>
             <p v-if="entry.notes" class="mt-1 text-sm text-muted-foreground">{{ entry.notes }}</p>

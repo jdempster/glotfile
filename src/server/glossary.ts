@@ -5,17 +5,20 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// Compiled whole-word, case-insensitive matchers, cached by surface form so the
+// Compiled whole-word matchers, cached by (case-sensitivity, surface form) so the
 // same term/alias reused across thousands of keys compiles its regex once.
 // Boundaries use Unicode property escapes (not \b, which is ASCII-only) so
 // adjacent accented/CJK letters count as part of the word — "Pro" applies to
-// "Pro plan" but never to "Process".
+// "Pro plan" but never to "Process". Matching is case-insensitive unless the
+// entry opts into caseSensitive (word-sense scoping: "Sprout" the brand vs
+// "sprout" a new shoot).
 const matcherCache = new Map<string, RegExp>();
-function matcherFor(surface: string): RegExp {
-  let re = matcherCache.get(surface);
+function matcherFor(surface: string, caseSensitive?: boolean): RegExp {
+  const cacheKey = `${caseSensitive ? "s" : "i"}:${surface}`;
+  let re = matcherCache.get(cacheKey);
   if (!re) {
-    re = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(surface)}(?![\\p{L}\\p{N}])`, "iu");
-    matcherCache.set(surface, re);
+    re = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(surface)}(?![\\p{L}\\p{N}])`, caseSensitive ? "u" : "iu");
+    matcherCache.set(cacheKey, re);
   }
   return re;
 }
@@ -31,11 +34,11 @@ function surfaces(entry: GlossaryEntry): string[] {
 }
 
 // The surface form (term or alias) that appears as a standalone word in the
-// source, or null. Always whole-word + case-insensitive: precision by default,
-// widened only by explicit aliases.
+// source, or null. Whole-word; case-insensitive unless the entry is
+// caseSensitive. Precision by default, widened only by explicit aliases.
 function matchedSurface(source: string, entry: GlossaryEntry): string | null {
   for (const s of surfaces(entry)) {
-    if (matcherFor(s).test(source)) return s;
+    if (matcherFor(s, entry.caseSensitive).test(source)) return s;
   }
   return null;
 }
@@ -95,11 +98,15 @@ export interface GlossaryViolation {
   kind: "do-not-translate" | "forced";
 }
 
-// Lenient, case-insensitive containment — the test that a translation HONORED a
-// term. Always lenient so inflected/compounded keeps are never flagged
+// Lenient containment — the test that a translation HONORED a term. Always
+// lenient on word boundaries so inflected/compounded keeps are never flagged
 // ("Webhooks" keeps "Webhook", German "Accounteinstellungen" keeps "Account").
-function valueContains(value: string, needle: string): boolean {
-  return value.toLowerCase().includes(needle.toLowerCase());
+// Case-folding mirrors the entry's matching: a caseSensitive keep ("Sprout")
+// is only honored by the exact casing, so a lowercased rendering is flagged.
+function valueContains(value: string, needle: string, caseSensitive?: boolean): boolean {
+  return caseSensitive
+    ? value.includes(needle)
+    : value.toLowerCase().includes(needle.toLowerCase());
 }
 
 // Keys whose source value contains `term`, using the same whole-word matching as
@@ -124,7 +131,7 @@ export function glossaryViolations(source: string, value: string, targetLocale: 
     if (entry.doNotTranslate) {
       // The translation must keep some matched surface (term or the alias that
       // appeared) verbatim. Lenient so inflections aren't flagged.
-      if (!surfaces(entry).some((s) => valueContains(value, s))) {
+      if (!surfaces(entry).some((s) => valueContains(value, s, entry.caseSensitive))) {
         out.push({ term: entry.term, expected: entry.term, kind: "do-not-translate" });
       }
       continue;
@@ -132,7 +139,7 @@ export function glossaryViolations(source: string, value: string, targetLocale: 
     // Forced enforcement only on a canonical-term match (see GlossaryMatch).
     if (!canonical) continue;
     const forced = entry.translations?.[targetLocale];
-    if (forced && !valueContains(value, forced)) {
+    if (forced && !valueContains(value, forced, entry.caseSensitive)) {
       out.push({ term: entry.term, expected: forced, kind: "forced" });
     }
   }

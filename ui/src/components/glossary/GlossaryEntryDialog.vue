@@ -34,6 +34,7 @@ const form = reactive({
   term: "",
   aliases: [] as string[],
   doNotTranslate: false,
+  caseSensitive: false,
   notes: "",
   // Only locales the user has chosen to pin appear here — not every target.
   translations: {} as Record<string, string>,
@@ -63,6 +64,7 @@ watch(
     form.term = e?.term ?? "";
     form.aliases = [...(e?.aliases ?? [])];
     form.doNotTranslate = e?.doNotTranslate ?? false;
+    form.caseSensitive = e?.caseSensitive ?? false;
     form.notes = e?.notes ?? "";
     form.translations = {};
     for (const [loc, value] of Object.entries(e?.translations ?? {})) {
@@ -113,6 +115,7 @@ async function submit() {
   const aliases = form.aliases.map((a) => a.trim()).filter((a) => a && a !== term);
   if (aliases.length) entry.aliases = aliases;
   if (form.doNotTranslate) entry.doNotTranslate = true;
+  if (form.caseSensitive) entry.caseSensitive = true;
   if (form.notes.trim()) entry.notes = form.notes.trim();
   // Do-not-translate terms never carry pinned translations.
   if (!form.doNotTranslate) {
@@ -171,6 +174,14 @@ async function submit() {
             <p class="text-xs text-muted-foreground">Keep this term verbatim in every language — brand and product names.</p>
           </div>
           <Switch id="glossary-dnt" v-model="form.doNotTranslate" />
+        </div>
+
+        <div class="flex items-center justify-between gap-4 rounded-lg border p-3">
+          <div>
+            <Label for="glossary-case-sensitive">Case-sensitive</Label>
+            <p class="text-xs text-muted-foreground">Match only the exact spelling — for a product name that's also a common word, like <span class="font-mono">Sprout</span> vs <span class="font-mono">sprout</span>.</p>
+          </div>
+          <Switch id="glossary-case-sensitive" v-model="form.caseSensitive" />
         </div>
 
         <div class="grid gap-1.5">

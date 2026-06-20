@@ -21,6 +21,7 @@ const setGlossaryTerm: ChatTool = {
           description: "Other source-language surface forms of the SAME term — inflections, plurals, casing variants (e.g. for \"feed\": [\"feeding\", \"feeds\", \"fed\"]). Matching is whole-word, so add these to catch the term where it appears as a different word form.",
         },
         doNotTranslate: { type: "boolean", description: "Keep the term verbatim in every language (brand/product names). Omit or false for terms that DO translate but must stay consistent." },
+        caseSensitive: { type: "boolean", description: "Match only the exact casing of the term. Set this for a product name that collides with a common word (e.g. \"Sprout\" the app vs \"sprout\" a new shoot) so the capitalized brand is governed while the lowercase word still translates." },
         translations: {
           type: "object",
           description: "Locale → fixed translation for terms that translate but must be consistent (e.g. { \"de\": \"düngen\" }). You fill these so the user never has to type a foreign word. Omit for do-not-translate terms.",
@@ -34,12 +35,13 @@ const setGlossaryTerm: ChatTool = {
   },
   humanSummary: (input) => `add glossary term "${(input as { term?: string }).term ?? ""}"`,
   run: async (input, ctx: ToolContext) => {
-    const { term, aliases, doNotTranslate, translations, notes } = input as
-      { term: string; aliases?: string[]; doNotTranslate?: boolean; translations?: Record<string, string>; notes?: string };
+    const { term, aliases, doNotTranslate, caseSensitive, translations, notes } = input as
+      { term: string; aliases?: string[]; doNotTranslate?: boolean; caseSensitive?: boolean; translations?: Record<string, string>; notes?: string };
     const entry: GlossaryEntry = { term: term.trim() };
     const cleanAliases = (aliases ?? []).map((a) => a.trim()).filter((a) => a && a !== entry.term);
     if (cleanAliases.length) entry.aliases = cleanAliases;
     if (doNotTranslate) entry.doNotTranslate = true;
+    if (caseSensitive) entry.caseSensitive = true;
     if (translations && Object.keys(translations).length) entry.translations = translations;
     if (notes?.trim()) entry.notes = notes.trim();
     const s = ctx.load();

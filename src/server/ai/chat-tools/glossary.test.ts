@@ -23,6 +23,11 @@ describe("glossary write tools", () => {
     expect(state.glossary).toEqual([{ term: "Sprout", doNotTranslate: true, notes: "brand" }]);
   });
 
+  it("set_glossary_term marks a brand that collides with a common word case-sensitive", async () => {
+    await tool("set_glossary_term").run({ term: "Sprout", doNotTranslate: true, caseSensitive: true }, ctx);
+    expect(state.glossary).toEqual([{ term: "Sprout", doNotTranslate: true, caseSensitive: true }]);
+  });
+
   it("set_glossary_term attaches fixed translations and omits empty fields", async () => {
     await tool("set_glossary_term").run({ term: "feed", translations: { de: "düngen" } }, ctx);
     expect(state.glossary).toEqual([{ term: "feed", translations: { de: "düngen" } }]);
