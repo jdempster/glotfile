@@ -1,10 +1,10 @@
 import type { State, LintConfig } from "../schema.js";
 import { globToRegExp } from "../glob.js";
-import { DEFAULT_SEVERITY, type Severity, type RuleId } from "./registry.js";
 import { ALL_RULES } from "./rules.js";
 import { defaultLoader, type DictionaryLoader } from "./spelling.js";
 import { ignoreWordsFor } from "../spell.js";
 import { findSuppression } from "./suppress.js";
+import { resolveSeverity, ruleEverActive } from "./severity.js";
 import type { Finding, LintContext, LintReport, Rule, Speller } from "./types.js";
 
 export interface RunOptions {
@@ -16,10 +16,6 @@ export interface RunOptions {
   // Keep findings hidden by per-key suppressions in the report (flagged
   // suppressed: true); they never contribute to counts.error/warn or ok.
   includeSuppressed?: boolean;
-}
-
-function resolveSeverity(id: RuleId, config: LintConfig): Severity {
-  return config.rules?.[id] ?? DEFAULT_SEVERITY[id];
 }
 
 export function sortFindings(findings: Finding[]): Finding[] {
@@ -59,7 +55,9 @@ export async function runLint(state: State, options: RunOptions = {}): Promise<L
 
   const isActive = (rule: Rule): boolean => {
     if (options.ruleIds && !options.ruleIds.includes(rule.id)) return false;
-    return resolveSeverity(rule.id, config) !== "off";
+    // Run a rule if it's on globally OR for any single locale; per-finding severity
+    // (resolved by locale below) then decides whether each finding is kept.
+    return ruleEverActive(rule.id, config);
   };
   const active = rules.filter(isActive);
 
@@ -77,8 +75,12 @@ export async function runLint(state: State, options: RunOptions = {}): Promise<L
   const findings: Finding[] = [];
   let suppressed = 0;
   for (const rule of active) {
-    const severity = resolveSeverity(rule.id, config) as Exclude<Severity, "off">;
     for (const raw of rule.run(state, ctx)) {
+      // Severity is resolved per the finding's locale, so a per-locale "off" drops
+      // just that finding (e.g. identical-to-source on en-GB) while the same rule
+      // still fires for other locales.
+      const severity = resolveSeverity(rule.id, config, raw.locale || undefined);
+      if (severity === "off") continue;
       if (ignoreRes.some((re) => re.test(raw.key))) continue;
       if (localeFilter && raw.locale !== "" && !localeFilter.has(raw.locale)) continue;
       const entry = state.keys[raw.key];

@@ -37,7 +37,11 @@ In **split** layout this is spread across `glotfile/config.json` (holds `version
   "projectContext": "Sprout is a houseplant-care app…", // AI: project-wide guidance
   "localeInstructions": { "fr": "Use vouvoiement." },                 // AI: per-locale rules
   "spelling": { "customWords": [] },
-  "lint": { "rules": {}, "ignore": [], "spelling": {} },
+  "lint": {                                // rules: per-rule severity; ignore: key globs every rule skips
+    "rules": {}, "ignore": ["legal.*"],
+    "localeRules": { "en-gb": { "identical-to-source": "off" } }, // per-locale severity overrides (layered over rules)
+    "spelling": {}
+  },
   "scan": {                                // tunes `scan` / `prune --unused`
     "include": [], "exclude": [],          // globs limiting which files are scanned
     "accessors": [],                       // extra Flutter accessor names

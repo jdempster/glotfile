@@ -1,8 +1,8 @@
 import type { CheckId, Issue } from "./types.js";
 import type { StateFacet, PluralityFacet } from "./filter.js";
 
-export const ALL_CHECKS: CheckId[] = ["untranslated", "placeholder", "spelling", "length", "glossary"];
-export const DEFAULT_ENABLED: CheckId[] = ["untranslated", "placeholder", "length", "glossary"];
+export const ALL_CHECKS: CheckId[] = ["untranslated", "placeholder", "spelling", "length", "glossary", "icu", "whitespace", "identical"];
+export const DEFAULT_ENABLED: CheckId[] = ["untranslated", "placeholder", "length", "glossary", "icu", "whitespace", "identical"];
 
 // Every state facet filterKeys() understands — drives the FilterMenu's Status list
 // and the active-filter chips. Keep in lockstep with StateFacet so neither drifts.
@@ -17,6 +17,9 @@ export const CHECK_LABELS: Record<CheckId, string> = {
   spelling: "Spelling",
   length: "Too long",
   glossary: "Glossary",
+  icu: "ICU mismatch",
+  whitespace: "Whitespace",
+  identical: "Identical to source",
 };
 
 export const STATE_LABELS: Record<StateFacet, string> = {

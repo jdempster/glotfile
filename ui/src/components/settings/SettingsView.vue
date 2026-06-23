@@ -28,7 +28,8 @@ import {
 } from "@/components/ui/dialog";
 import LanguageLabel from "@/components/lang/LanguageLabel.vue";
 import AddLocaleCombobox from "@/components/lang/AddLocaleCombobox.vue";
-import { compareByLanguageName } from "@/languages.js";
+import { compareByLanguageName, resolveLanguage } from "@/languages.js";
+import type { LintSeverity } from "@/types.js";
 import OutputEditor from "./OutputEditor.vue";
 import ScanListField from "./ScanListField.vue";
 import SyncWizard from "@/components/sync/SyncWizard.vue";
@@ -78,7 +79,7 @@ const draft = reactive<ConfigForm>({
   autoExport: true,
   exportLocales: [],
   customWords: [],
-  lintRules: {}, lintIgnore: [],
+  lintRules: {}, lintIgnore: [], lintLocaleRules: {},
   scanAccessors: [], scanPatterns: [], scanInclude: [], scanExclude: [], scanKeep: [],
   projectContext: "", localeInstructions: {},
 });
@@ -113,6 +114,12 @@ const pendingRoute = ref<Route | null>(null);
 const showToast = ref(false);
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
+// Deep-clone the per-locale rules map. JSON (not structuredClone) because `draft` is a
+// reactive Proxy and structuredClone throws DataCloneError on proxies; the map is plain
+// string→string→severity, so JSON round-trips it losslessly.
+const cloneRules = (r: Record<string, Record<string, LintSeverity>>): Record<string, Record<string, LintSeverity>> =>
+  JSON.parse(JSON.stringify(r));
+
 function applyForm(f: ConfigForm) {
   draft.sourceLocale = f.sourceLocale;
   draft.locales      = [...f.locales];
@@ -125,6 +132,7 @@ function applyForm(f: ConfigForm) {
   draft.customWords  = [...f.customWords];
   draft.lintRules    = { ...f.lintRules };
   draft.lintIgnore   = [...f.lintIgnore];
+  draft.lintLocaleRules = cloneRules(f.lintLocaleRules);
   draft.scanAccessors = [...f.scanAccessors];
   draft.scanPatterns = [...f.scanPatterns];
   draft.scanInclude  = [...f.scanInclude];
@@ -147,6 +155,7 @@ function snapSaved() {
     customWords:  [...draft.customWords],
     lintRules:    { ...draft.lintRules },
     lintIgnore:   [...draft.lintIgnore],
+    lintLocaleRules: cloneRules(draft.lintLocaleRules),
     scanAccessors: [...draft.scanAccessors],
     scanPatterns: [...draft.scanPatterns],
     scanInclude:  [...draft.scanInclude],
@@ -427,7 +436,8 @@ function sectionEq(id: SectionId): boolean {
     && JSON.stringify(d.scanExclude) === JSON.stringify(s.scanExclude)
     && JSON.stringify(d.scanKeep) === JSON.stringify(s.scanKeep);
   if (id === "quality") return JSON.stringify(d.lintRules) === JSON.stringify(s.lintRules)
-    && JSON.stringify(d.lintIgnore) === JSON.stringify(s.lintIgnore);
+    && JSON.stringify(d.lintIgnore) === JSON.stringify(s.lintIgnore)
+    && JSON.stringify(d.lintLocaleRules) === JSON.stringify(s.lintLocaleRules);
   if (id === "dictionary") return JSON.stringify(d.customWords) === JSON.stringify(s.customWords);
   return true;
 }
@@ -496,8 +506,13 @@ function sectionSummary(id: SectionId): string {
   if (id === "quality") {
     const off = Object.entries(draft.lintRules).filter(([, sev]) => sev === "off").length;
     const adjusted = Object.entries(draft.lintRules).filter(([rid, sev]) => RULE_DEFAULTS[rid] !== undefined && sev !== RULE_DEFAULTS[rid]).length;
-    if (!adjusted && !draft.lintIgnore.length) return "Defaults";
-    const parts = [adjusted && `${adjusted} adjusted${off ? ` (${off} off)` : ""}`, draft.lintIgnore.length && `${draft.lintIgnore.length} ignored`].filter(Boolean);
+    const perLocale = Object.values(draft.lintLocaleRules).reduce((n, rules) => n + Object.keys(rules).length, 0);
+    if (!adjusted && !draft.lintIgnore.length && !perLocale) return "Defaults";
+    const parts = [
+      adjusted && `${adjusted} adjusted${off ? ` (${off} off)` : ""}`,
+      perLocale && `${perLocale} per-locale`,
+      draft.lintIgnore.length && `${draft.lintIgnore.length} ignored`,
+    ].filter(Boolean);
     return parts.join(" · ");
   }
   if (id === "dictionary") return draft.customWords.length ? `${draft.customWords.length} word${draft.customWords.length === 1 ? "" : "s"}` : "No custom words";
@@ -624,6 +639,48 @@ function setLocaleInstruction(loc: string, value: string) {
   if (value === "") delete next[loc];
   else next[loc] = value;
   draft.localeInstructions = next;
+}
+
+// ── Per-locale lint overrides (config.lint.localeRules) ──────────────────────
+const localeName = (loc: string) => resolveLanguage(loc).name;
+const baseLang = (loc: string) => loc.split("-")[0]!;
+
+// Flattened (locale, rule, severity) rows for the overrides table.
+const localeOverrideRows = computed(() =>
+  Object.entries(draft.lintLocaleRules)
+    .flatMap(([locale, rules]) => Object.entries(rules).map(([rule, severity]) => ({ locale, rule, severity })))
+    .sort((a, b) => compareByLanguageName(a.locale, b.locale) || a.rule.localeCompare(b.rule)),
+);
+
+function setLocaleOverride(locale: string, rule: string, severity: LintSeverity) {
+  const next = cloneRules(draft.lintLocaleRules);
+  next[locale] = { ...(next[locale] ?? {}), [rule]: severity };
+  draft.lintLocaleRules = next;
+}
+function removeLocaleOverride(locale: string, rule: string) {
+  const next = cloneRules(draft.lintLocaleRules);
+  if (next[locale]) {
+    delete next[locale][rule];
+    if (Object.keys(next[locale]).length === 0) delete next[locale];
+  }
+  draft.lintLocaleRules = next;
+}
+
+// "Add override" row. allVariants applies it across every target locale sharing the
+// chosen locale's base language (the en-* shortcut).
+const newOverride = reactive({ locale: "", rule: "", severity: "off" as LintSeverity, allVariants: false });
+const overrideVariants = computed(() =>
+  newOverride.locale
+    ? targetLocales.value.filter((l) => l !== newOverride.locale && baseLang(l) === baseLang(newOverride.locale))
+    : [],
+);
+function addLocaleOverride() {
+  if (!newOverride.locale || !newOverride.rule) return;
+  const next = cloneRules(draft.lintLocaleRules);
+  const locales = newOverride.allVariants ? [newOverride.locale, ...overrideVariants.value] : [newOverride.locale];
+  for (const loc of locales) next[loc] = { ...(next[loc] ?? {}), [newOverride.rule]: newOverride.severity };
+  draft.lintLocaleRules = next;
+  newOverride.locale = ""; newOverride.rule = ""; newOverride.severity = "off"; newOverride.allVariants = false;
 }
 
 // AI "Suggest" affordances. Disabled until a model is configured (the server also
@@ -1550,6 +1607,73 @@ function onSynced(): void {
                 </p>
               </template>
             </ScanListField>
+
+            <!-- Per-locale overrides: turn a rule off/up for one language only. -->
+            <div>
+              <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Per-locale overrides</div>
+              <p class="mt-1 text-xs text-muted-foreground">
+                Change a rule's severity for one language only — e.g. turn
+                <code class="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">identical-to-source</code>
+                off for English variants, where matching the source is expected. Layered over the rules above.
+              </p>
+
+              <div v-if="localeOverrideRows.length" class="mt-2 divide-y rounded-lg border">
+                <div v-for="row in localeOverrideRows" :key="`${row.locale}:${row.rule}`" class="flex items-center gap-3 p-3">
+                  <span class="font-mono text-xs font-semibold uppercase">{{ row.locale }}</span>
+                  <span class="min-w-0 truncate text-xs text-muted-foreground">{{ localeName(row.locale) }}</span>
+                  <code class="rounded border bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground">{{ row.rule }}</code>
+                  <Select :model-value="row.severity" @update:model-value="setLocaleOverride(row.locale, row.rule, $event as LintSeverity)">
+                    <SelectTrigger class="ml-auto w-28 shrink-0" :class="row.severity === 'off' ? 'text-muted-foreground' : ''">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="error">Error</SelectItem>
+                      <SelectItem value="warn">Warning</SelectItem>
+                      <SelectItem value="off">Off</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <button
+                    type="button"
+                    class="flex size-[26px] shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    :aria-label="`Remove ${row.rule} override for ${row.locale}`"
+                    @click="removeLocaleOverride(row.locale, row.rule)"
+                  ><X class="size-3.5" /></button>
+                </div>
+              </div>
+              <p v-else class="mt-2 text-xs text-muted-foreground">No per-locale overrides.</p>
+
+              <!-- Add an override -->
+              <div v-if="targetLocales.length" class="mt-3 flex flex-col gap-2 rounded-lg border border-dashed p-3">
+                <div class="flex flex-wrap items-center gap-2">
+                  <Select v-model="newOverride.locale">
+                    <SelectTrigger class="w-44"><SelectValue placeholder="Language…" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem v-for="loc in targetLocales" :key="loc" :value="loc">{{ localeName(loc) }} ({{ loc.toUpperCase() }})</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select v-model="newOverride.rule">
+                    <SelectTrigger class="w-48"><SelectValue placeholder="Rule…" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem v-for="rule in LINT_RULES" :key="rule.id" :value="rule.id">{{ rule.label }}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select v-model="newOverride.severity">
+                    <SelectTrigger class="w-28"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="off">Off</SelectItem>
+                      <SelectItem value="warn">Warning</SelectItem>
+                      <SelectItem value="error">Error</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" :disabled="!newOverride.locale || !newOverride.rule" @click="addLocaleOverride">Add override</Button>
+                </div>
+                <label v-if="overrideVariants.length" class="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input v-model="newOverride.allVariants" type="checkbox" class="size-3.5 rounded border-muted-foreground" />
+                  Apply to all {{ baseLang(newOverride.locale) }}-* variants
+                  ({{ [newOverride.locale, ...overrideVariants].map((l) => l.toUpperCase()).join(", ") }})
+                </label>
+              </div>
+            </div>
           </div>
 
           <!-- ── Dictionary body ── -->

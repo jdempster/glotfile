@@ -13,12 +13,16 @@ export interface LocaleValue {
 }
 export interface Note { id: string; text: string; at: string }
 export interface PlaceholderMeta { type?: string; format?: string; example?: string }
+// A dismissed lint finding: hides one (rule, locale) for this key until the
+// source text changes (tracked via `source`, a hash of the source at dismissal).
+export interface Suppression { rule: string; locale: string; source: string }
 export interface KeyEntry {
   context?: string; contextSource?: "ai";
   notes?: Note[]; tags?: string[]; maxLength?: number; description?: string;
   screenshot?: string; skipTranslate?: boolean; createdAt?: string;
   plural?: { arg: string };
   placeholders?: Record<string, PlaceholderMeta>;
+  suppressions?: Suppression[];
   values: Record<string, LocaleValue>;
 }
 
@@ -230,7 +234,7 @@ export interface LogEntry {
   results?: { id: string; translation?: string; value?: string; forms?: Partial<Record<PluralCategory, string>>; error?: string }[];
 }
 
-export type CheckId = "untranslated" | "placeholder" | "spelling" | "length" | "glossary";
+export type CheckId = "untranslated" | "placeholder" | "spelling" | "length" | "glossary" | "icu" | "whitespace" | "identical";
 export interface Issue {
   key: string;
   locale: string;

@@ -80,6 +80,9 @@ decisions. See `references/schema.md`.
 | Make many edits at once | Pipe a JSON op list to `glotfile apply` — one atomic write; the right tool for bulk edits on a big file. |
 | Write locale files | `glotfile export` |
 | Find problems | `glotfile lint` (catalog issues) / `glotfile check` (lint + exports up to date) |
+| Silence lint warnings that are false positives | Dismiss them: `glotfile lint --accept` bulk-suppresses the currently-shown warnings (narrow with `--rule <id>`/`--locale <code>`); the UI key panel's Lint section dismisses a single (rule, locale) on one key. Either way the dismissal auto-resurfaces when that key's source text changes — safe, not permanent. `glotfile lint --include-suppressed` audits what's hidden. |
+| Stop lint flagging a whole key or area | Add a key glob to `config.lint.ignore` (e.g. `"legal.*"`) — every rule skips those keys, in both `glotfile lint`/`check` and the editor's live markers. Use for generated/legal/debug strings; prefer a dismissal for a one-off. See `references/schema.md`. |
+| Turn a rule off (or change severity) for one language | Set `config.lint.localeRules.<locale>.<rule>` (e.g. `"en-gb": { "identical-to-source": "off" }`) — layered over `rules`, honored by `glotfile lint`/`check` and the editor. Use when a rule is noise for a whole locale, e.g. identical-to-source on English variants. Managed in the UI under Settings → Quality → Per-locale overrides. |
 | Bootstrap from existing locale files | `glotfile import --format <adapter>` (or bare `glotfile import` to auto-detect) — see `references/workflows.md`. Every export adapter is importable. |
 | Remove dead keys | `glotfile prune --unused` / `--empty-source` (dry-run unless `--write`). |
 | Stop a live key being pruned | Add its glob to `config.scan.keep` (keys always counted as used). Never delete a `prune --unused` hit you know is live — `keep` it. See `references/schema.md`. |

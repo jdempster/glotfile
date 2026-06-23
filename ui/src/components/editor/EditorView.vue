@@ -723,7 +723,10 @@ async function onCreated(key: string) {
               :aria-checked="detailPanelOpen"
               :aria-label="detailPanelOpen ? 'Hide key details' : 'Show key details'"
               :class="[
-                'ml-auto w-8 px-0 max-[1080px]:hidden',
+                'w-8 px-0 max-[1080px]:hidden',
+                // Only this button claims the auto-margin when nothing is selected;
+                // with a selection, SelectionBar's ml-auto right-aligns the whole group.
+                { 'ml-auto': !selectedCount },
                 detailPanelOpen
                   ? 'bg-accent text-foreground shadow-[inset_0_1px_2px_rgb(0_0_0/0.25)] hover:bg-accent'
                   : 'text-muted-foreground',
@@ -822,6 +825,7 @@ async function onCreated(key: string) {
           :issues="selectedKey ? (issuesByKey.get(selectedKey) ?? []) : []"
           :locales="allLocales"
           :source-locale="sourceLocale"
+          :lint-ignore="state?.config.lint?.ignore ?? []"
           :usage-revision="usageRevision"
           :style="{ width: `${detailPanelWidth}px` }"
           @changed="reload"

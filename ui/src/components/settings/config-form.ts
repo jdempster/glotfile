@@ -31,6 +31,8 @@ export interface ConfigForm {
   // config.lint.rules); only deviations from the defaults are persisted.
   lintRules: Record<string, LintSeverity>;
   lintIgnore: string[];
+  // config.lint.localeRules — per-locale severity overrides: locale → rule → severity.
+  lintLocaleRules: Record<string, Record<string, LintSeverity>>;
   // config.scan — all empty by default (auto-detection needs no config).
   scanAccessors: string[];
   scanPatterns: string[];
@@ -75,6 +77,7 @@ export function configToForm(config: Config): ConfigForm {
     customWords: [...(config.spelling?.customWords ?? [])],
     lintRules: { ...RULE_DEFAULTS, ...config.lint?.rules },
     lintIgnore: [...(config.lint?.ignore ?? [])],
+    lintLocaleRules: config.lint?.localeRules ? structuredClone(config.lint.localeRules) as Record<string, Record<string, LintSeverity>> : {},
     scanAccessors: [...(config.scan?.accessors ?? [])],
     scanPatterns: [...(config.scan?.patterns ?? [])],
     scanInclude: [...(config.scan?.include ?? [])],
@@ -159,6 +162,13 @@ export function formToConfig(form: ConfigForm, original?: Config): Config {
   );
   const lint: NonNullable<Config["lint"]> = {};
   if (Object.keys(ruleOverrides).length) lint.rules = ruleOverrides;
+  // Per-locale overrides: drop locales whose override map ended up empty.
+  const localeRules = Object.fromEntries(
+    Object.entries(form.lintLocaleRules)
+      .map(([loc, rules]) => [loc, { ...rules }] as const)
+      .filter(([, rules]) => Object.keys(rules).length > 0),
+  );
+  if (Object.keys(localeRules).length) lint.localeRules = localeRules;
   if (form.lintIgnore.length) lint.ignore = [...form.lintIgnore];
   if (original?.lint?.spelling !== undefined) lint.spelling = original.lint.spelling;
   if (Object.keys(lint).length) config.lint = lint;

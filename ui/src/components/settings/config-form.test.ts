@@ -157,6 +157,17 @@ describe("config-form", () => {
     expect(formToConfig(configToForm(withLint))).toEqual(withLint);
   });
 
+  it("round-trips per-locale lint overrides", () => {
+    const withLint: Config = { ...config, lint: { localeRules: { "en-gb": { "identical-to-source": "off" }, "en-us": { "identical-to-source": "off" } } } };
+    expect(formToConfig(configToForm(withLint))).toEqual(withLint);
+  });
+
+  it("drops a locale whose override map is emptied", () => {
+    const form = configToForm({ ...config, lint: { localeRules: { "en-gb": { "identical-to-source": "off" } } } });
+    form.lintLocaleRules = { "en-gb": {} };
+    expect(formToConfig(form)).not.toHaveProperty("lint");
+  });
+
   it("preserves unmodeled lint.spelling locale overrides across a save", () => {
     const withLint: Config = { ...config, lint: { spelling: { locales: { en: "en-US" } } } };
     const result = formToConfig(configToForm(withLint), withLint);

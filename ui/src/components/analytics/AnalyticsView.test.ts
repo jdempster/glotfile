@@ -1,8 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
+import { h } from "vue";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import AnalyticsView from "./AnalyticsView.vue";
 import { pendingFilter } from "@/drilldown.js";
 import type { State } from "@/types.js";
+
+// AnalyticsView uses Tooltip, which needs a TooltipProvider ancestor (App.vue
+// supplies one in the running app). Wrap, then drill back to the view.
+const mountView = () =>
+  mount(TooltipProvider, { slots: { default: () => h(AnalyticsView) } }).findComponent(AnalyticsView);
 
 // en → fr, de. fr fully translated but with a breaking placeholder; de missing one string.
 const state: State = {
@@ -42,7 +49,7 @@ describe("AnalyticsView", () => {
   });
 
   it("renders the readiness cockpit with a card per target locale", async () => {
-    const wrapper = mount(AnalyticsView);
+    const wrapper = mountView();
     await flushPromises();
     const text = wrapper.text();
     expect(text).toContain("Can I ship?");
@@ -53,21 +60,21 @@ describe("AnalyticsView", () => {
   });
 
   it("drills to all issues when the open-issues stat is clicked", async () => {
-    const wrapper = mount(AnalyticsView);
+    const wrapper = mountView();
     await flushPromises();
     await wrapper.get('[data-test="open-issues"]').trigger("click");
     expect(pendingFilter.value).toEqual({ needsAttention: true });
   });
 
   it("drills a blocked locale into its breaking issues", async () => {
-    const wrapper = mount(AnalyticsView);
+    const wrapper = mountView();
     await flushPromises();
     await wrapper.get('[data-test="rcard-fr"]').trigger("click");
     expect(pendingFilter.value).toEqual({ locale: "fr", issues: ["placeholder"] });
   });
 
   it("drills a locale with a missing string into its missing strings", async () => {
-    const wrapper = mount(AnalyticsView);
+    const wrapper = mountView();
     await flushPromises();
     await wrapper.get('[data-test="rcard-de"]').trigger("click");
     expect(pendingFilter.value).toEqual({ locale: "de", states: ["missing"] });

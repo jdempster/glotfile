@@ -45,6 +45,39 @@ describe("runLint", () => {
     expect(r.findings.every((f) => f.key !== "b.key")).toBe(true);
   });
 
+  it("turns a rule off for one locale via localeRules, keeping it for others", async () => {
+    const s: State = {
+      version: 1,
+      config: {
+        sourceLocale: "en", locales: ["en", "en-gb", "fr"], outputs: [],
+        format: { indent: 2, sortKeys: true, finalNewline: true },
+        lint: { localeRules: { "en-gb": { "identical-to-source": "off" } } },
+      },
+      glossary: [], glossarySuggestions: [],
+      keys: {
+        "a.key": { values: {
+          en: { value: "Colour", state: "source" },
+          "en-gb": { value: "Colour", state: "reviewed" },
+          fr: { value: "Colour", state: "reviewed" },
+        } },
+      },
+    };
+    const r = await runLint(s, { loadSpeller: async () => null, ...quiet });
+    const ident = r.findings.filter((f) => f.ruleId === "identical-to-source");
+    expect(ident.some((f) => f.locale === "en-gb")).toBe(false);
+    expect(ident.some((f) => f.locale === "fr")).toBe(true);
+  });
+
+  it("localeRules can turn a globally-off rule back on for one locale", async () => {
+    const r = await runLint(
+      state({ rules: { "identical-to-source": "off" }, localeRules: { fr: { "identical-to-source": "warn" } } }),
+      { loadSpeller: async () => null, ...quiet },
+    );
+    const ident = r.findings.filter((f) => f.ruleId === "identical-to-source");
+    expect(ident).toHaveLength(1);
+    expect(ident[0]).toMatchObject({ locale: "fr", severity: "warn" });
+  });
+
   it("restricts to a --rule subset", async () => {
     const r = await runLint(state(), { ruleIds: ["identical-to-source"], loadSpeller: async () => null, ...quiet });
     expect(r.findings.every((f) => f.ruleId === "identical-to-source")).toBe(true);

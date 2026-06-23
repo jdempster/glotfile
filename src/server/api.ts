@@ -6,7 +6,7 @@ import {
   setPluralForms, setSourcePluralForms, convertToPlural, convertToScalar, setPluralArg,
   upsertGlossaryEntry, deleteGlossaryEntry,
   addNote, editNote, deleteNote, addCustomWord, removeCustomWord,
-  addSuppression, removeSuppression,
+  addSuppression, removeSuppression, addLintIgnore, removeLintIgnore,
   mergeGlossarySuggestions, dismissGlossarySuggestion, removeGlossarySuggestion,
 } from "./state.js";
 import { selectGlossarySources, knownTermList, buildGlossarySuggestSystemPrompt, buildGlossarySuggestBatchPrompt, GLOSSARY_SUGGEST_SCHEMA, dedupeTerms, type SuggestedTerm } from "./ai/glossary-suggest.js";
@@ -1076,6 +1076,27 @@ export function createApi(deps: ApiDeps): Hono {
     removeSuppression(s, key, rule, locale);
     persist(s);
     logChange({ kind: "suppression", summary: `Unsuppressed ${rule} for ${key} [${locale}]`, key, locale, before: rule });
+    return c.json({ ok: true });
+  });
+
+  // Add/remove a key glob in config.lint.ignore (every rule skips matching keys).
+  app.post("/lint/ignore", async (c) => {
+    const { glob } = await c.req.json().catch(() => ({}));
+    if (typeof glob !== "string" || !glob.trim()) return c.json({ error: "glob is required" }, 400);
+    const s = load();
+    addLintIgnore(s, glob);
+    persist(s);
+    logChange({ kind: "config", summary: `Lint-ignored ${glob.trim()}`, after: glob.trim() });
+    return c.json({ ok: true });
+  });
+
+  app.delete("/lint/ignore", (c) => {
+    const glob = c.req.query("glob") ?? "";
+    if (!glob) return c.json({ error: "glob is required" }, 400);
+    const s = load();
+    removeLintIgnore(s, glob);
+    persist(s);
+    logChange({ kind: "config", summary: `Removed lint ignore ${glob}`, before: glob });
     return c.json({ ok: true });
   });
 

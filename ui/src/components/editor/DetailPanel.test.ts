@@ -6,7 +6,7 @@ import DetailPanel from "./DetailPanel.vue";
 import type { KeyEntry } from "@/types.js";
 
 // DetailPanel's tooltips need a TooltipProvider ancestor — wrap, then drill back to the panel.
-function mountPanel(props: { keyName: string; entry: KeyEntry }) {
+function mountPanel(props: { keyName: string; entry: KeyEntry; lintIgnore?: string[] }) {
   return mount(TooltipProvider, {
     slots: { default: () => h(DetailPanel, props) },
   }).findComponent(DetailPanel);
@@ -29,9 +29,13 @@ vi.mock("@/api.js", () => ({
   convertToScalar: vi.fn(() => Promise.resolve({})),
   buildContextStream: vi.fn(async function*() { yield { type: "done", requested: 0, written: 0, errors: [] }; }),
   keyUsage: vi.fn(() => Promise.resolve({ indexed: false, count: 0, refs: [] })),
+  suppressFinding: vi.fn(() => Promise.resolve({})),
+  unsuppressFinding: vi.fn(() => Promise.resolve({})),
+  addLintIgnore: vi.fn(() => Promise.resolve({})),
+  removeLintIgnore: vi.fn(() => Promise.resolve({})),
 }));
 
-import { convertToPlural, convertToScalar, keyUsage, patchKey, type KeyUsage } from "@/api.js";
+import { convertToPlural, convertToScalar, keyUsage, patchKey, suppressFinding, unsuppressFinding, addLintIgnore, removeLintIgnore, type KeyUsage } from "@/api.js";
 
 const scalarEntry: KeyEntry = {
   values: { en: { value: "Home", state: "source" } },
@@ -146,6 +150,80 @@ describe("DetailPanel live-reload edit safety", () => {
     await w.setProps({ keyName: "home.title", entry: { values: {}, context: "suggested context" } });
     await nextTick();
     expect((w.find("#detail-context").element as HTMLTextAreaElement).value).toBe("suggested context");
+  });
+});
+
+describe("DetailPanel lint ignores", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("shows a whole-key lint-ignore note with the matching glob", async () => {
+    const w = mountPanel({ keyName: "legal.terms", entry: scalarEntry, lintIgnore: ["legal.*", "debug.*"] });
+    await flushPromises();
+    expect(w.text()).toContain("Lint ignore");
+    expect(w.text()).toContain("legal.*");
+    // A non-matching glob isn't shown.
+    expect(w.text()).not.toContain("debug.*");
+  });
+
+  it("offers 'Ignore this key' when the key has issues and isn't ignored, and adds the exact key", async () => {
+    const w = mount(TooltipProvider, {
+      slots: { default: () => h(DetailPanel, {
+        keyName: "home.title",
+        entry: scalarEntry,
+        issues: [{ key: "home.title", locale: "fr", check: "identical", message: "Identical to the source text" }],
+      }) },
+    }).findComponent(DetailPanel);
+    await flushPromises();
+    await w.get('[data-testid="ignore-key"]').trigger("click");
+    await flushPromises();
+    expect(addLintIgnore).toHaveBeenCalledWith("home.title");
+    expect(w.emitted("changed")).toBeTruthy();
+  });
+
+  it("removes a matching ignore glob from the panel", async () => {
+    const w = mountPanel({ keyName: "legal.terms", entry: scalarEntry, lintIgnore: ["legal.*"] });
+    await flushPromises();
+    expect(w.text()).toContain("legal.*");
+    await w.find('[aria-label="Stop ignoring legal.*"]').trigger("click");
+    await flushPromises();
+    expect(removeLintIgnore).toHaveBeenCalledWith("legal.*");
+  });
+
+  it("makes every issue dismissable, including error-level placeholder/glossary", async () => {
+    const w = mount(TooltipProvider, {
+      slots: { default: () => h(DetailPanel, {
+        keyName: "greeting",
+        entry: scalarEntry,
+        issues: [
+          { key: "greeting", locale: "fr", check: "placeholder", message: "drops {name}" },
+          { key: "greeting", locale: "de", check: "glossary", message: "missing term" },
+        ],
+      }) },
+    }).findComponent(DetailPanel);
+    await flushPromises();
+
+    const dismissBtns = w.findAll('[aria-label="Dismiss until the source changes"]');
+    expect(dismissBtns).toHaveLength(2);
+
+    await dismissBtns[0]!.trigger("click");
+    await flushPromises();
+    expect(suppressFinding).toHaveBeenCalledWith("greeting", "placeholder-mismatch", "fr");
+  });
+
+  it("lists dismissed findings and restores one on click", async () => {
+    const entry: KeyEntry = {
+      values: { en: { value: "Home", state: "source" } },
+      suppressions: [{ rule: "spelling", locale: "fr", source: "abc123" }],
+    };
+    const w = mountPanel({ keyName: "home.title", entry });
+    await flushPromises();
+    expect(w.text()).toContain("1 dismissed");
+    expect(w.text()).toContain("FR");
+
+    await w.find('[aria-label="Restore this check"]').trigger("click");
+    await flushPromises();
+    expect(unsuppressFinding).toHaveBeenCalledWith("home.title", "spelling", "fr");
+    expect(w.emitted("changed")).toBeTruthy();
   });
 });
 

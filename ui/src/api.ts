@@ -432,6 +432,12 @@ export const acceptLintFindings = (opts: { rules?: string[]; locales?: string[] 
   fetch("/api/lint/accept", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(opts) })
     .then((r) => json<{ ok: boolean; accepted: number; byRule: Record<string, number> }>(r));
 
+// config.lint.ignore key globs (every rule skips matching keys).
+export const addLintIgnore = (glob: string) =>
+  fetch("/api/lint/ignore", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ glob }) }).then(json);
+export const removeLintIgnore = (glob: string) =>
+  fetch(`/api/lint/ignore?glob=${encodeURIComponent(glob)}`, { method: "DELETE" }).then(json);
+
 export const getStats = () => fetch("/api/stats").then((r) => json<Stats>(r));
 
 export interface ImportSampleKey { key: string; value: string }

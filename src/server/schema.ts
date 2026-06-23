@@ -124,6 +124,10 @@ export interface FormatConfig { indent: number; sortKeys: boolean; finalNewline:
 export interface SpellingConfig { customWords: string[] }
 export interface LintConfig {
   rules?: Record<string, Severity>;
+  // Per-locale severity overrides, layered over `rules`: localeRules[locale][rule].
+  // Lets a rule be turned off (or escalated) for one language only — e.g. silencing
+  // identical-to-source on English variants where matching the source is expected.
+  localeRules?: Record<string, Record<string, Severity>>;
   ignore?: string[];
   spelling?: { locales?: Record<string, string> };
 }
@@ -304,6 +308,18 @@ export function validate(raw: unknown): State {
         if (!RULE_IDS.includes(id as RuleId)) fail(`config.lint.rules has unknown rule id "${id}"`);
         if (sev !== "error" && sev !== "warn" && sev !== "off") {
           fail(`config.lint.rules.${id} must be "error", "warn", or "off"`);
+        }
+      }
+    }
+    if (lint.localeRules !== undefined) {
+      if (!isObject(lint.localeRules)) fail("config.lint.localeRules must be an object");
+      for (const [locale, rules] of Object.entries(lint.localeRules)) {
+        if (!isObject(rules)) fail(`config.lint.localeRules.${locale} must be an object`);
+        for (const [id, sev] of Object.entries(rules as Record<string, unknown>)) {
+          if (!RULE_IDS.includes(id as RuleId)) fail(`config.lint.localeRules.${locale} has unknown rule id "${id}"`);
+          if (sev !== "error" && sev !== "warn" && sev !== "off") {
+            fail(`config.lint.localeRules.${locale}.${id} must be "error", "warn", or "off"`);
+          }
         }
       }
     }

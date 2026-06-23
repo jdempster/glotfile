@@ -10,7 +10,7 @@ import { formsToIcu } from "./plurals.js";
 import { splitDirFor, detectFormat, loadSplit, saveSplit, stripEmptySuggestions } from "./storage.js";
 import { normalizeSource } from "./normalize.js";
 import { sourceHash, pruneStaleSuppressions } from "./lint/suppress.js";
-import { RULE_IDS, type RuleId } from "./lint/registry.js";
+import { RULE_IDS, type RuleId, type Severity } from "./lint/registry.js";
 
 export type Clock = () => string;
 export const systemClock: Clock = () => new Date().toISOString();
@@ -394,6 +394,45 @@ export function removeSuppression(state: State, key: string, rule: string, local
   if (!entry.suppressions) return;
   entry.suppressions = entry.suppressions.filter((s) => !(s.rule === rule && s.locale === locale));
   if (!entry.suppressions.length) delete entry.suppressions;
+}
+
+// Add a key glob to config.lint.ignore — every rule skips matching keys. Idempotent.
+export function addLintIgnore(state: State, glob: string): void {
+  const g = glob.trim();
+  if (!g) throw new GlotfileError("Ignore glob cannot be empty");
+  const lint = (state.config.lint ??= {});
+  const list = lint.ignore ?? [];
+  if (!list.includes(g)) list.push(g);
+  lint.ignore = list;
+}
+
+// Remove a glob from config.lint.ignore; drops the array (and an emptied lint block) when last.
+export function removeLintIgnore(state: State, glob: string): void {
+  const lint = state.config.lint;
+  if (!lint?.ignore) return;
+  lint.ignore = lint.ignore.filter((g) => g !== glob);
+  if (!lint.ignore.length) delete lint.ignore;
+  if (lint.ignore === undefined && !lint.rules && !lint.localeRules && !lint.spelling) delete state.config.lint;
+}
+
+// Set (or clear, with severity=null) a per-locale rule severity in config.lint.localeRules.
+// Empty maps and an emptied lint block are pruned so the config stays minimal.
+export function setLocaleLintRule(state: State, locale: string, rule: string, severity: Severity | null): void {
+  if (!RULE_IDS.includes(rule as RuleId)) throw new GlotfileError(`Unknown lint rule: ${rule}`);
+  if (severity !== null && severity !== "error" && severity !== "warn" && severity !== "off") {
+    throw new GlotfileError(`Severity must be "error", "warn", "off", or null to clear`);
+  }
+  const loc = canonLocale(locale);
+  const lint = (state.config.lint ??= {});
+  const map = lint.localeRules ?? {};
+  const forLocale = { ...(map[loc] ?? {}) };
+  if (severity === null) delete forLocale[rule];
+  else forLocale[rule] = severity;
+  if (Object.keys(forLocale).length) map[loc] = forLocale;
+  else delete map[loc];
+  if (Object.keys(map).length) lint.localeRules = map;
+  else delete lint.localeRules;
+  if (!lint.rules && !lint.localeRules && !lint.ignore && !lint.spelling) delete state.config.lint;
 }
 
 export function upsertGlossaryEntry(state: State, entry: GlossaryEntry): void {

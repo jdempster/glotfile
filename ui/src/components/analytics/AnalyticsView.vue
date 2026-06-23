@@ -13,6 +13,7 @@ import {
   ChevronRight, ChevronDown, Ship, Flag, Check, BellOff, BookPlus, RotateCcw,
 } from "lucide-vue-next";
 import { toast } from "@/components/ui/toast";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 const state = ref<State | null>(null);
 // The release gate runs on the server's /lint report — the same rules (and the
@@ -57,6 +58,14 @@ onMounted(async () => {
 
 const showSuppressed = ref(false);
 const acting = ref(false);
+
+// output-stale findings key a file path, not a translation key, so drilling lands
+// on an empty editor filter — there's nothing to navigate to. Their detail (which
+// file, why) lives entirely in the message, so keep them static and readable.
+const canDrill = (f: LintFinding) => f.ruleId !== "output-stale";
+function activateFinding(f: LintFinding) {
+  if (canDrill(f)) drillTo(drillFilterFor(f));
+}
 
 function wordOf(f: LintFinding): string | undefined {
   return f.ruleId === "spelling" ? /"([^"]+)"/.exec(f.message)?.[1] : undefined;
@@ -354,13 +363,25 @@ function tierFilter(key: Severity) {
                     </button>
                   </div>
                   <div v-for="(f, idx) in g.findings" :key="idx"
-                    role="button" tabindex="0"
-                    class="group grid w-full cursor-pointer grid-cols-[42px_minmax(90px,1fr)_1.4fr_auto] items-center gap-2.5 border-b px-3.5 py-2.5 text-left text-xs last:border-b-0 hover:bg-muted/50"
-                    @click="drillTo(drillFilterFor(f))"
-                    @keydown.enter="drillTo(drillFilterFor(f))">
+                    :role="canDrill(f) ? 'button' : undefined"
+                    :tabindex="canDrill(f) ? 0 : undefined"
+                    class="group grid w-full grid-cols-[42px_minmax(90px,1fr)_1.4fr_auto] items-center gap-2.5 border-b px-3.5 py-2.5 text-left text-xs last:border-b-0"
+                    :class="canDrill(f) ? 'cursor-pointer hover:bg-muted/50' : ''"
+                    @click="activateFinding(f)"
+                    @keydown.enter="activateFinding(f)">
                     <span class="font-mono font-semibold uppercase text-muted-foreground" :title="f.locale ? langName(f.locale) : 'project-wide'">{{ f.locale || "—" }}</span>
-                    <span class="truncate font-medium"><span class="font-mono text-muted-foreground">{{ f.key }}</span></span>
-                    <span class="truncate text-muted-foreground">{{ f.message }}</span>
+                    <Tooltip>
+                      <TooltipTrigger as-child>
+                        <span class="truncate font-medium"><span class="font-mono text-muted-foreground">{{ f.key }}</span></span>
+                      </TooltipTrigger>
+                      <TooltipContent class="max-w-md break-all font-mono">{{ f.key }}</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger as-child>
+                        <span class="truncate text-muted-foreground">{{ f.message }}</span>
+                      </TooltipTrigger>
+                      <TooltipContent class="max-w-md">{{ f.message }}</TooltipContent>
+                    </Tooltip>
                     <span class="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                       <button
                         v-if="wordOf(f)"
@@ -401,8 +422,18 @@ function tierFilter(key: Severity) {
               <div v-for="(f, idx) in suppressedFindings" :key="idx"
                 class="grid w-full grid-cols-[42px_minmax(90px,1fr)_1.4fr_auto] items-center gap-2.5 border-b px-3.5 py-2.5 text-left text-xs text-muted-foreground last:border-b-0">
                 <span class="font-mono font-semibold uppercase">{{ f.locale || "—" }}</span>
-                <span class="truncate">{{ RULE_LABELS[f.ruleId] }} · <span class="font-mono">{{ f.key }}</span></span>
-                <span class="truncate">{{ f.message }}</span>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <span class="truncate">{{ RULE_LABELS[f.ruleId] }} · <span class="font-mono">{{ f.key }}</span></span>
+                  </TooltipTrigger>
+                  <TooltipContent class="max-w-md break-all font-mono">{{ f.key }}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <span class="truncate">{{ f.message }}</span>
+                  </TooltipTrigger>
+                  <TooltipContent class="max-w-md">{{ f.message }}</TooltipContent>
+                </Tooltip>
                 <button
                   type="button"
                   class="flex items-center gap-1 rounded border bg-background px-1.5 py-0.5 text-[11px] transition-colors hover:bg-accent hover:text-foreground"

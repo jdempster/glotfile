@@ -90,6 +90,57 @@ describe("runChecks (cheap checks)", () => {
     expect(g[0]!.detail).toEqual(["panier"]);
   });
 
+  it("drops every issue for a key matched by a config.lint.ignore glob", () => {
+    const s = stateWith({
+      "legal.terms": { values: { en: { value: "Hi {name}", state: "source" }, fr: { value: "Salut", state: "reviewed" } } },
+      greeting: { values: { en: { value: "Hi {name}", state: "source" }, fr: { value: "Salut", state: "reviewed" } } },
+    });
+    s.config.lint = { ignore: ["legal.*"] };
+    const issues = runChecks(s).issues;
+    expect(issues.some((i) => i.key === "legal.terms")).toBe(false);
+    expect(issues.some((i) => i.key === "greeting")).toBe(true);
+  });
+
+  it("drops a check for one locale via config.lint.localeRules, keeping others", () => {
+    const s = stateWith({
+      greeting: { maxLength: 3, values: {
+        en: { value: "Hi", state: "source" },
+        fr: { value: "Bonjour", state: "reviewed" },
+      } },
+    });
+    s.config.locales = ["en", "fr"];
+    s.config.lint = { localeRules: { fr: { "max-length": "off" } } };
+    const len = runChecks(s).issues.filter((i) => i.check === "length");
+    expect(len.some((i) => i.locale === "fr")).toBe(false);
+
+    // Without the override the same value is flagged, proving the override did the work.
+    s.config.lint = {};
+    expect(runChecks(s).issues.filter((i) => i.check === "length" && i.locale === "fr")).toHaveLength(1);
+  });
+
+  it("surfaces rule-backed checks: identical-to-source, whitespace, icu mismatch", () => {
+    const s = stateWith({
+      same: { values: { en: { value: "Open", state: "source" }, fr: { value: "Open", state: "reviewed" } } },
+      space: { values: { en: { value: "Hi", state: "source" }, fr: { value: "Salut ", state: "reviewed" } } },
+      icu: { values: { en: { value: "{n, plural, other {# items}}", state: "source" }, fr: { value: "beaucoup", state: "reviewed" } } },
+    });
+    const issues = runChecks(s).issues;
+    expect(issues.some((i) => i.key === "same" && i.check === "identical" && i.locale === "fr")).toBe(true);
+    expect(issues.some((i) => i.key === "space" && i.check === "whitespace" && i.locale === "fr")).toBe(true);
+    expect(issues.some((i) => i.key === "icu" && i.check === "icu" && i.locale === "fr")).toBe(true);
+  });
+
+  it("respects config off + per-locale off for rule-backed checks", () => {
+    const base = () => stateWith({
+      same: { values: { en: { value: "Open", state: "source" }, fr: { value: "Open", state: "reviewed" } } },
+    });
+    const off = base(); off.config.lint = { rules: { "identical-to-source": "off" } };
+    expect(runChecks(off).issues.some((i) => i.check === "identical")).toBe(false);
+
+    const perLocaleOff = base(); perLocaleOff.config.lint = { localeRules: { fr: { "identical-to-source": "off" } } };
+    expect(runChecks(perLocaleOff).issues.some((i) => i.check === "identical")).toBe(false);
+  });
+
   it("honors `only` to restrict which checks run", () => {
     const s = stateWith({
       greeting: { maxLength: 1, values: { en: { value: "Hi {name}", state: "source" }, fr: { value: "Salut", state: "reviewed" } } },

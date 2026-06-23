@@ -163,10 +163,12 @@ describe("drillFilterFor", () => {
       .toEqual({ locale: "fr", issues: ["placeholder"] });
     expect(drillFilterFor({ ruleId: "spelling", key: "k", locale: "fr", severity: "warn", message: "" }))
       .toEqual({ locale: "fr", issues: ["spelling"] });
+    // identical-to-source is now an editor check too.
+    expect(drillFilterFor({ ruleId: "identical-to-source", key: "k", locale: "fr", severity: "warn", message: "" }))
+      .toEqual({ locale: "fr", issues: ["identical"] });
   });
   it("falls back to a key text filter for rules without an editor check", () => {
-    expect(drillFilterFor({ ruleId: "identical-to-source", key: "k", locale: "fr", severity: "warn", message: "" }))
-      .toEqual({ locale: "fr", text: "k" });
+    // empty-source is project-level (no locale) and has no editor check.
     expect(drillFilterFor({ ruleId: "empty-source", key: "k", locale: "", severity: "error", message: "" }))
       .toEqual({ text: "k" });
   });

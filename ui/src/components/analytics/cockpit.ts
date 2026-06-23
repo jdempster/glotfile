@@ -25,6 +25,9 @@ const RULE_TO_CHECK: Partial<Record<LintRuleId, CheckId>> = {
   "glossary-violation": "glossary",
   "max-length": "length",
   "spelling": "spelling",
+  "icu-mismatch": "icu",
+  "whitespace": "whitespace",
+  "identical-to-source": "identical",
 };
 
 export function drillFilterFor(f: LintFinding): Partial<KeyFilter> {

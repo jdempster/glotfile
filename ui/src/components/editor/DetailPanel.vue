@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { reactive, ref, watch, computed } from "vue";
-import { FileText, Image as ImageIcon, Upload, Trash2, AlertTriangle, RefreshCw, Sparkles, Code2, ExternalLink, Asterisk, Info, Tags, Ruler, Folder, BellOff } from "lucide-vue-next";
-import type { Issue, KeyEntry } from "@/types.js";
-import { patchKey, uploadScreenshot, deleteScreenshot, convertToPlural, convertToScalar, buildContextStream, keyUsage, suppressFinding, type KeyUsage, type KeyUsageRef } from "@/api.js";
+import { FileText, Image as ImageIcon, Upload, Trash2, AlertTriangle, RefreshCw, Sparkles, Code2, ExternalLink, Asterisk, Info, Tags, Ruler, Folder, BellOff, Bell, Filter, X } from "lucide-vue-next";
+import type { Issue, KeyEntry, LintRuleId, Suppression } from "@/types.js";
+import { patchKey, uploadScreenshot, deleteScreenshot, convertToPlural, convertToScalar, buildContextStream, keyUsage, suppressFinding, unsuppressFinding, addLintIgnore, removeLintIgnore, type KeyUsage, type KeyUsageRef } from "@/api.js";
+import { RULE_LABELS } from "@/components/analytics/cockpit.js";
 import { buildOpenUrl } from "@/editor.js";
 import { buildUsageTree } from "@/usageTree.js";
 import { isTargetMissing } from "@/missing.js";
@@ -23,6 +24,8 @@ const props = defineProps<{
   // completeness regardless of which locales the editor currently shows.
   locales?: string[];
   sourceLocale?: string;
+  // config.lint.ignore globs — used to tell the user when lint skips this whole key.
+  lintIgnore?: string[];
   // Increments when a scan refreshes the editor's scan-derived data; signals this
   // panel to re-fetch the selected key's usage even though its key name is unchanged.
   usageRevision?: number;
@@ -59,16 +62,27 @@ const CHECK_LABELS: Record<string, string> = {
   spelling: "Spelling",
   length: "Length",
   glossary: "Glossary",
+  icu: "ICU",
+  whitespace: "Whitespace",
+  identical: "Identical",
 };
 const realIssues = computed(() => (props.issues ?? []).filter((i) => i.check !== "untranslated"));
 
-// Warning-level checks can be dismissed: the matching lint rule is suppressed for
-// this key+locale until the source text changes. Error-level checks (placeholder,
-// glossary) block a release, so they stay.
-const DISMISSIBLE_RULE: Record<string, string> = { spelling: "spelling", length: "max-length" };
+// Each live check maps to the lint rule it mirrors (same map as the server's
+// checks.ts CHECK_RULE), so any issue — error or warning — can be dismissed: the
+// rule is suppressed for this key+locale until the source text changes, then resurfaces.
+const CHECK_RULE: Record<string, string> = {
+  placeholder: "placeholder-mismatch",
+  spelling: "spelling",
+  length: "max-length",
+  glossary: "glossary-violation",
+  icu: "icu-mismatch",
+  whitespace: "whitespace",
+  identical: "identical-to-source",
+};
 const dismissing = ref(false);
 async function dismissIssue(r: Issue) {
-  const rule = DISMISSIBLE_RULE[r.check];
+  const rule = CHECK_RULE[r.check];
   if (!rule || !props.keyName || dismissing.value) return;
   dismissing.value = true;
   try {
@@ -81,6 +95,67 @@ async function dismissIssue(r: Issue) {
     dismissing.value = false;
   }
 }
+// ── Lint ignores affecting this key ─────────────────────────────────────────
+// Two kinds: a config.lint.ignore glob that skips the whole key, and per-finding
+// dismissals (suppressions) stored on the entry. Both are surfaced so the user can
+// see — and, for dismissals, undo — why a key shows no lint markers.
+function globToRegExp(glob: string): RegExp {
+  return new RegExp(`^${glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`);
+}
+const ignoredByGlobs = computed(() => {
+  const key = props.keyName;
+  if (!key) return [];
+  return (props.lintIgnore ?? []).filter((g) => globToRegExp(g).test(key));
+});
+const suppressions = computed<Suppression[]>(() => props.entry?.suppressions ?? []);
+const ruleLabel = (rule: string) => RULE_LABELS[rule as LintRuleId] ?? rule;
+
+const ignoring = ref(false);
+// Add the exact key to config.lint.ignore so every rule skips it.
+async function ignoreKey() {
+  if (!props.keyName || ignoring.value) return;
+  ignoring.value = true;
+  try {
+    await addLintIgnore(props.keyName);
+    toast.success("Lint now skips this key");
+    emit("changed");
+  } catch (e) {
+    toast.error((e as Error).message);
+  } finally {
+    ignoring.value = false;
+  }
+}
+// Remove a matching glob from config.lint.ignore. A pattern (not the exact key) affects
+// other keys too, so the button's tooltip warns before that happens.
+async function removeIgnore(glob: string) {
+  if (ignoring.value) return;
+  ignoring.value = true;
+  try {
+    await removeLintIgnore(glob);
+    toast.success(glob === props.keyName ? "Lint re-enabled for this key" : `Removed ignore ${glob}`);
+    emit("changed");
+  } catch (e) {
+    toast.error((e as Error).message);
+  } finally {
+    ignoring.value = false;
+  }
+}
+
+const restoring = ref(false);
+async function restoreSuppression(s: Suppression) {
+  if (!props.keyName || restoring.value) return;
+  restoring.value = true;
+  try {
+    await unsuppressFinding(props.keyName, s.rule, s.locale);
+    toast.success(`Restored ${ruleLabel(s.rule).toLowerCase()} check`);
+    emit("changed");
+  } catch (e) {
+    toast.error((e as Error).message);
+  } finally {
+    restoring.value = false;
+  }
+}
+
 const untranslatedLocales = computed(() => {
   const entry = props.entry;
   const src = props.sourceLocale;
@@ -373,7 +448,7 @@ async function save() {
             <Flag :code="r.locale" :size="14" />
             <span class="font-mono text-[11px] font-semibold">{{ r.locale.toUpperCase() }}</span>
             <span class="ml-auto rounded border border-destructive px-1.5 py-0.5 text-[10.5px] font-semibold text-destructive">{{ CHECK_LABELS[r.check] ?? r.check }}</span>
-            <Tooltip v-if="DISMISSIBLE_RULE[r.check]">
+            <Tooltip v-if="CHECK_RULE[r.check]">
               <TooltipTrigger as-child>
                 <button
                   type="button"
@@ -397,6 +472,85 @@ async function save() {
             <Flag :code="loc" :size="14" />
             <span class="font-mono text-[11px] font-semibold">{{ loc.toUpperCase() }}</span>
             <span class="ml-auto rounded border border-border-soft bg-accent px-1.5 py-0.5 text-[10.5px] font-semibold italic text-muted-foreground">Empty</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lint ignores: whole-key glob skips (manageable here) + dismissed findings -->
+      <div
+        v-if="ignoredByGlobs.length || suppressions.length || realIssues.length"
+        class="flex flex-col gap-3 rounded-xl border border-border bg-background p-3"
+      >
+        <div class="flex flex-col gap-1.5">
+          <div class="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+            <Filter class="size-3.5" /> Lint ignore
+          </div>
+          <template v-if="ignoredByGlobs.length">
+            <p class="text-[12px] leading-relaxed text-muted-foreground">
+              Lint skips this key — remove a pattern to re-enable its checks.
+            </p>
+            <div v-for="g in ignoredByGlobs" :key="g" class="group flex items-center gap-2 text-[12.5px]">
+              <code class="rounded bg-accent px-1 py-0.5 font-mono text-[11px] text-foreground">{{ g }}</code>
+              <span
+                v-if="g !== keyName"
+                class="rounded border border-border-soft px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+              >pattern</span>
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <button
+                    type="button"
+                    class="ml-auto flex size-[20px] items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100"
+                    :disabled="ignoring"
+                    :aria-label="`Stop ignoring ${g}`"
+                    @click="removeIgnore(g)"
+                  >
+                    <X class="size-3" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>{{ g === keyName ? "Stop ignoring this key" : `Remove ${g} — affects other keys it matches` }}</TooltipContent>
+              </Tooltip>
+            </div>
+          </template>
+          <template v-else>
+            <p class="text-[12px] leading-relaxed text-muted-foreground">
+              Skip every lint check for this key — for generated strings or copy that's intentionally off-spec.
+            </p>
+            <button
+              type="button"
+              data-testid="ignore-key"
+              class="flex items-center gap-1.5 self-start rounded-md border border-border-soft px-2 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+              :disabled="ignoring"
+              @click="ignoreKey"
+            >
+              <Filter class="size-3.5" /> Ignore this key
+            </button>
+          </template>
+        </div>
+        <div v-if="suppressions.length" class="flex flex-col gap-1.5">
+          <div class="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+            <BellOff class="size-3.5" /> {{ suppressions.length }} dismissed
+          </div>
+          <p class="text-[11.5px] leading-relaxed text-muted-foreground">
+            Hidden until this key's source text changes.
+          </p>
+          <div v-for="(s, i) in suppressions" :key="i" class="group flex items-center gap-2 text-[12.5px]">
+            <Flag :code="s.locale" :size="14" />
+            <span class="font-mono text-[11px] font-semibold">{{ s.locale.toUpperCase() }}</span>
+            <span class="ml-auto rounded border border-border-soft bg-accent px-1.5 py-0.5 text-[10.5px] font-semibold text-muted-foreground">{{ ruleLabel(s.rule) }}</span>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <button
+                  type="button"
+                  class="flex size-[20px] items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100"
+                  :disabled="restoring"
+                  aria-label="Restore this check"
+                  @click="restoreSuppression(s)"
+                >
+                  <Bell class="size-3" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Restore this check</TooltipContent>
+            </Tooltip>
           </div>
         </div>
       </div>

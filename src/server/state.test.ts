@@ -12,6 +12,7 @@ import {
   applyMachineTranslationForms, setPluralArg,
   findEmptySourceKeys, pruneEmptySourceKeys,
   mergeGlossarySuggestions, dismissGlossarySuggestion, removeGlossarySuggestion,
+  addLintIgnore, removeLintIgnore,
 } from "./state.js";
 import { defaultState, GlotfileError, validate } from "./schema.js";
 import { disassemble, assemble } from "./storage.js";
@@ -1006,4 +1007,34 @@ test("remove hard-deletes a suggestion (used after accept)", () => {
   const s = stateWith([], [{ term: "Foo", status: "pending" }]);
   removeGlossarySuggestion(s, "Foo");
   expect(s.glossarySuggestions).toHaveLength(0);
+});
+
+describe("addLintIgnore / removeLintIgnore", () => {
+  it("adds a glob to config.lint.ignore (idempotent) and removes it, dropping empties", () => {
+    const s = defaultState();
+    addLintIgnore(s, "legal.*");
+    addLintIgnore(s, "legal.*");
+    expect(s.config.lint?.ignore).toEqual(["legal.*"]);
+
+    addLintIgnore(s, "app.title");
+    expect(s.config.lint?.ignore).toEqual(["legal.*", "app.title"]);
+
+    removeLintIgnore(s, "legal.*");
+    expect(s.config.lint?.ignore).toEqual(["app.title"]);
+
+    // Removing the last glob drops the array, and the now-empty lint block.
+    removeLintIgnore(s, "app.title");
+    expect(s.config.lint).toBeUndefined();
+  });
+
+  it("preserves a lint block that still has other settings when the last ignore is removed", () => {
+    const s = defaultState();
+    s.config.lint = { rules: { spelling: "off" }, ignore: ["x.*"] };
+    removeLintIgnore(s, "x.*");
+    expect(s.config.lint).toEqual({ rules: { spelling: "off" } });
+  });
+
+  it("rejects an empty glob", () => {
+    expect(() => addLintIgnore(defaultState(), "  ")).toThrow(GlotfileError);
+  });
 });
