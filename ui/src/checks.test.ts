@@ -20,7 +20,7 @@ describe("indexIssuesByKey", () => {
 
 describe("check constants", () => {
   it("DEFAULT_ENABLED is the cheap checks (spelling opt-in) and includes untranslated", () => {
-    expect(DEFAULT_ENABLED).toEqual(["untranslated", "placeholder", "length", "glossary"]);
+    expect(DEFAULT_ENABLED).toEqual(["untranslated", "placeholder", "length", "glossary", "icu", "whitespace", "identical"]);
     expect(ALL_CHECKS).toContain("spelling");
     expect(ALL_CHECKS).not.toContain("empty");
   });
