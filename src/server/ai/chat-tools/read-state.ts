@@ -163,7 +163,7 @@ const grepSource: ChatTool = {
 const readKey: ChatTool = {
   def: {
     name: "read_key",
-    description: "Read one key in full: source text, context, tags, max length, whether it is plural or has a screenshot, and every locale's value/forms + state.",
+    description: "Read one key in full: source text, context, developer description, tags, max length, typed placeholders (type/format/example), whether it is plural or has a screenshot, and every locale's value/forms + state.",
     schema: {
       type: "object",
       properties: { key: { type: "string" } },
@@ -188,8 +188,10 @@ const readKey: ChatTool = {
       source: sourceText(entry, s.config.sourceLocale),
       context: entry.context,
       contextSource: entry.contextSource,
+      description: entry.description,
       tags: entry.tags ?? [],
       maxLength: entry.maxLength,
+      placeholders: entry.placeholders ?? {},
       skipTranslate: entry.skipTranslate ?? false,
       plural: entry.plural?.arg ?? null,
       hasScreenshot: !!entry.screenshot,
@@ -212,13 +214,15 @@ const readGuidance: ChatTool = {
       localeInstructions: s.config.localeInstructions ?? {},
       glossary: s.glossary.map((g) => ({
         term: g.term,
+        aliases: g.aliases ?? [],
         doNotTranslate: g.doNotTranslate ?? false,
+        caseSensitive: g.caseSensitive ?? false,
         translations: g.translations ?? {},
         notes: g.notes,
       })),
       pendingSuggestions: s.glossarySuggestions
         .filter((g) => g.status === "pending")
-        .map((g) => ({ term: g.term, note: g.note })),
+        .map((g) => ({ term: g.term, aliases: g.aliases ?? [], doNotTranslate: g.doNotTranslate ?? false, note: g.note })),
     };
   },
 };

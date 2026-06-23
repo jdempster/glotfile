@@ -58,7 +58,7 @@ const readLintConfig: ChatTool = {
   def: {
     name: "read_lint_config",
     description:
-      "Read the current lint configuration so you can see what's already on, off, or escalated BEFORE changing it: the effective global severity of every rule, per-locale overrides (config.lint.localeRules), ignore globs (config.lint.ignore), spelling dictionaries, and the active per-key dismissals. lint_check returns the FINDINGS; this returns the SETTINGS that produced them — read it before deciding a rule is noise, removing a glob, or claiming a rule is \"already\" off.",
+      "Read the current lint configuration so you can see what's already on, off, or escalated BEFORE changing it: the effective global severity of every rule, per-locale overrides (config.lint.localeRules), ignore globs (config.lint.ignore), spelling dictionaries and the custom-word allowlist, and the active per-key dismissals. lint_check returns the FINDINGS; this returns the SETTINGS that produced them — read it before deciding a rule is noise, removing a glob, or claiming a rule is \"already\" off.",
     schema: { type: "object", properties: {}, additionalProperties: false },
   },
   humanSummary: () => "read lint config",
@@ -82,6 +82,9 @@ const readLintConfig: ChatTool = {
       localeRules: lint.localeRules ?? {},
       ignore: lint.ignore ?? [],
       spellingLocales: lint.spelling?.locales ?? {},
+      // The spell-check allowlist (config.spelling.customWords): words the
+      // spelling rule treats as correct, so Lingo can see what's already exempt.
+      spellingCustomWords: s.config.spelling?.customWords ?? [],
       dismissals,
       ...(truncated ? { truncated } : {}),
     };

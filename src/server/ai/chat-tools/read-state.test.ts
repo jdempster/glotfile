@@ -15,11 +15,14 @@ function sproutState(): State {
   s.config.locales = ["en", "de"];
   s.config.projectContext = "Sprout is a houseplant-care app; treat 'feed' as giving a plant fertilizer, never as a social-media feed.";
   s.config.localeInstructions = { de: "Use informal du." };
-  s.glossary = [{ term: "Sprout", doNotTranslate: true, notes: "product name" }];
+  s.glossary = [{ term: "Sprout", aliases: ["Sprouts"], doNotTranslate: true, caseSensitive: true, notes: "product name" }];
+  s.glossarySuggestions = [{ term: "Bloom", aliases: ["Blooms"], doNotTranslate: true, note: "feature name", status: "pending" }];
   s.keys = {
     "plant.water": { values: { en: { value: "Water your plant", state: "source" } } },
     "plant.feed": {
       context: "Button to fertilize a plant.",
+      description: "Primary CTA on the plant card.",
+      placeholders: { gardener: { type: "String", example: "Alex" } },
       values: {
         en: { value: "Feed your plant {gardener}", state: "source" },
         de: { value: "Dünge deine Pflanze {gardener}", state: "reviewed" },
@@ -59,12 +62,16 @@ describe("state read tools", () => {
     expect(r.keys.map((k) => k.key).sort()).toEqual(["plant.feed", "plant.water"]);
   });
 
-  it("read_key returns source, context, and per-locale state", async () => {
+  it("read_key returns source, context, description, placeholders, and per-locale state", async () => {
     const r = (await tool("read_key").run({ key: "plant.feed" }, ctx)) as {
-      source: string; context?: string; values: Record<string, { state: string; value?: string }>;
+      source: string; context?: string; description?: string;
+      placeholders: Record<string, { type?: string; example?: string }>;
+      values: Record<string, { state: string; value?: string }>;
     };
     expect(r.source).toContain("Feed your plant");
     expect(r.context).toContain("fertilize");
+    expect(r.description).toContain("Primary CTA");
+    expect(r.placeholders.gardener).toEqual({ type: "String", example: "Alex" });
     expect(r.values.de!.state).toBe("reviewed");
   });
 
@@ -105,13 +112,19 @@ describe("state read tools", () => {
     await expect(tool("grep_source").run({ pattern: "(" }, ctx)).rejects.toThrow();
   });
 
-  it("read_guidance returns project context, locale rules, and glossary", async () => {
+  it("read_guidance returns project context, locale rules, and glossary with aliases + caseSensitive", async () => {
     const r = (await tool("read_guidance").run({}, ctx)) as {
       projectContext: string; localeInstructions: Record<string, string>;
-      glossary: { term: string }[];
+      glossary: { term: string; aliases: string[]; caseSensitive: boolean }[];
+      pendingSuggestions: { term: string; aliases: string[]; doNotTranslate: boolean }[];
     };
     expect(r.projectContext).toContain("Sprout");
     expect(r.localeInstructions.de).toContain("informal");
-    expect(r.glossary.map((g) => g.term)).toContain("Sprout");
+    const sprout = r.glossary.find((g) => g.term === "Sprout")!;
+    expect(sprout.aliases).toEqual(["Sprouts"]);
+    expect(sprout.caseSensitive).toBe(true);
+    const bloom = r.pendingSuggestions.find((g) => g.term === "Bloom")!;
+    expect(bloom.aliases).toEqual(["Blooms"]);
+    expect(bloom.doNotTranslate).toBe(true);
   });
 });

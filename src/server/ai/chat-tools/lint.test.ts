@@ -60,10 +60,12 @@ describe("lint chat tools", () => {
     await tool("set_lint_ignore").run({ glob: "a.*" }, ctx);
     await tool("set_locale_lint_rule").run({ locale: "en-gb", rule: "identical-to-source", severity: "off" }, ctx);
     await tool("dismiss_finding").run({ key: "a.same", rule: "identical-to-source", locale: "fr" }, ctx);
+    state.config.spelling = { customWords: ["Sprout"] };
     const r = await tool("read_lint_config").run({}, ctx) as {
       rules: Record<string, string>;
       localeRules: Record<string, Record<string, string>>;
       ignore: string[];
+      spellingCustomWords: string[];
       dismissals: { key: string; rule: string; locale: string }[];
     };
     // Effective global severity per rule, defaults filled in.
@@ -72,6 +74,7 @@ describe("lint chat tools", () => {
     expect(r.rules["spelling"]).toBe("off");
     expect(r.localeRules).toEqual({ "en-gb": { "identical-to-source": "off" } });
     expect(r.ignore).toEqual(["a.*"]);
+    expect(r.spellingCustomWords).toEqual(["Sprout"]);
     expect(r.dismissals).toEqual([{ key: "a.same", rule: "identical-to-source", locale: "fr" }]);
   });
 
