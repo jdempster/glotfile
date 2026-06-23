@@ -482,6 +482,39 @@ describe("glossary mutations", () => {
     expect(s.glossary).toHaveLength(0);
     expect(() => deleteGlossaryEntry(s, "Nope")).not.toThrow();
   });
+
+  it("sorts the glossary deterministically in storage regardless of insertion order", () => {
+    const p = join(mkdtempSync(join(tmpdir(), "glot-")), "glotfile.json");
+    const s = defaultState();
+    upsertGlossaryEntry(s, { term: "Zebra" });
+    upsertGlossaryEntry(s, { term: "apple" });
+    upsertGlossaryEntry(s, { term: "Mango" });
+    saveState(p, s);
+    // Insertion order was Zebra/apple/Mango; on disk it must be case-insensitively sorted.
+    expect(loadState(p).glossary.map((e) => e.term)).toEqual(["apple", "Mango", "Zebra"]);
+    const file = readFileSync(p, "utf8");
+    expect(file.indexOf('"apple"')).toBeLessThan(file.indexOf('"Mango"'));
+    expect(file.indexOf('"Mango"')).toBeLessThan(file.indexOf('"Zebra"'));
+    // Re-saving a loaded state is a zero-diff no-op (stable order).
+    saveState(p, loadState(p));
+    expect(readFileSync(p, "utf8")).toBe(file);
+  });
+
+  it("sorts the glossary deterministically in split storage (config.json) too", () => {
+    const dir = mkdtempSync(join(tmpdir(), "glot-"));
+    const p = join(dir, "glotfile.json");
+    const s = defaultState();
+    s.config.storage = "split";
+    upsertGlossaryEntry(s, { term: "Zebra" });
+    upsertGlossaryEntry(s, { term: "apple" });
+    upsertGlossaryEntry(s, { term: "Mango" });
+    saveState(p, s);
+    // Glossary lives in the split manifest (config.json) and must be sorted there.
+    const cfg = readFileSync(join(dir, "glotfile", "config.json"), "utf8");
+    expect(cfg.indexOf('"apple"')).toBeLessThan(cfg.indexOf('"Mango"'));
+    expect(cfg.indexOf('"Mango"')).toBeLessThan(cfg.indexOf('"Zebra"'));
+    expect(loadState(p).glossary.map((e) => e.term)).toEqual(["apple", "Mango", "Zebra"]);
+  });
 });
 
 describe("notes", () => {

@@ -73,26 +73,44 @@ function normalizeState(state: State): void {
   // locale keys are canonicalized here too, so a value pinned under "pt-BR"
   // still applies (and still enforces) when the target becomes "pt-br".
   // Keep these field lists in sync with GlossaryEntry / GlossarySuggestion.
-  state.glossary = state.glossary.map((entry) => {
-    const clean: GlossaryEntry = { term: entry.term };
-    if (entry.aliases?.length) clean.aliases = entry.aliases;
-    if (entry.doNotTranslate) clean.doNotTranslate = true;
-    if (entry.caseSensitive) clean.caseSensitive = true;
-    if (entry.translations && Object.keys(entry.translations).length) {
-      const remapped: Record<string, string> = {};
-      for (const [k, v] of Object.entries(entry.translations)) remapped[canonLocale(k)] = v;
-      clean.translations = remapped;
-    }
-    if (entry.notes) clean.notes = entry.notes;
-    return clean;
-  });
-  state.glossarySuggestions = state.glossarySuggestions.map((sug) => {
-    const clean: GlossarySuggestion = { term: sug.term, status: sug.status };
-    if (sug.aliases?.length) clean.aliases = sug.aliases;
-    if (sug.note) clean.note = sug.note;
-    if (sug.doNotTranslate) clean.doNotTranslate = true;
-    return clean;
-  });
+  // Both arrays are sorted by term so the catalog serializes deterministically
+  // regardless of the order entries were added/suggested (sortKeys only orders
+  // object keys, never array elements). Compared case-insensitively by code unit
+  // (not localeCompare, which is locale-dependent and would diff across machines),
+  // with a case-sensitive tiebreak so casing variants keep a stable relative order.
+  state.glossary = state.glossary
+    .map((entry) => {
+      const clean: GlossaryEntry = { term: entry.term };
+      if (entry.aliases?.length) clean.aliases = entry.aliases;
+      if (entry.doNotTranslate) clean.doNotTranslate = true;
+      if (entry.caseSensitive) clean.caseSensitive = true;
+      if (entry.translations && Object.keys(entry.translations).length) {
+        const remapped: Record<string, string> = {};
+        for (const [k, v] of Object.entries(entry.translations)) remapped[canonLocale(k)] = v;
+        clean.translations = remapped;
+      }
+      if (entry.notes) clean.notes = entry.notes;
+      return clean;
+    })
+    .sort(byGlossaryTerm);
+  state.glossarySuggestions = state.glossarySuggestions
+    .map((sug) => {
+      const clean: GlossarySuggestion = { term: sug.term, status: sug.status };
+      if (sug.aliases?.length) clean.aliases = sug.aliases;
+      if (sug.note) clean.note = sug.note;
+      if (sug.doNotTranslate) clean.doNotTranslate = true;
+      return clean;
+    })
+    .sort(byGlossaryTerm);
+}
+
+// Deterministic, locale-independent ordering for glossary terms.
+function byGlossaryTerm(a: { term: string }, b: { term: string }): number {
+  const na = normGlossaryTerm(a.term);
+  const nb = normGlossaryTerm(b.term);
+  if (na !== nb) return na < nb ? -1 : 1;
+  if (a.term !== b.term) return a.term < b.term ? -1 : 1;
+  return 0;
 }
 
 export function loadState(path: string): State {
