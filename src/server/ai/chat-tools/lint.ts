@@ -1,16 +1,20 @@
 import type { ChatTool, ToolContext } from "../chat-types.js";
 import { runLint } from "../../lint/run.js";
+import { resolveSeverity } from "../../lint/severity.js";
+import { RULE_IDS } from "../../lint/registry.js";
 import { addLintIgnore, removeLintIgnore, setLocaleLintRule, addSuppression } from "../../state.js";
 
-// Lint access for Lingo: read the catalog's quality findings, and manage the
-// rules that silence noise — ignore globs, per-locale severities, and per-key
-// dismissals. Read is free; every write is confirm-gated (the chat Approve card).
+// Lint access for Lingo: read the catalog's quality findings AND the lint
+// configuration behind them, and manage the rules that silence noise — ignore
+// globs, per-locale severities, and per-key dismissals. Reads are free; every
+// write is confirm-gated (the chat Approve card).
 //
 // Guard-rail (reinforced in chat-prompt.ts): these silence NOISE, never real
 // problems. Lingo must not turn off a rule or dismiss an error just to make the
 // release gate look green — only when a finding is genuinely a false positive.
 
 const MAX_FINDINGS = 100;
+const MAX_DISMISSALS = 200;
 
 const lintCheck: ChatTool = {
   def: {
@@ -46,6 +50,40 @@ const lintCheck: ChatTool = {
       ok: report.ok,
       findings: out,
       ...(findings.length > MAX_FINDINGS ? { truncated: findings.length - MAX_FINDINGS } : {}),
+    };
+  },
+};
+
+const readLintConfig: ChatTool = {
+  def: {
+    name: "read_lint_config",
+    description:
+      "Read the current lint configuration so you can see what's already on, off, or escalated BEFORE changing it: the effective global severity of every rule, per-locale overrides (config.lint.localeRules), ignore globs (config.lint.ignore), spelling dictionaries, and the active per-key dismissals. lint_check returns the FINDINGS; this returns the SETTINGS that produced them — read it before deciding a rule is noise, removing a glob, or claiming a rule is \"already\" off.",
+    schema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  humanSummary: () => "read lint config",
+  run: async (_input, ctx: ToolContext) => {
+    const s = ctx.load();
+    const lint = s.config.lint ?? {};
+    // Effective global severity per rule (built-in default unless overridden in
+    // config.lint.rules); per-locale layering is shown separately as localeRules.
+    const rules: Record<string, string> = {};
+    for (const id of RULE_IDS) rules[id] = resolveSeverity(id, lint);
+    const dismissals: { key: string; rule: string; locale: string }[] = [];
+    let truncated = 0;
+    for (const key of Object.keys(s.keys).sort()) {
+      for (const sup of s.keys[key]!.suppressions ?? []) {
+        if (dismissals.length >= MAX_DISMISSALS) { truncated++; continue; }
+        dismissals.push({ key, rule: sup.rule, locale: sup.locale });
+      }
+    }
+    return {
+      rules,
+      localeRules: lint.localeRules ?? {},
+      ignore: lint.ignore ?? [],
+      spellingLocales: lint.spelling?.locales ?? {},
+      dismissals,
+      ...(truncated ? { truncated } : {}),
     };
   },
 };
@@ -163,4 +201,4 @@ const dismissFinding: ChatTool = {
   },
 };
 
-export const lintTools: ChatTool[] = [lintCheck, setLintIgnore, removeLintIgnoreTool, setLocaleRule, dismissFinding];
+export const lintTools: ChatTool[] = [lintCheck, readLintConfig, setLintIgnore, removeLintIgnoreTool, setLocaleRule, dismissFinding];

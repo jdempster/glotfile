@@ -10,7 +10,7 @@ import { lintTools } from "./lint.js";
 
 // The tools the assistant may call: read the project state, read the user's
 // codebase (incl. where each key is used), drive the editor's view (filter the
-// key list, open a key), run the catalog's lint checks and manage the rules that
+// key list, open a key), run the catalog's lint checks, read the lint config, and manage the rules that
 // silence noise (ignore globs, per-locale severities, per-key dismissals), and
 // make FOCUSED, single-item changes to the SETUP that steers translation —
 // project/locale guidance, glossary terms, per-key context/tags/length, and

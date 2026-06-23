@@ -56,8 +56,29 @@ describe("lint chat tools", () => {
     ]);
   });
 
-  it("write tools are confirm-gated; lint_check is not", () => {
-    expect(tool("lint_check").confirm).toBeFalsy();
+  it("read_lint_config returns effective rules, overrides, ignores and dismissals", async () => {
+    await tool("set_lint_ignore").run({ glob: "a.*" }, ctx);
+    await tool("set_locale_lint_rule").run({ locale: "en-gb", rule: "identical-to-source", severity: "off" }, ctx);
+    await tool("dismiss_finding").run({ key: "a.same", rule: "identical-to-source", locale: "fr" }, ctx);
+    const r = await tool("read_lint_config").run({}, ctx) as {
+      rules: Record<string, string>;
+      localeRules: Record<string, Record<string, string>>;
+      ignore: string[];
+      dismissals: { key: string; rule: string; locale: string }[];
+    };
+    // Effective global severity per rule, defaults filled in.
+    expect(r.rules["placeholder-mismatch"]).toBe("error");
+    expect(r.rules["identical-to-source"]).toBe("warn");
+    expect(r.rules["spelling"]).toBe("off");
+    expect(r.localeRules).toEqual({ "en-gb": { "identical-to-source": "off" } });
+    expect(r.ignore).toEqual(["a.*"]);
+    expect(r.dismissals).toEqual([{ key: "a.same", rule: "identical-to-source", locale: "fr" }]);
+  });
+
+  it("read tools are not confirm-gated; write tools are", () => {
+    for (const name of ["lint_check", "read_lint_config"]) {
+      expect(tool(name).confirm).toBeFalsy();
+    }
     for (const name of ["set_lint_ignore", "remove_lint_ignore", "set_locale_lint_rule", "dismiss_finding"]) {
       expect(tool(name).confirm).toBe(true);
     }
