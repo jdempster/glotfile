@@ -515,6 +515,78 @@ describe("glossary mutations", () => {
     expect(cfg.indexOf('"Mango"')).toBeLessThan(cfg.indexOf('"Zebra"'));
     expect(loadState(p).glossary.map((e) => e.term)).toEqual(["apple", "Mango", "Zebra"]);
   });
+
+  it("sorts glossary aliases deterministically in storage", () => {
+    const p = join(mkdtempSync(join(tmpdir(), "glot-")), "glotfile.json");
+    const s = defaultState();
+    upsertGlossaryEntry(s, { term: "feed", aliases: ["fed", "feeds", "feeding"] });
+    saveState(p, s);
+    expect(loadState(p).glossary[0].aliases).toEqual(["fed", "feeding", "feeds"]);
+  });
+});
+
+describe("deterministic array ordering in storage", () => {
+  it("sorts per-key suppressions and tags regardless of insertion order", () => {
+    const p = join(mkdtempSync(join(tmpdir(), "glot-")), "glotfile.json");
+    const s = defaultState();
+    s.config.locales = ["en", "fr", "de"];
+    createKey(s, "plant.water", "Water");
+    const entry = s.keys["plant.water"];
+    entry.tags = ["ui", "button", "home"];
+    // Scrambled across locale and rule; sort is (locale, rule, source).
+    entry.suppressions = [
+      { rule: "whitespace", locale: "fr", source: "aaaa" },
+      { rule: "max-length", locale: "fr", source: "aaaa" },
+      { rule: "whitespace", locale: "de", source: "aaaa" },
+    ];
+    saveState(p, s);
+    const reloaded = loadState(p).keys["plant.water"];
+    expect(reloaded.tags).toEqual(["button", "home", "ui"]);
+    expect(reloaded.suppressions).toEqual([
+      { rule: "whitespace", locale: "de", source: "aaaa" },
+      { rule: "max-length", locale: "fr", source: "aaaa" },
+      { rule: "whitespace", locale: "fr", source: "aaaa" },
+    ]);
+    // Zero-diff re-save (stable order).
+    const file = readFileSync(p, "utf8");
+    saveState(p, loadState(p));
+    expect(readFileSync(p, "utf8")).toBe(file);
+  });
+
+  it("sorts per-key notes by timestamp", () => {
+    const p = join(mkdtempSync(join(tmpdir(), "glot-")), "glotfile.json");
+    const s = defaultState();
+    createKey(s, "plant.water", "Water");
+    s.keys["plant.water"].notes = [
+      { id: "n_c", text: "third", at: "2026-03-01T00:00:00.000Z" },
+      { id: "n_a", text: "first", at: "2026-01-01T00:00:00.000Z" },
+      { id: "n_b", text: "second", at: "2026-02-01T00:00:00.000Z" },
+    ];
+    saveState(p, s);
+    expect(loadState(p).keys["plant.water"].notes?.map((n) => n.text)).toEqual(["first", "second", "third"]);
+  });
+
+  it("sorts free-form config arrays and outputs deterministically", () => {
+    const p = join(mkdtempSync(join(tmpdir(), "glot-")), "glotfile.json");
+    const s = defaultState();
+    s.config.locales = ["en", "fr", "de"];
+    s.config.exportLocales = ["fr", "de"];
+    s.config.spelling = { customWords: ["Zinnia", "Aloe", "Monstera"] };
+    s.config.lint = { ignore: ["z.*", "a.*", "m.*"] };
+    s.config.scan = { include: ["src/**", "lib/**"], exclude: ["test/**", "dist/**"] };
+    s.config.outputs = [
+      { adapter: "laravel-php", path: "lang/{locale}.php" },
+      { adapter: "flutter-arb", path: "lib/{locale}.arb" },
+    ];
+    saveState(p, s);
+    const cfg = loadState(p).config;
+    expect(cfg.spelling?.customWords).toEqual(["Aloe", "Monstera", "Zinnia"]);
+    expect(cfg.lint?.ignore).toEqual(["a.*", "m.*", "z.*"]);
+    expect(cfg.scan?.include).toEqual(["lib/**", "src/**"]);
+    expect(cfg.scan?.exclude).toEqual(["dist/**", "test/**"]);
+    expect(cfg.exportLocales).toEqual(["de", "fr"]);
+    expect(cfg.outputs.map((o) => o.adapter)).toEqual(["flutter-arb", "laravel-php"]);
+  });
 });
 
 describe("notes", () => {

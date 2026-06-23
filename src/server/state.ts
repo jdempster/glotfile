@@ -4,7 +4,7 @@ import { serializeJson } from "./format.js";
 import { writeFileAtomic } from "./atomic-write.js";
 import {
   validate, defaultState, GlotfileError, isPluralForm, CURRENT_VERSION, STATES,
-  type State, type LocaleState, type LocaleValue, type KeyEntry, type GlossaryEntry, type Note, type PluralCategory, type PluralForm, type GlossarySuggestion,
+  type State, type LocaleState, type LocaleValue, type KeyEntry, type GlossaryEntry, type Note, type PluralCategory, type PluralForm, type GlossarySuggestion, type Suppression, type OutputConfig,
 } from "./schema.js";
 import { formsToIcu } from "./plurals.js";
 import { splitDirFor, detectFormat, loadSplit, saveSplit, stripEmptySuggestions } from "./storage.js";
@@ -55,12 +55,37 @@ function normalizeState(state: State): void {
     }
     entry.values = remapped;
     for (const s of entry.suppressions ?? []) s.locale = canonLocale(s.locale);
+    // Sort every per-key array so identical content serializes identically
+    // regardless of the order entries were appended (sortKeys orders object
+    // keys, never array elements). Notes keep their chronological order via
+    // their `at` timestamp; the rest are order-independent bags.
+    entry.suppressions?.sort(bySuppression);
+    entry.notes?.sort(byNote);
+    entry.tags?.sort(byCodeUnit);
   }
   for (const output of state.config.outputs) {
-    if (!output.localeMap) continue;
-    const remapped: Record<string, string> = {};
-    for (const [k, v] of Object.entries(output.localeMap)) remapped[canonLocale(k)] = v;
-    output.localeMap = remapped;
+    if (output.localeMap) {
+      const remapped: Record<string, string> = {};
+      for (const [k, v] of Object.entries(output.localeMap)) remapped[canonLocale(k)] = v;
+      output.localeMap = remapped;
+    }
+    if (output.localeAliases) {
+      for (const aliases of Object.values(output.localeAliases)) aliases.sort(byCodeUnit);
+    }
+  }
+  // Each output writes to its own path, so their order has no functional effect;
+  // sort by adapter then path so the list serializes deterministically.
+  state.config.outputs.sort(byOutput);
+  // The remaining free-form config arrays are order-independent sets of
+  // globs/words/locales — sort them for the same deterministic-serialization
+  // reason. (config.locales is ordered separately above: source-first.)
+  state.config.exportLocales?.sort(byCodeUnit);
+  state.config.spelling?.customWords.sort(byCodeUnit);
+  state.config.lint?.ignore?.sort(byCodeUnit);
+  if (state.config.scan) {
+    for (const field of ["include", "exclude", "accessors", "patterns", "keep"] as const) {
+      state.config.scan[field]?.sort(byCodeUnit);
+    }
   }
   if (state.config.localeInstructions) {
     const remapped: Record<string, string> = {};
@@ -81,7 +106,7 @@ function normalizeState(state: State): void {
   state.glossary = state.glossary
     .map((entry) => {
       const clean: GlossaryEntry = { term: entry.term };
-      if (entry.aliases?.length) clean.aliases = entry.aliases;
+      if (entry.aliases?.length) clean.aliases = [...entry.aliases].sort(byCodeUnit);
       if (entry.doNotTranslate) clean.doNotTranslate = true;
       if (entry.caseSensitive) clean.caseSensitive = true;
       if (entry.translations && Object.keys(entry.translations).length) {
@@ -96,7 +121,7 @@ function normalizeState(state: State): void {
   state.glossarySuggestions = state.glossarySuggestions
     .map((sug) => {
       const clean: GlossarySuggestion = { term: sug.term, status: sug.status };
-      if (sug.aliases?.length) clean.aliases = sug.aliases;
+      if (sug.aliases?.length) clean.aliases = [...sug.aliases].sort(byCodeUnit);
       if (sug.note) clean.note = sug.note;
       if (sug.doNotTranslate) clean.doNotTranslate = true;
       return clean;
@@ -111,6 +136,25 @@ function byGlossaryTerm(a: { term: string }, b: { term: string }): number {
   if (na !== nb) return na < nb ? -1 : 1;
   if (a.term !== b.term) return a.term < b.term ? -1 : 1;
   return 0;
+}
+
+// The shared primitive for sorting the schema's free-form arrays: code-unit
+// order, never localeCompare (which varies by the host's locale and would diff
+// identical content across machines).
+function byCodeUnit(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function bySuppression(a: Suppression, b: Suppression): number {
+  return byCodeUnit(a.locale, b.locale) || byCodeUnit(a.rule, b.rule) || byCodeUnit(a.source, b.source);
+}
+
+function byNote(a: Note, b: Note): number {
+  return byCodeUnit(a.at, b.at) || byCodeUnit(a.id, b.id);
+}
+
+function byOutput(a: OutputConfig, b: OutputConfig): number {
+  return byCodeUnit(a.adapter, b.adapter) || byCodeUnit(a.path, b.path);
 }
 
 export function loadState(path: string): State {
