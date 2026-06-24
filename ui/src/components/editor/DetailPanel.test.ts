@@ -6,7 +6,7 @@ import DetailPanel from "./DetailPanel.vue";
 import type { KeyEntry } from "@/types.js";
 
 // DetailPanel's tooltips need a TooltipProvider ancestor — wrap, then drill back to the panel.
-function mountPanel(props: { keyName: string; entry: KeyEntry; lintIgnore?: string[] }) {
+function mountPanel(props: { keyName: string; entry: KeyEntry; lintIgnore?: string[]; enabledChecks?: string[] }) {
   return mount(TooltipProvider, {
     slots: { default: () => h(DetailPanel, props) },
   }).findComponent(DetailPanel);
@@ -227,6 +227,23 @@ describe("DetailPanel lint ignores", () => {
     await flushPromises();
     expect(unsuppressFinding).toHaveBeenCalledWith("home.title", "spelling", "fr");
     expect(w.emitted("changed")).toBeTruthy();
+  });
+
+  it("hides a dismissed finding whose check is toggled off, shows it when on", async () => {
+    const entry: KeyEntry = {
+      values: { en: { value: "Home", state: "source" } },
+      suppressions: [{ rule: "identical-to-source", locale: "fr", source: "abc123" }],
+    };
+    // "identical" check off → restoring it couldn't resurface the live finding, so
+    // the dismissal must not be offered.
+    const off = mountPanel({ keyName: "home.title", entry, enabledChecks: ["placeholder", "glossary"] });
+    await flushPromises();
+    expect(off.text()).not.toContain("dismissed");
+
+    // Same suppression, with the check running → it surfaces and can be restored.
+    const on = mountPanel({ keyName: "home.title", entry, enabledChecks: ["placeholder", "identical"] });
+    await flushPromises();
+    expect(on.text()).toContain("1 dismissed");
   });
 });
 

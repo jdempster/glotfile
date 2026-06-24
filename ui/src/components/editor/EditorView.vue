@@ -823,6 +823,7 @@ async function onCreated(key: string) {
           :key-name="selectedKey"
           :entry="selectedEntry"
           :issues="selectedKey ? (issuesByKey.get(selectedKey) ?? []) : []"
+          :enabled-checks="enabledChecks"
           :locales="allLocales"
           :source-locale="sourceLocale"
           :lint-ignore="state?.config.lint?.ignore ?? []"

@@ -20,6 +20,11 @@ const props = defineProps<{
   keyName: string | null;
   entry: KeyEntry | null;
   issues?: Issue[];
+  // Checks the editor is currently running (the Filter "Issues" toggles). Live
+  // issues already come pre-gated via `issues`; the dismissed list is gated to
+  // match, so a check that's switched off hides both its findings and their
+  // dismissals — restoring one always brings the live finding back.
+  enabledChecks?: CheckId[];
   // All configured locales + the source locale, so "untranslated" reflects true
   // completeness regardless of which locales the editor currently shows.
   locales?: string[];
@@ -110,7 +115,17 @@ const ignoredByGlobs = computed(() => {
   if (!key) return [];
   return (props.lintIgnore ?? []).filter((g) => globToRegExp(g).test(key));
 });
-const suppressions = computed<Suppression[]>(() => props.entry?.suppressions ?? []);
+// Only show dismissals for checks that are actually running: a finding whose
+// check is toggled off wouldn't reappear on restore, so surfacing it here would
+// let the user "restore" into nothing. When the prop is absent, gate nothing.
+const enabledRules = computed(() =>
+  props.enabledChecks ? new Set(props.enabledChecks.map((c) => CHECK_RULE[c]).filter(Boolean)) : null,
+);
+const suppressions = computed<Suppression[]>(() => {
+  const all = props.entry?.suppressions ?? [];
+  const rules = enabledRules.value;
+  return rules ? all.filter((s) => rules.has(s.rule)) : all;
+});
 const ruleLabel = (rule: string) => RULE_LABELS[rule as LintRuleId] ?? rule;
 
 const ignoring = ref(false);
