@@ -138,13 +138,24 @@ describe("buildCockpit — prioritized worklist", () => {
     expect(breaking.filter).toMatchObject({ issues: ["placeholder"], locale: "fr" });
 
     const missing = c.worklist.find((w) => w.priority === "missing")!;
-    expect(missing.filter).toMatchObject({ text: "home.welcome", states: ["missing"] });
+    // home.welcome is missing only in de — the filter pins that locale.
+    expect(missing.filter).toMatchObject({ text: "home.welcome", locale: "de", states: ["missing"] });
 
     const stale = c.worklist.find((w) => w.priority === "stale")!;
     expect(stale.filter).toMatchObject({ states: ["needs-review"] });
 
     const warning = c.worklist.find((w) => w.priority === "warning")!;
     expect(warning.filter).toMatchObject({ issues: ["length"] });
+  });
+
+  it("leaves a missing item locale-wide when more than one locale lacks it", () => {
+    const multi: LintFinding[] = [
+      { ruleId: "empty-translation", key: "home.welcome", locale: "de", severity: "error", message: "missing" },
+      { ruleId: "empty-translation", key: "home.welcome", locale: "fr", severity: "error", message: "missing" },
+    ];
+    const missing = buildCockpit(fixture(), report(multi)).worklist.find((w) => w.priority === "missing")!;
+    expect(missing.filter).toEqual({ text: "home.welcome", states: ["missing"] });
+    expect(missing.filter).not.toHaveProperty("locale");
   });
 
   it("gives a stale-output item no drill filter", () => {

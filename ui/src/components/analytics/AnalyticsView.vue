@@ -6,6 +6,7 @@ import {
 import { drillTo } from "@/drilldown.js";
 import { onExternalChange } from "@/liveReload";
 import { buildCockpit, drillFilterFor, RULE_LABELS, type LocaleReadiness, type Verdict, type Severity } from "./cockpit.js";
+import { usePager } from "./usePager.js";
 import { resolveLanguage } from "@/languages.js";
 import type { State, LintReport, LintFinding, LintRuleId } from "@/types.js";
 import {
@@ -58,6 +59,11 @@ onMounted(async () => {
 
 const showSuppressed = ref(false);
 const acting = ref(false);
+
+// The worklist, Quality findings and suppressed drawer are all unbounded — a large
+// project yields thousands of rows. Render a capped window and reveal more on demand
+// so the page stays light (see usePager).
+const pager = usePager(50);
 
 // output-stale findings key a file path, not a translation key, so drilling lands
 // on an empty editor filter — there's nothing to navigate to. Their detail (which
@@ -299,7 +305,7 @@ function tierFilter(key: Severity) {
           </div>
         </div>
         <ol v-else class="flex flex-col gap-2">
-          <li v-for="(it, i) in cockpit.worklist" :key="it.id">
+          <li v-for="(it, i) in pager.slice('worklist', cockpit.worklist)" :key="it.id">
             <button type="button"
               class="grid w-full grid-cols-[30px_1fr_auto_16px] items-center gap-3 rounded-xl border border-l-[3px] px-3.5 py-3 text-left transition enabled:hover:bg-muted/50"
               :class="[PRIORITY[it.priority].border, i === 0 ? PRIORITY[it.priority].soft : '']"
@@ -316,6 +322,15 @@ function tierFilter(key: Severity) {
               </span>
               <span class="rounded-full px-2.5 py-1 text-[11px] font-semibold" :class="[PRIORITY[it.priority].soft, PRIORITY[it.priority].text]">{{ PRIORITY[it.priority].label }}</span>
               <ChevronRight class="size-4 text-muted-foreground" />
+            </button>
+          </li>
+          <li v-if="pager.remaining('worklist', cockpit.worklist)">
+            <button type="button"
+              class="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed py-2.5 text-xs font-medium text-muted-foreground transition hover:bg-muted/50"
+              @click="pager.more('worklist')">
+              <ChevronDown class="size-3.5" />
+              Show {{ Math.min(pager.pageSize, pager.remaining('worklist', cockpit.worklist)) }} more
+              <span class="text-muted-foreground/60">· {{ pager.remaining('worklist', cockpit.worklist) }} hidden</span>
             </button>
           </li>
         </ol>
@@ -362,7 +377,7 @@ function tierFilter(key: Severity) {
                       <BellOff class="size-3" /> Dismiss all
                     </button>
                   </div>
-                  <div v-for="(f, idx) in g.findings" :key="idx"
+                  <div v-for="(f, idx) in pager.slice(`${t.key}:${g.ruleId}`, g.findings)" :key="idx"
                     :role="canDrill(f) ? 'button' : undefined"
                     :tabindex="canDrill(f) ? 0 : undefined"
                     class="group grid w-full grid-cols-[42px_minmax(90px,1fr)_1.4fr_auto] items-center gap-2.5 border-b px-3.5 py-2.5 text-left text-xs last:border-b-0"
@@ -405,6 +420,12 @@ function tierFilter(key: Severity) {
                       </button>
                     </span>
                   </div>
+                  <button v-if="pager.remaining(`${t.key}:${g.ruleId}`, g.findings)" type="button"
+                    class="flex w-full items-center justify-center gap-1.5 border-b bg-muted/20 py-2 text-[11px] font-medium text-muted-foreground transition last:border-b-0 hover:bg-muted/50"
+                    @click="pager.more(`${t.key}:${g.ruleId}`)">
+                    <ChevronDown class="size-3" />
+                    Show {{ Math.min(pager.pageSize, pager.remaining(`${t.key}:${g.ruleId}`, g.findings)) }} more · {{ pager.remaining(`${t.key}:${g.ruleId}`, g.findings) }} hidden
+                  </button>
                 </template>
               </div>
             </div>
@@ -419,7 +440,7 @@ function tierFilter(key: Severity) {
               Suppressed ({{ suppressedFindings.length }}) — hidden until each key's source changes
             </button>
             <div v-if="showSuppressed" class="border-t">
-              <div v-for="(f, idx) in suppressedFindings" :key="idx"
+              <div v-for="(f, idx) in pager.slice('suppressed', suppressedFindings)" :key="idx"
                 class="grid w-full grid-cols-[42px_minmax(90px,1fr)_1.4fr_auto] items-center gap-2.5 border-b px-3.5 py-2.5 text-left text-xs text-muted-foreground last:border-b-0">
                 <span class="font-mono font-semibold uppercase">{{ f.locale || "—" }}</span>
                 <Tooltip>
@@ -443,6 +464,12 @@ function tierFilter(key: Severity) {
                   <RotateCcw class="size-3" /> Restore
                 </button>
               </div>
+              <button v-if="pager.remaining('suppressed', suppressedFindings)" type="button"
+                class="flex w-full items-center justify-center gap-1.5 border-b bg-muted/20 py-2 text-[11px] font-medium text-muted-foreground transition last:border-b-0 hover:bg-muted/50"
+                @click="pager.more('suppressed')">
+                <ChevronDown class="size-3" />
+                Show {{ Math.min(pager.pageSize, pager.remaining('suppressed', suppressedFindings)) }} more · {{ pager.remaining('suppressed', suppressedFindings) }} hidden
+              </button>
             </div>
           </div>
         </section>

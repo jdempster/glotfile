@@ -231,7 +231,9 @@ function buildWorklist(localesOut: LocaleReadiness[], risk: Record<Severity, Lin
       title: `Translate ${plural(locs.length, "missing string")}`,
       where: key,
       detail: `Missing in ${locs.map((x) => x.toUpperCase()).join(", ")}`,
-      filter: { text: key, states: ["missing"] },
+      // Pin the locale when it's missing in just one — drilling lands on that
+      // language's cell, not every locale's. With several, leave it locale-wide.
+      filter: locs.length === 1 ? { text: key, locale: locs[0], states: ["missing"] } : { text: key, states: ["missing"] },
       count: locs.length,
     });
   }
