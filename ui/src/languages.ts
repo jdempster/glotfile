@@ -43,6 +43,16 @@ function hasVariantSubtag(bcp47: string): boolean {
   return bcp47.split("-").slice(1).some((part) => /^[a-zA-Z]{5,8}$/.test(part) || /^[0-9][a-zA-Z0-9]{3}$/.test(part));
 }
 
+// Bare language codes whose CLDR-maximized region surprises native speakers.
+// maximize() picks the most-populous region, which isn't always the language's
+// conventional home: "en" → US but we want the combined UK/US flag; "pt" → BR
+// but a region-less "pt" reads as Portugal (Brazil is "pt-BR"). Region-qualified
+// codes skip this — they keep their explicit region.
+const BARE_FLAG_OVERRIDES: Record<string, string> = {
+  en: "en",
+  pt: "PT",
+};
+
 // Base languages written right-to-left. Region/script subtags inherit the base
 // direction, so we test the primary subtag only.
 const RTL_LANGUAGES = new Set([
@@ -85,17 +95,15 @@ export function resolveLanguage(code: string, override?: LanguageOverride): Reso
     name = displayNames.of(bcp47) ?? code;
   }
 
-  // flagRegion: explicit override (incl. null) → combined `en` → maximize().region → null.
+  // flagRegion: explicit override (incl. null) → bare-code override → maximize().region → null.
   let flagRegion: string | null;
   if (override && override.flag !== undefined) {
     // explicit override: a region string, or null for the neutral globe
     flagRegion = override.flag;
   } else if (isCustom) {
     flagRegion = null;
-  } else if (bcp47 === "en") {
-    // Region-less English represents a UK/US product, not the US specifically.
-    // maximize() would pick "US"; instead use the combined UK/US flag (en.svg).
-    flagRegion = "en";
+  } else if (BARE_FLAG_OVERRIDES[bcp47]) {
+    flagRegion = BARE_FLAG_OVERRIDES[bcp47];
   } else {
     flagRegion = new Intl.Locale(bcp47).maximize().region ?? null;
   }

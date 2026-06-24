@@ -11,6 +11,13 @@ describe("resolveLanguage", () => {
     expect(r.flagRegion).toBe("en");
   });
 
+  it("maps region-less Portuguese to Portugal, not maximize()'s Brazil", () => {
+    expect(resolveLanguage("pt").flagRegion).toBe("PT");
+    // Region-qualified codes keep their explicit region.
+    expect(resolveLanguage("pt_BR").flagRegion).toBe("BR");
+    expect(resolveLanguage("pt_PT").flagRegion).toBe("PT");
+  });
+
   it("resolves region subtags (underscore separator must not throw)", () => {
     expect(() => resolveLanguage("en_US")).not.toThrow();
     const us = resolveLanguage("en_US");
