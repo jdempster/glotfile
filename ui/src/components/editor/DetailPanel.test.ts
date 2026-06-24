@@ -218,6 +218,9 @@ describe("DetailPanel lint ignores", () => {
     const w = mountPanel({ keyName: "home.title", entry });
     await flushPromises();
     expect(w.text()).toContain("1 dismissed");
+
+    // Dismissed findings are collapsed by default — expand to reveal them.
+    await w.find('[aria-expanded]').trigger("click");
     expect(w.text()).toContain("FR");
 
     await w.find('[aria-label="Restore this check"]').trigger("click");

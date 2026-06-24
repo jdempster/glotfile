@@ -15,6 +15,7 @@ import { LINT_RULES, RULE_DEFAULTS } from "@/lint-rules.js";
 import { settingsDirtyCount } from "./save-state.js";
 import { setLeaveGuard, navigate, getHashSearch, type Route } from "@/router";
 import { runScan, scanPending, scanDetail } from "@/scanStatus.js";
+import { onExternalChange } from "@/liveReload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -448,6 +449,20 @@ const dirtyTitles = computed(() => dirtyIds.value.map((id) => SECTION_META[id].t
 
 watch(dirtyCount, (n) => { settingsDirtyCount.value = n; }, { immediate: true });
 onUnmounted(() => { settingsDirtyCount.value = 0; });
+
+// Re-sync the committed-config form when the state changes out of band — a CLI
+// run, a git restore, or Lingo editing config via a tool (e.g. project guidance).
+// Without this the form holds a one-time snapshot, so a Lingo edit lands on disk
+// (the header flashes its refresh spinner) but the open field never updates. We
+// skip the re-sync while the form is dirty: re-applying would clobber the user's
+// unsaved edits, so their in-progress work wins until they save or discard it.
+onExternalChange(async () => {
+  if (dirtyCount.value > 0) return;
+  const state = await fetchState();
+  original.value = state.config;
+  applyForm(configToForm(state.config));
+  snapSaved();
+});
 
 // ── Editor preference (local, not committed — lives in .glotfile/settings.json) ──
 // Backed by the app-wide editor store; changing it autosaves to the server, so it

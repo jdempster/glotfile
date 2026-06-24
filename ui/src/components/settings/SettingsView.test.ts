@@ -40,6 +40,7 @@ const suggestLocaleInstruction = vi.fn((..._args: unknown[]) => Promise.resolve(
 // Imported after the mock is declared so SettingsView and the test share one router module.
 import SettingsView from "./SettingsView.vue";
 import { navigate, setLeaveGuard } from "@/router";
+import { dispatchExternalChange } from "@/liveReload";
 
 function leaveButton(w: VueWrapper, label: string) {
   return w.findAll("button").find((b) => b.text().includes(label));
@@ -276,6 +277,47 @@ describe("SettingsView translation guidance", () => {
     const w = mountView("#settings?section=guidance");
     await flushPromises();
     expect((w.get("[data-testid='suggest-context']").element as HTMLButtonElement).disabled).toBe(true);
+    w.unmount();
+  });
+});
+
+describe("SettingsView live reload", () => {
+  beforeEach(() => {
+    mockState = { version: 1, config: makeConfig(), keys: {} };
+    putConfig.mockClear();
+    location.hash = "";
+  });
+  afterEach(() => {
+    setLeaveGuard(null);
+    location.hash = "";
+  });
+
+  it("refreshes the guidance field when the state changes out of band (e.g. Lingo edits it)", async () => {
+    const w = mountView("#settings?section=guidance");
+    await flushPromises();
+    expect((w.get("#project-context").element as HTMLTextAreaElement).value).toBe("");
+
+    // Lingo edits config.projectContext via a tool; the server pushes a state-changed
+    // event and the next fetchState reflects the new value.
+    mockState = { version: 1, config: { ...makeConfig(), projectContext: "Sprout is a houseplant-care app." }, keys: {} };
+    dispatchExternalChange();
+    await flushPromises();
+
+    expect((w.get("#project-context").element as HTMLTextAreaElement).value).toBe("Sprout is a houseplant-care app.");
+    w.unmount();
+  });
+
+  it("does not clobber unsaved edits when an external change lands", async () => {
+    const w = mountView("#settings?section=guidance");
+    await flushPromises();
+
+    // User is mid-edit (unsaved) when an unrelated external change arrives.
+    await w.get("#project-context").setValue("My own draft, not yet saved.");
+    mockState = { version: 1, config: { ...makeConfig(), projectContext: "Sprout is a houseplant-care app." }, keys: {} };
+    dispatchExternalChange();
+    await flushPromises();
+
+    expect((w.get("#project-context").element as HTMLTextAreaElement).value).toBe("My own draft, not yet saved.");
     w.unmount();
   });
 });

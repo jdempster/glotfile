@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref, watch, computed } from "vue";
-import { FileText, Image as ImageIcon, Upload, Trash2, AlertTriangle, RefreshCw, Sparkles, Code2, ExternalLink, Asterisk, Info, Tags, Ruler, Folder, BellOff, Bell, Filter, X } from "lucide-vue-next";
-import type { Issue, KeyEntry, LintRuleId, Suppression } from "@/types.js";
+import { FileText, Image as ImageIcon, Upload, Trash2, AlertTriangle, RefreshCw, Sparkles, Code2, ExternalLink, Asterisk, Info, Tags, Ruler, Folder, BellOff, Bell, Filter, X, ChevronRight } from "lucide-vue-next";
+import type { CheckId, Issue, KeyEntry, LintRuleId, Suppression } from "@/types.js";
 import { patchKey, uploadScreenshot, deleteScreenshot, convertToPlural, convertToScalar, buildContextStream, keyUsage, suppressFinding, unsuppressFinding, addLintIgnore, removeLintIgnore, type KeyUsage, type KeyUsageRef } from "@/api.js";
 import { RULE_LABELS } from "@/components/analytics/cockpit.js";
 import { buildOpenUrl } from "@/editor.js";
@@ -81,6 +81,9 @@ const CHECK_RULE: Record<string, string> = {
   identical: "identical-to-source",
 };
 const dismissing = ref(false);
+// Dismissed findings are collapsed by default — they're resolved, so less
+// pressing than live issues; the user can expand to review/restore them.
+const dismissedExpanded = ref(false);
 async function dismissIssue(r: Issue) {
   const rule = CHECK_RULE[r.check];
   if (!rule || !props.keyName || dismissing.value) return;
@@ -257,6 +260,7 @@ watch(() => props.entry, () => { if (formIsPristine()) syncForm(); });
 // ── Code usage (from the last scan) ───────────────────────────────────────────
 const usage = ref<KeyUsage | null>(null);
 const usageShown = ref(6);
+const literalsShown = ref(6);
 async function loadUsage() {
   const k = props.keyName;
   if (!k) { usage.value = null; return; }
@@ -268,6 +272,7 @@ watch(
   async () => {
     usage.value = null;
     usageShown.value = 6;
+    literalsShown.value = 6;
     await loadUsage();
   },
   { immediate: true },
@@ -527,9 +532,16 @@ async function save() {
           </template>
         </div>
         <div v-if="suppressions.length" class="flex flex-col gap-1.5">
-          <div class="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+          <button
+            type="button"
+            class="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground"
+            :aria-expanded="dismissedExpanded"
+            @click="dismissedExpanded = !dismissedExpanded"
+          >
+            <ChevronRight class="size-3.5 transition-transform" :class="dismissedExpanded && 'rotate-90'" />
             <BellOff class="size-3.5" /> {{ suppressions.length }} dismissed
-          </div>
+          </button>
+          <template v-if="dismissedExpanded">
           <p class="text-[11.5px] leading-relaxed text-muted-foreground">
             Hidden until this key's source text changes.
           </p>
@@ -552,6 +564,7 @@ async function save() {
               <TooltipContent>Restore this check</TooltipContent>
             </Tooltip>
           </div>
+          </template>
         </div>
       </div>
 
@@ -660,7 +673,7 @@ async function save() {
               <Asterisk class="size-3" /> Possible usage (string literals)
             </p>
             <ul class="flex flex-col gap-1">
-              <li v-for="(r, i) in literalRows" :key="i" class="text-[11.5px]">
+              <li v-for="(r, i) in literalRows.slice(0, literalsShown)" :key="i" class="text-[11.5px]">
                 <Tooltip>
                   <TooltipTrigger as-child>
                     <component
@@ -679,6 +692,14 @@ async function save() {
                 </Tooltip>
               </li>
             </ul>
+            <button
+              v-if="literalRows.length > literalsShown"
+              type="button"
+              class="mt-0.5 self-start text-[11.5px] text-primary hover:underline"
+              @click="literalsShown = literalRows.length"
+            >
+              + {{ literalRows.length - literalsShown }} more
+            </button>
           </div>
         </template>
       </div>
