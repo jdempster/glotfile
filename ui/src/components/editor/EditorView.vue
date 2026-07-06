@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, shallowRef, computed, watch, onMounted, onUnmounted } from "vue";
 import { useVirtualizer } from "@tanstack/vue-virtual";
-import { Search, Plus, ListFilter, FileDown, Sparkles, X, TriangleAlert, ScanSearch, Loader2, Check, Minus, CircleQuestionMark, PanelRight, ArrowUpDown } from "lucide-vue-next";
+import { Search, Plus, ListFilter, FileDown, Sparkles, X, TriangleAlert, ScanSearch, Loader2, Check, Minus, CircleQuestionMark, ChevronsLeft, ChevronsRight, ArrowUpDown } from "lucide-vue-next";
 import type { State, Issue } from "@/types.js";
 import { filterKeys, exactKeyQuery, type KeyFilter } from "@/filter.js";
 import { filterFromUrl, filterToUrl, type SortMode } from "@/filterUrl.js";
@@ -714,34 +714,10 @@ async function onCreated(key: string) {
           @translate="translateOpen = true"
           @build-context="contextOpen = true"
         />
-        <Tooltip>
-          <TooltipTrigger as-child>
-            <Button
-              size="sm"
-              variant="ghost"
-              role="switch"
-              :aria-checked="detailPanelOpen"
-              :aria-label="detailPanelOpen ? 'Hide key details' : 'Show key details'"
-              :class="[
-                'w-8 px-0 max-[1080px]:hidden',
-                // Only this button claims the auto-margin when nothing is selected;
-                // with a selection, SelectionBar's ml-auto right-aligns the whole group.
-                { 'ml-auto': !selectedCount },
-                detailPanelOpen
-                  ? 'bg-accent text-foreground shadow-[inset_0_1px_2px_rgb(0_0_0/0.25)] hover:bg-accent'
-                  : 'text-muted-foreground',
-              ]"
-              @click="detailPanelToggle.toggle()"
-            >
-              <PanelRight class="size-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">{{ detailPanelOpen ? "Hide key details" : "Show key details" }} · ⌘/Ctrl + I</TooltipContent>
-        </Tooltip>
       </div>
 
       <!-- Body: virtualized list + detail panel -->
-      <div class="flex min-h-0 flex-1 overflow-hidden" :style="{ '--key-col-width': `${keyColumnWidth}px` }">
+      <div class="relative flex min-h-0 flex-1 overflow-hidden" :style="{ '--key-col-width': `${keyColumnWidth}px` }">
         <div class="relative min-w-0 flex-1 overflow-hidden">
           <div ref="parent" class="h-full overflow-auto">
             <div
@@ -831,6 +807,30 @@ async function onCreated(key: string) {
           :style="{ width: `${detailPanelWidth}px` }"
           @changed="reload"
         />
+
+        <!-- Detail-panel toggle, welded to the panel's leading edge (or the content's
+             right edge when closed): its flat, border-less right side butts against the
+             panel's left border so the two read as one surface — a drawer pull that's
+             part of the sidebar, not a floating pill. Kept mounted whenever there's a
+             panel to close, so an open panel is never orphaned by a zero-row filter. -->
+        <Tooltip v-if="rows.length || detailPanelOpen">
+          <TooltipTrigger as-child>
+            <button
+              type="button"
+              role="switch"
+              :aria-checked="detailPanelOpen"
+              :aria-label="detailPanelOpen ? 'Hide key details' : 'Show key details'"
+              class="absolute top-2.5 z-30 flex size-8 items-center justify-center rounded-l-lg border border-r-0 border-border bg-card text-muted-foreground shadow-[-3px_0_6px_-3px_rgb(0_0_0/0.15)] transition-colors hover:bg-accent hover:text-foreground max-[1080px]:hidden"
+              :class="detailPanelOpen && 'text-foreground'"
+              :style="{ right: detailPanelOpen ? `${detailPanelWidth - 1}px` : '0px' }"
+              @click="detailPanelToggle.toggle()"
+            >
+              <ChevronsRight v-if="detailPanelOpen" class="size-4" />
+              <ChevronsLeft v-else class="size-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="left">{{ detailPanelOpen ? "Hide key details" : "Show key details" }} · ⌘/Ctrl + I</TooltipContent>
+        </Tooltip>
       </div>
 
       <AddKeyDialog v-model:open="addOpen" @created="onCreated" />
