@@ -71,7 +71,7 @@ decisions. See `references/schema.md`.
 | Size up the catalog / what's left | `glotfile stats` (per-locale translated/reviewed/missing counts). |
 | Extract specific values | `glotfile get [<key-glob>…] [--locale <list>] [--state <list>]` — JSON out; the way to read a large catalog. `--keys-only` for just names. |
 | Find keys by their text (not name) | `glotfile get --search "<query>"` — `key:`, `value:`, `context:` scopes, `/regex/`, or no prefix for all three. E.g. `--search "value:Sign in"`, `--search "context:button"`, `--search "/^auth\\./"`. ANDs with globs/`--state`. See `references/cli-reference.md`. |
-| Add a new string | `glotfile set <key> "<source text>" --create`, then `glotfile translate` + `glotfile export`. (Angular: add it in code, not here.) See `references/workflows.md`. |
+| Add a new string | `glotfile set <key> "<source text>" --create`. Then **ask the user whether to sort out the new key now** — if yes, `glotfile build-context --key "<key>"` (after `scan`) then `glotfile translate --key "<key>"`; otherwise leave it for a later batch `translate`. Finish with `glotfile export`. (Angular: add it in code, not here.) See `references/workflows.md`. |
 | Edit an existing source string | `glotfile set <key> "<new text>"` — flips downstream translations to `needs-review`. Then `glotfile translate --state needs-review` re-translates just those. See `references/workflows.md`. |
 | Set or fix one translation | `glotfile set <key> "<text>" --locale <code>` (lands `reviewed`; `--state` to override). |
 | Translate missing strings | `glotfile translate` (fills empties only). `--state needs-review` re-translates stale strings; `--all` redoes everything. |

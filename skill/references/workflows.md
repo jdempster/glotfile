@@ -12,10 +12,17 @@ when no command fits (then match the deterministic format — see `references/sc
    ```sh
    glotfile set cart.empty.title "Your cart is empty" --create
    ```
-   Add `context` when the string is ambiguous out of context — it measurably improves
-   translation quality (set it in the UI, or hand-edit the key's `context` field; see
-   `references/schema.md`).
-3. `glotfile translate` to fill the other locales (or `--key "cart.*"` to scope it).
+3. **Ask the user whether to sort out the new key now** — i.e. generate its context and
+   translate it into the other locales. If they say yes, run the two steps below scoped to
+   just this key; if not, leave it for a later batch `translate`.
+   ```sh
+   glotfile scan                                 # index code references (if not fresh)
+   glotfile build-context --key "cart.empty.title"   # AI writes a short context from usage
+   glotfile translate --key "cart.empty.title"       # fill the other locales, context-aware
+   ```
+   `build-context` needs a scan index and an AI provider; `context` measurably improves
+   translation quality, especially for short or ambiguous strings. (You can also set
+   `context` by hand in the UI or the key's `context` field — see `references/schema.md`.)
 4. `glotfile export` to write the locale files.
 5. Wire the key up in the app code using the project's i18n accessor, then commit.
 
