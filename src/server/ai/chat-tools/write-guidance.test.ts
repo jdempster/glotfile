@@ -44,4 +44,18 @@ describe("guidance write tools", () => {
     await tool("set_locale_instruction").run({ locale: "de", text: "" }, ctx);
     expect(state.config.localeInstructions).toEqual({ fr: "garde" });
   });
+
+  it("add_language canonicalises and appends to config.locales without clobbering other config", async () => {
+    const outputsBefore = JSON.stringify(state.config.outputs);
+    const res = await tool("add_language").run({ locale: "PT-BR" }, ctx);
+    expect(state.config.locales).toEqual(["en", "de", "pt-br"]);
+    expect(res).toMatchObject({ ok: true, locale: "pt-br", added: true });
+    expect(JSON.stringify(state.config.outputs)).toBe(outputsBefore);
+  });
+
+  it("add_language is idempotent for a language that's already a target", async () => {
+    const res = await tool("add_language").run({ locale: "de" }, ctx);
+    expect(state.config.locales).toEqual(["en", "de"]);
+    expect(res).toMatchObject({ added: false });
+  });
 });

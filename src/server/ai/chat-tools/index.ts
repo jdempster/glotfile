@@ -13,8 +13,8 @@ import { lintTools } from "./lint.js";
 // key list, open a key), run the catalog's lint checks, read the lint config, and manage the rules that
 // silence noise (ignore globs, per-locale severities, per-key dismissals), and
 // make FOCUSED, single-item changes to the SETUP that steers translation —
-// project/locale guidance, glossary terms, per-key context/tags/length, and
-// source text. Deliberately NO translation writes at all: Lingo never sets or
+// project/locale guidance, adding a target language, glossary terms, per-key
+// context/tags/length, and source text. Deliberately NO translation writes at all: Lingo never sets or
 // reviews translations (single or bulk) — it gets the guidance right and the user
 // runs translation from the app's own translate/review controls. It also has no
 // access to the human Notes field.
