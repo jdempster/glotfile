@@ -40,12 +40,11 @@ async function collect(p: AnthropicProvider, ...args: Parameters<AnthropicProvid
   return out;
 }
 
-// A step is either a canned successful turn or an error thrown while opening the
-// stream (how a grammar-compilation timeout surfaces — before any output).
+// A step is either a canned successful turn or an error thrown while opening the stream.
 type Step = CannedMessage | { throws: Error };
 
 function fakeClientSteps(steps: Step[]) {
-  const calls: { tools?: { strict?: boolean }[] }[] = [];
+  const calls: { tools?: unknown[] }[] = [];
   let i = 0;
   return {
     calls,
@@ -71,9 +70,6 @@ function fakeClientSteps(steps: Step[]) {
     },
   };
 }
-
-const strictTool = { name: "set_key_context", description: "d", schema: { type: "object" as const }, strict: true };
-const okTurn: CannedMessage = { content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage: {} };
 
 describe("AnthropicProvider.chat", () => {
   it("emits turn_end carrying the tool_use content for a tool-use turn", async () => {
@@ -153,48 +149,12 @@ describe("AnthropicProvider.chat", () => {
     expect(args.tools[0]).toMatchObject({ name: "overview", description: "d", input_schema: { type: "object" } });
   });
 
-  // The API compiles strict tool schemas into a constrained-decoding grammar and
-  // can transiently return "Grammar compilation timed out" on a cold compile. The
-  // turn must recover rather than die.
-  it("retries a transient grammar-compilation timeout, keeping strict, and recovers", async () => {
-    const fake = fakeClientSteps([{ throws: new Error("Grammar compilation timed out") }, okTurn]);
+  it("propagates a stream error to the caller", async () => {
+    const fake = fakeClientSteps([{ throws: new Error("overloaded_error") }]);
     const p = new AnthropicProvider(cfg, fake.client as never);
-    const events = await collect(p, [{ role: "user", content: [{ type: "text", text: "hi" }] }], [strictTool], "sys");
-    expect(events).toEqual([
-      { type: "retry", attempt: 1, total: 3 },
-      { type: "text", delta: "ok" },
-      { type: "turn_end", stopReason: "end_turn", content: [{ type: "text", text: "ok" }] },
-    ]);
-    expect(fake.calls).toHaveLength(2);
-    // Both attempts keep strict — the retry banks on the now-warm schema cache.
-    expect(fake.calls[0]!.tools![0]).toMatchObject({ strict: true });
-    expect(fake.calls[1]!.tools![0]).toMatchObject({ strict: true });
-  });
-
-  it("drops strict as a last resort so the turn still completes", async () => {
-    const fake = fakeClientSteps([
-      { throws: new Error("Grammar compilation timed out") },
-      { throws: new Error("Grammar compilation timed out") },
-      okTurn,
-    ]);
-    const p = new AnthropicProvider(cfg, fake.client as never);
-    const events = await collect(p, [{ role: "user", content: [{ type: "text", text: "hi" }] }], [strictTool], "sys");
-    expect(events).toEqual([
-      { type: "retry", attempt: 1, total: 3 },
-      { type: "retry", attempt: 2, total: 3 },
-      { type: "text", delta: "ok" },
-      { type: "turn_end", stopReason: "end_turn", content: [{ type: "text", text: "ok" }] },
-    ]);
-    expect(fake.calls).toHaveLength(3);
-    expect(fake.calls[1]!.tools![0]).toMatchObject({ strict: true });
-    // Final fallback advertises the tool without strict — no grammar to compile.
-    expect(fake.calls[2]!.tools![0]).not.toHaveProperty("strict");
-  });
-
-  it("does not retry errors that are not grammar-compilation timeouts", async () => {
-    const fake = fakeClientSteps([{ throws: new Error("overloaded_error") }, okTurn]);
-    const p = new AnthropicProvider(cfg, fake.client as never);
-    await expect(collect(p, [{ role: "user", content: [{ type: "text", text: "hi" }] }], [strictTool], "sys")).rejects.toThrow("overloaded_error");
+    await expect(
+      collect(p, [{ role: "user", content: [{ type: "text", text: "hi" }] }], [{ name: "overview", description: "d", schema: { type: "object" } }], "sys"),
+    ).rejects.toThrow("overloaded_error");
     expect(fake.calls).toHaveLength(1);
   });
 });

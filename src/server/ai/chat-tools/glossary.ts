@@ -55,9 +55,7 @@ const setGlossaryTerm: ChatTool = {
 const removeGlossaryTerm: ChatTool = {
   confirm: true,
   def: {
-    name: "remove_glossary_term",
-    strict: true,
-    description: "Remove a term from the glossary by its exact source spelling.",
+    name: "remove_glossary_term",    description: "Remove a term from the glossary by its exact source spelling.",
     schema: {
       type: "object",
       properties: { term: { type: "string" } },
@@ -119,9 +117,7 @@ const acceptGlossarySuggestion: ChatTool = {
 const dismissSuggestion: ChatTool = {
   confirm: true,
   def: {
-    name: "dismiss_glossary_suggestion",
-    strict: true,
-    description: "Dismiss a pending glossary suggestion so it won't resurface. Use when the suggested term doesn't belong in the glossary.",
+    name: "dismiss_glossary_suggestion",    description: "Dismiss a pending glossary suggestion so it won't resurface. Use when the suggested term doesn't belong in the glossary.",
     schema: {
       type: "object",
       properties: { term: { type: "string" } },

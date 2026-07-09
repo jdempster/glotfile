@@ -190,9 +190,7 @@ const filterView: ChatTool = {
 
 const selectKey: ChatTool = {
   def: {
-    name: "select_key",
-    strict: true,
-    description: "Open ONE key in the editor's detail panel so the user sees its source, translations, context and notes side by side. Use after pointing them at a key you want to discuss or edit. It only changes what's selected — writes nothing — so apply it directly. Leaves the list filter untouched (it doesn't filter the list to this key); pair it with filter_view first if you also want the list narrowed.",
+    name: "select_key",    description: "Open ONE key in the editor's detail panel so the user sees its source, translations, context and notes side by side. Use after pointing them at a key you want to discuss or edit. It only changes what's selected — writes nothing — so apply it directly. Leaves the list filter untouched (it doesn't filter the list to this key); pair it with filter_view first if you also want the list narrowed.",
     schema: {
       type: "object",
       properties: { key: { type: "string", description: "The key path to open (e.g. \"plant.feed\")." } },

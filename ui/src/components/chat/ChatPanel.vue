@@ -62,8 +62,6 @@ const thinking = computed(() => {
   if (!isSending.value) return false;
   const last = messages.value[messages.value.length - 1];
   if (!last || last.role === "user") return true;
-  // A retry notice is its own (spinning) indicator — don't double up with the reel.
-  if (last.notice) return false;
   return !last.tools.some((t) => t.status === "running" || t.status === "pending-confirm");
 });
 

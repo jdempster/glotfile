@@ -12,9 +12,7 @@ import type { ChatTool, ToolContext } from "../chat-types.js";
 const setKeyContext: ChatTool = {
   confirm: true,
   def: {
-    name: "set_key_context",
-    strict: true,
-    description: "Set the context for ONE key — what the string means, where it appears, and anything a translator needs to disambiguate it (e.g. button vs. heading, who the subject is). This is the single biggest per-string quality lever. Pass empty text to clear it. Writing context marks it human-authored.",
+    name: "set_key_context",    description: "Set the context for ONE key — what the string means, where it appears, and anything a translator needs to disambiguate it (e.g. button vs. heading, who the subject is). This is the single biggest per-string quality lever. Pass empty text to clear it. Writing context marks it human-authored.",
     schema: {
       type: "object",
       properties: {
@@ -38,9 +36,7 @@ const setKeyContext: ChatTool = {
 const addKeyTag: ChatTool = {
   confirm: true,
   def: {
-    name: "add_key_tag",
-    strict: true,
-    description: "Add a tag to ONE key. Tags group keys (e.g. \"onboarding\", \"cta\", \"legal\") so the user can filter by them. Idempotent — adding a tag the key already has is a no-op.",
+    name: "add_key_tag",    description: "Add a tag to ONE key. Tags group keys (e.g. \"onboarding\", \"cta\", \"legal\") so the user can filter by them. Idempotent — adding a tag the key already has is a no-op.",
     schema: {
       type: "object",
       properties: {
@@ -70,9 +66,7 @@ const addKeyTag: ChatTool = {
 const removeKeyTag: ChatTool = {
   confirm: true,
   def: {
-    name: "remove_key_tag",
-    strict: true,
-    description: "Remove a tag from ONE key. A no-op if the key doesn't carry it.",
+    name: "remove_key_tag",    description: "Remove a tag from ONE key. A no-op if the key doesn't carry it.",
     schema: {
       type: "object",
       properties: {
@@ -101,9 +95,7 @@ const removeKeyTag: ChatTool = {
 const setMaxLength: ChatTool = {
   confirm: true,
   def: {
-    name: "set_max_length",
-    strict: true,
-    description: "Set a maximum character length for ONE key — a budget the translations should respect (e.g. a button or a fixed-width label). Pass 0 to clear the limit. It's advisory metadata surfaced to the translator and lint, not enforced.",
+    name: "set_max_length",    description: "Set a maximum character length for ONE key — a budget the translations should respect (e.g. a button or a fixed-width label). Pass 0 to clear the limit. It's advisory metadata surfaced to the translator and lint, not enforced.",
     schema: {
       type: "object",
       properties: {
@@ -131,9 +123,7 @@ const setMaxLength: ChatTool = {
 const setSourceText: ChatTool = {
   confirm: true,
   def: {
-    name: "set_source_text",
-    strict: true,
-    description: "Change ONE key's SOURCE-locale text (the original string everything is translated from). Use to fix a typo or reword the source. If the wording actually changes, existing reviewed/machine translations are flagged needs-review automatically, since they may no longer match. Does not apply to plural keys.",
+    name: "set_source_text",    description: "Change ONE key's SOURCE-locale text (the original string everything is translated from). Use to fix a typo or reword the source. If the wording actually changes, existing reviewed/machine translations are flagged needs-review automatically, since they may no longer match. Does not apply to plural keys.",
     schema: {
       type: "object",
       properties: {
@@ -157,9 +147,7 @@ const setSourceText: ChatTool = {
 const addKey: ChatTool = {
   confirm: true,
   def: {
-    name: "add_key",
-    strict: true,
-    description: "Create a NEW key with its source-locale text. Use when the user wants to add a string to the catalog. The key is the dotted/slashed path the code references (e.g. \"plant.repot\"); pick one that matches the project's existing naming. Creates a single (non-plural) key. Fails if the key already exists.",
+    name: "add_key",    description: "Create a NEW key with its source-locale text. Use when the user wants to add a string to the catalog. The key is the dotted/slashed path the code references (e.g. \"plant.repot\"); pick one that matches the project's existing naming. Creates a single (non-plural) key. Fails if the key already exists.",
     schema: {
       type: "object",
       properties: {
@@ -185,9 +173,7 @@ const addKey: ChatTool = {
 const deleteKeyTool: ChatTool = {
   confirm: true,
   def: {
-    name: "delete_key",
-    strict: true,
-    description: "Delete ONE key from the catalog — its source text and every translation in every language. Use only for a key that's genuinely unwanted (a duplicate, a leftover, a mistake). This is destructive and does NOT remove references to the key in the user's code, so only delete a key the code no longer uses — when unsure, look up its usage first. Fails if the key doesn't exist.",
+    name: "delete_key",    description: "Delete ONE key from the catalog — its source text and every translation in every language. Use only for a key that's genuinely unwanted (a duplicate, a leftover, a mistake). This is destructive and does NOT remove references to the key in the user's code, so only delete a key the code no longer uses — when unsure, look up its usage first. Fails if the key doesn't exist.",
     schema: {
       type: "object",
       properties: {

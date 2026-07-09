@@ -23,14 +23,10 @@ export interface ChatMessage {
 }
 
 // A tool advertised to the model. `schema` is a JSON Schema for the input.
-// `strict: true` makes the API guarantee `tool_use.input` validates against the
-// schema exactly — only valid for fully-closed schemas (additionalProperties:false,
-// all properties required, no open maps).
 export interface ToolDef {
   name: string;
   description: string;
   schema: object;
-  strict?: boolean;
 }
 
 // What a provider's chat() yields for a SINGLE model turn. `text` events stream
@@ -40,9 +36,6 @@ export interface ToolDef {
 // transcript reflects exactly what the model produced, not a delta reconstruction.
 export type ChatEvent =
   | { type: "text"; delta: string }
-  // A retryable provider hiccup (a grammar-compile timeout) before any output —
-  // the provider is re-attempting. `attempt`/`total` drive a "Retrying… 1/3" notice.
-  | { type: "retry"; attempt: number; total: number }
   | { type: "turn_end"; stopReason: string; content: ChatContentBlock[] };
 
 // What a tool needs to do its work. `load` re-reads the current State from disk
@@ -75,9 +68,6 @@ export type ChatStreamEvent =
   // renders separately, matching how the reloaded transcript splits per turn.
   | { type: "turn-start" }
   | { type: "text"; delta: string }
-  // The in-flight turn is retrying a transient provider hiccup (grammar-compile
-  // timeout) before any output landed — surfaced as a transient "Retrying… N/total".
-  | { type: "retry"; attempt: number; total: number }
   | { type: "tool-start"; id: string; name: string; humanSummary: string }
   | { type: "tool-end"; id: string; result?: unknown; error?: string }
   | { type: "tool-progress"; id: string; done: number; total: number; detail?: string }
