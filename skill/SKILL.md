@@ -30,6 +30,33 @@ keys cannot be added in glotfile (trans-unit ids are content hashes). After the 
 context) — see "Angular projects" in `references/workflows.md` for the
 extract → sync → translate → export loop.
 
+## Don't translate strings yourself — let glotfile translate
+
+When translations need filling, **run `glotfile translate`; do not translate the text in
+your head and write it in with `set --locale`.** This is not busywork you're delegating —
+glotfile is the better translator here. Its `translate` pipeline feeds the model
+everything the project has taught it that you don't have in front of you:
+
+- `config.projectContext` — what the product is and how ambiguous terms are meant (the
+  "feed a plant, not a social feed" kind of disambiguation).
+- `config.localeInstructions` — per-locale register, formality, and terminology rules.
+- the **glossary** — do-not-translate brand terms and pinned per-locale translations.
+- each key's **`context`** — how that string is actually used in the code (from `scan` +
+  `build-context`), which resolves short/ambiguous strings.
+- placeholder, plural (ICU/CLDR), and markup-token handling, plus the correct review
+  `state` on the result.
+
+A translation you compose inline in this session sees none of that. It drifts from the
+project's terminology and register, ignores the glossary, mishandles placeholders, and
+lands unreviewed and inconsistent with the rest of the catalog. So: **to translate, call
+`glotfile translate`** (`--key`, `--locale`, `--state needs-review`, or `--all` to scope
+it) — see the task map below. Use `set --locale` **only** to record one specific
+translation a human has already decided, or to fix a single wrong cell — never as a
+stand-in for translating a batch yourself.
+
+If `translate` can't run because a provider/API key isn't configured, that's a user setup
+step (see "Provider/API keys" below) — surface it and stop; don't fall back to hand-translating.
+
 ## Work through the commands, not the raw file
 
 On anything but a tiny catalog, **don't `Read` the whole state file or hand-edit its JSON.**
