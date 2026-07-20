@@ -67,20 +67,18 @@ function onLinkKeydown(e: KeyboardEvent) {
   if ((e.key === "Enter" || e.key === " ") && activate(e.target)) e.preventDefault();
 }
 
-// Per-tool expand state (reveals the applied change / raw result). Pending
-// edits awaiting Approve/Skip start OPEN — the summary line truncates, and the
-// user is being asked to approve, so the full proposed change must be visible
-// without a click. Resolved rows start closed.
+// Per-tool expand state (reveals the applied change / raw result).
 const expanded = ref<Record<string, boolean>>({});
-const isExpanded = (tool: UiToolCall) => expanded.value[tool.id] ?? tool.status === "pending-confirm";
+const isExpanded = (tool: UiToolCall) => !!expanded.value[tool.id];
 const toggle = (tool: UiToolCall) => { expanded.value[tool.id] = !isExpanded(tool); };
 
 // A row has something to reveal — and so is clickable — once it's resolved. A
 // skipped (declined) row counts too: it reads like a done row (collapsed, with a
-// chevron) and expands to show what the edit would have been. A pending-confirm
-// row is expandable so the proposal can be collapsed/reopened while deciding.
+// chevron) and expands to show what the edit would have been. Pending-confirm
+// and still-running rows are expandable as long as they carry their input, so
+// the full action is inspectable before/while it happens.
 const expandable = (tool: UiToolCall) =>
-  tool.status === "done" || tool.status === "error" || tool.status === "declined" || tool.status === "pending-confirm";
+  tool.status === "done" || tool.status === "error" || tool.status === "declined" || tool.input !== undefined;
 
 // Coerce a tool result/input (which may arrive as a JSON string on reload) to a
 // plain object, or null if it isn't one.
@@ -144,8 +142,8 @@ function appliedValue(tool: UiToolCall): string | null {
 
 function detail(tool: UiToolCall): string {
   if (tool.status === "error") return tool.error ?? "error";
-  // A pending edit has no result yet — show its full proposed input instead.
-  const raw = tool.result ?? (tool.status === "pending-confirm" ? tool.input : undefined);
+  // A pending or still-running call has no result yet — show its full input.
+  const raw = tool.result ?? tool.input;
   if (raw === undefined || raw === null) return "";
   // Pretty-print as indented JSON: objects directly, and strings that are
   // themselves JSON after parsing. Plain (non-JSON) strings pass through as-is.
@@ -215,7 +213,9 @@ function detail(tool: UiToolCall): string {
             <X v-else class="size-3" />
           </span>
 
-          <span class="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{{ tool.humanSummary || tool.name }}</span>
+          <!-- Wraps rather than truncates: the summary IS the action — a long
+               key must stay readable, not vanish behind an ellipsis. -->
+          <span class="min-w-0 flex-1 break-words text-[13px] font-medium text-foreground">{{ tool.humanSummary || tool.name }}</span>
           <span v-if="tool.progress" class="shrink-0 text-[11px] text-muted-foreground">{{ tool.progress.done }}/{{ tool.progress.total }}</span>
           <span v-if="shortLabel(tool)" class="max-w-[150px] shrink-0 truncate font-mono text-[11px] text-muted-foreground">{{ shortLabel(tool) }}</span>
           <ChevronRight
@@ -235,7 +235,9 @@ function detail(tool: UiToolCall): string {
               <span class="font-medium text-success">{{ appliedValue(tool) }}</span>
             </div>
           </div>
-          <pre v-else class="max-h-[32rem] overflow-auto rounded-md bg-muted p-2.5 font-mono text-[11px] leading-relaxed text-foreground">{{ detail(tool) }}</pre>
+          <!-- pre-wrap + break-words: long unbroken values (full dotted keys,
+               URLs) wrap into view instead of hiding behind a horizontal scroll. -->
+          <pre v-else class="max-h-[32rem] overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-2.5 font-mono text-[11px] leading-relaxed text-foreground">{{ detail(tool) }}</pre>
         </div>
       </template>
 

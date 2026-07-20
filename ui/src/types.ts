@@ -196,7 +196,7 @@ export interface ChatTranscript {
 export type ChatStreamEvent =
   | { type: "turn-start" }
   | { type: "text"; delta: string }
-  | { type: "tool-start"; id: string; name: string; humanSummary: string }
+  | { type: "tool-start"; id: string; name: string; humanSummary: string; input?: unknown }
   | { type: "tool-end"; id: string; result?: unknown; error?: string }
   | { type: "tool-progress"; id: string; done: number; total: number; detail?: string }
   | { type: "confirm-required"; batchId: string; items: { id: string; name: string; humanSummary: string; input: unknown }[] }

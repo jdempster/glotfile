@@ -72,7 +72,7 @@ describe("ChatMessage", () => {
     expect(labels.some((t) => t.includes("Skip"))).toBe(true);
   });
 
-  it("shows a pending edit's full proposed change, open by default", () => {
+  it("expands a pending edit to its full proposed change", async () => {
     const value = "Time to feed your monstera — it has been two weeks since the last fertiliser dose.";
     const message: UiMessage = {
       role: "assistant", text: "",
@@ -80,26 +80,37 @@ describe("ChatMessage", () => {
       pendingConfirm: { batchId: "t1" },
     };
     const wrapper = mount(ChatMessage, { props: { message } });
-    // The truncating summary line is not enough to judge the edit — the full
-    // proposed value (and the key it lands on) must be visible without a click.
+    // Collapsed by default…
+    expect(wrapper.text()).not.toContain(value);
+    // …but the row expands (first button is the row itself) to the full
+    // proposed value and the key it lands on, so the truncating summary line
+    // never hides what would be approved.
+    await wrapper.find("button").trigger("click");
     expect(wrapper.text()).toContain(value);
     expect(wrapper.text()).toContain("plant.feed.reminder");
   });
 
-  it("shows a pending non-edit tool's input as JSON, and lets the row collapse", async () => {
+  it("expands a pending non-edit tool to its input JSON, and collapses again", async () => {
     const message: UiMessage = {
       role: "assistant", text: "",
       tools: [{ id: "t1", name: "add_glossary_term", humanSummary: "add glossary term \"feed\"", status: "pending-confirm", input: { term: "feed", note: "Fertilising a plant, never a social feed." } }],
       pendingConfirm: { batchId: "t1" },
     };
     const wrapper = mount(ChatMessage, { props: { message } });
-    // Open by default, showing the full input…
+    await wrapper.find("button").trigger("click");
     expect(wrapper.text()).toContain("Fertilising a plant, never a social feed.");
-    // …and collapsible while deciding (first button is the row itself).
     await wrapper.find("button").trigger("click");
     expect(wrapper.text()).not.toContain("Fertilising a plant, never a social feed.");
+  });
+
+  it("expands a still-running tool to its input", async () => {
+    const message: UiMessage = {
+      role: "assistant", text: "",
+      tools: [{ id: "t1", name: "search_source", humanSummary: "grep source \"fertiliser\"", status: "running", input: { pattern: "fertiliser", locale: "de" } }],
+    };
+    const wrapper = mount(ChatMessage, { props: { message } });
     await wrapper.find("button").trigger("click");
-    expect(wrapper.text()).toContain("Fertilising a plant, never a social feed.");
+    expect(wrapper.text()).toContain('"pattern": "fertiliser"');
   });
 
   it("renders a skipped row like a resolved row — collapsed, expandable, no 'Skipped.' line", async () => {

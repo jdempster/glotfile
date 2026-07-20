@@ -29,9 +29,10 @@ describe("applyEvent (chat stream reducer)", () => {
 
   it("adds a tool row on tool-start and resolves it on tool-end", () => {
     const msgs = withUser("how many keys?");
-    applyEvent(msgs, { type: "tool-start", id: "t1", name: "overview", humanSummary: "project overview" });
+    applyEvent(msgs, { type: "tool-start", id: "t1", name: "overview", humanSummary: "project overview", input: { scope: "all" } });
     let tool = msgs[1]!.tools[0]!;
-    expect(tool).toMatchObject({ id: "t1", name: "overview", status: "running" });
+    // input rides along so the running row can be expanded to show the call.
+    expect(tool).toMatchObject({ id: "t1", name: "overview", status: "running", input: { scope: "all" } });
     applyEvent(msgs, { type: "tool-end", id: "t1", result: { keyCount: 3 } });
     tool = msgs[1]!.tools[0]!;
     expect(tool.status).toBe("done");

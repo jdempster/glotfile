@@ -97,7 +97,7 @@ export async function runChatTurn(history: ChatMessage[], userText: string, deps
           continue;
         }
         const humanSummary = safeSummary(tool, call.input);
-        deps.onEvent({ type: "tool-start", id: call.id, name: call.name, humanSummary });
+        deps.onEvent({ type: "tool-start", id: call.id, name: call.name, humanSummary, input: call.input });
         try {
           const result = await tool.run(call.input, deps.ctx);
           deps.onEvent({ type: "tool-end", id: call.id, result });

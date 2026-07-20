@@ -68,7 +68,9 @@ export type ChatStreamEvent =
   // renders separately, matching how the reloaded transcript splits per turn.
   | { type: "turn-start" }
   | { type: "text"; delta: string }
-  | { type: "tool-start"; id: string; name: string; humanSummary: string }
+  // `input` is the tool's full argument object, so the UI can reveal what a
+  // call is doing while it runs (the summary line alone truncates).
+  | { type: "tool-start"; id: string; name: string; humanSummary: string; input?: unknown }
   | { type: "tool-end"; id: string; result?: unknown; error?: string }
   | { type: "tool-progress"; id: string; done: number; total: number; detail?: string }
   // A batch of confirm-gated edits awaiting ONE approval (the UI's Approve/Skip

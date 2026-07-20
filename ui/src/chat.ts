@@ -70,7 +70,9 @@ export function applyEvent(messages: UiMessage[], event: ChatStreamEvent): void 
       msg.text += event.delta;
       break;
     case "tool-start":
-      upsertTool(msg, event.id, { name: event.name, humanSummary: event.humanSummary, status: "running" });
+      // Keep any input already set by confirm-required if this event omits it
+      // (older server) — an undefined patch value would clobber it.
+      upsertTool(msg, event.id, { name: event.name, humanSummary: event.humanSummary, status: "running", ...(event.input !== undefined ? { input: event.input } : {}) });
       break;
     case "tool-progress":
       upsertTool(msg, event.id, { progress: { done: event.done, total: event.total, detail: event.detail } });
