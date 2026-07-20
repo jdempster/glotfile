@@ -1,6 +1,6 @@
 import type { PluralCategory } from "../schema.js";
 import type { TranslationRequest, TranslationResult } from "./provider.js";
-import { placeholdersMatch, pluralFormPlaceholdersMatch } from "../placeholders.js";
+import { canonicalizeLiterals, placeholdersMatch, pluralFormPlaceholdersMatch } from "../placeholders.js";
 
 // What a provider's transport returns per item: scalar items carry `translation`,
 // plural items carry `forms`.
@@ -114,7 +114,11 @@ export function validateTranslation(
   translation: string | undefined,
 ): TranslationResult {
   if (translation === undefined) return { id: req.id, error: "No translation returned." };
-  if (!placeholdersMatch(req.source, translation)) {
+  // The model sees literals in rendered form ({{name}}, via renderForModel) and
+  // echoes them back bare; the store path re-escapes them ('{{name}}'). Compare
+  // placeholders on that canonical form — the same bytes that will be stored —
+  // or a rendered literal reads as an invented {name} placeholder.
+  if (!placeholdersMatch(req.source, canonicalizeLiterals(translation))) {
     return { id: req.id, error: "Placeholder mismatch between source and translation." };
   }
   if (req.maxLength !== undefined && translation.length > req.maxLength) {
@@ -138,7 +142,9 @@ export function validatePlural(
   // req.source is the representative "other" form. Count-bearing categories must
   // carry exactly its placeholders; zero/one/two may drop the count idiomatically
   // but still may not introduce placeholders the source never had.
-  const badPh = cats.find((c) => !pluralFormPlaceholdersMatch(c, req.source, forms[c]!));
+  // Canonicalize each form for the same reason as the scalar path: rendered
+  // {{name}} literals in the reply must not read as invented placeholders.
+  const badPh = cats.find((c) => !pluralFormPlaceholdersMatch(c, req.source, canonicalizeLiterals(forms[c]!)));
   if (badPh) return { id: req.id, error: `Placeholder mismatch in plural form "${badPh}".` };
   if (req.maxLength !== undefined) {
     const over = cats.find((c) => forms[c]!.length > req.maxLength!);

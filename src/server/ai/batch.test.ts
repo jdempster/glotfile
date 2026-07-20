@@ -21,6 +21,16 @@ describe("validateTranslation", () => {
     expect(res.error).toMatch(/length/i);
     expect(res.translation).toBe("Salut {name}");
   });
+  it("accepts a reply echoing a doubled-brace literal in rendered form ({{gardener}}) against a canonical source ('{{gardener}}')", () => {
+    const r = req({ source: "Dear '{{gardener}}', welcome to '{{site}}'.", placeholders: [] });
+    const res = validateTranslation(r, "Cher {{gardener}}, bienvenue à {{site}}.");
+    expect(res.error).toBeUndefined();
+    expect(res.translation).toBe("Cher {{gardener}}, bienvenue à {{site}}.");
+  });
+  it("still rejects a reply that invents a real placeholder alongside rendered literals", () => {
+    const r = req({ source: "Dear '{{gardener}}'.", placeholders: [] });
+    expect(validateTranslation(r, "Cher {{gardener}} {name}.").error).toMatch(/placeholder/i);
+  });
 });
 
 describe("runBatched", () => {
@@ -201,6 +211,15 @@ describe("validatePlural", () => {
       plural: { arg: "count", categories: ["zero", "one", "other"], sourceForms: { one: "{count} item", other: "{count} items" } },
     });
     expect(validatePlural(arReq, { zero: "{bogus} items", one: "{count} item", other: "{count} items" }).error).toMatch(/placeholder/i);
+  });
+  it("accepts forms echoing a doubled-brace literal in rendered form against a canonical source", () => {
+    const r = pluralReq({
+      source: "{count} plants for '{{gardener}}'",
+      plural: { arg: "count", categories: ["one", "other"], sourceForms: { one: "{count} plant for '{{gardener}}'", other: "{count} plants for '{{gardener}}'" } },
+    });
+    const res = validatePlural(r, { one: "{count} plante pour {{gardener}}", other: "{count} plantes pour {{gardener}}" });
+    expect(res.error).toBeUndefined();
+    expect(res.forms).toEqual({ one: "{count} plante pour {{gardener}}", other: "{count} plantes pour {{gardener}}" });
   });
 });
 
