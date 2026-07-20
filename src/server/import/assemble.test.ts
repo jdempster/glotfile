@@ -22,6 +22,17 @@ describe("assemble", () => {
     expect(state.keys["greet"]!.placeholders).toEqual({ name: { type: "String" } });
   });
 
+  it("canonicalizes bare doubled-brace literals from brace-agnostic formats", () => {
+    const withLiteral: ParseResult = {
+      locales: ["en", "fr"],
+      keys: { greet: { values: { en: "Dear {{visitor}}", fr: "Bonjour {{visitor}}" } } },
+      warnings: [],
+    };
+    const state = assemble(withLiteral, { sourceLocale: "en", format: "gettext-po" });
+    expect(state.keys["greet"]!.values["en"]!.value).toBe("Dear '{{visitor}}'");
+    expect(state.keys["greet"]!.values["fr"]!.value).toBe("Bonjour '{{visitor}}'");
+  });
+
   it("stamps source locale values as 'source'", () => {
     const state = assemble(parsed, { sourceLocale: "en", format: "vue-i18n-json" });
     expect(state.keys["auth.signIn"]!.values["en"]!.state).toBe("source");

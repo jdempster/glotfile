@@ -102,6 +102,17 @@ describe("laravel-php", () => {
     expect(r.warnings.some((w) => w.code === "lossy-literal" && w.key === "greet")).toBe(true);
   });
 
+  it("warns lossy-literal when an unescaped {{name}} would export to a broken :name", () => {
+    const s = defaultState();
+    s.config.locales = ["en"];
+    createKey(s, "greet", "placeholder");
+    // Bypass the setters to simulate a hand-edited glotfile.json holding a raw
+    // doubled-brace literal that never went through canonicalization.
+    s.keys["greet"]!.values.en = { value: "Dear {{visitor}}", state: "source" };
+    const r = laravelPhp.export(s, { adapter: "laravel-php", path: "lang/{locale}/{namespace}.php" });
+    expect(r.warnings.some((w) => w.code === "lossy-literal" && w.key === "greet")).toBe(true);
+  });
+
   it("does not warn for a :token that matches no placeholder", () => {
     const s = defaultState();
     s.config.locales = ["en"];

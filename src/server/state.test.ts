@@ -322,6 +322,41 @@ describe("mutations", () => {
     expect(s.keys["k"]!.values.fr).toEqual({ value: "Bonjour", state: "machine", source: "ai" });
   });
 
+  it("canonicalizes bare doubled-brace literals on every scalar write path", () => {
+    const s = defaultState();
+    s.config.locales = ["en", "fr", "es"];
+    createKey(s, "k", "Dear {{visitor}}");
+    expect(s.keys["k"]!.values.en!.value).toBe("Dear '{{visitor}}'");
+    setSourceValue(s, "k", "Hi {{visitor}}");
+    expect(s.keys["k"]!.values.en!.value).toBe("Hi '{{visitor}}'");
+    setTargetValue(s, "k", "fr", "Salut {{visitor}}");
+    expect(s.keys["k"]!.values.fr!.value).toBe("Salut '{{visitor}}'");
+    applyMachineTranslation(s, "k", "es", "Hola {{visitor}}");
+    expect(s.keys["k"]!.values.es!.value).toBe("Hola '{{visitor}}'");
+  });
+
+  it("does not re-flag translations when the source is re-typed in rendered form", () => {
+    const s = defaultState();
+    s.config.locales = ["en", "fr"];
+    createKey(s, "k", "Dear {{visitor}}");
+    applyMachineTranslation(s, "k", "fr", "Salut '{{visitor}}'");
+    setKeyState(s, "k", "fr", "reviewed");
+    // Re-entering the same string in its rendered form must canonicalize to the
+    // stored value, so the reviewed translation stays reviewed.
+    setSourceValue(s, "k", "Dear {{visitor}}");
+    expect(s.keys["k"]!.values.fr!.state).toBe("reviewed");
+  });
+
+  it("canonicalizes doubled-brace literals in plural form writes", () => {
+    const s = defaultState();
+    s.config.locales = ["en", "fr"];
+    createKey(s, "p", "other body", undefined, { plural: { arg: "count" } });
+    setSourcePluralForms(s, "p", { one: "One for {{visitor}}", other: "Many for {{visitor}}" });
+    expect(s.keys["p"]!.values.en!.forms!.one).toBe("One for '{{visitor}}'");
+    applyMachineTranslationForms(s, "p", "fr", { one: "Un pour {{visitor}}", other: "Plusieurs pour {{visitor}}" });
+    expect(s.keys["p"]!.values.fr!.forms!.one).toBe("Un pour '{{visitor}}'");
+  });
+
   it("renameKey moves the entry; deleteKey removes it", () => {
     const s = defaultState();
     createKey(s, "old", "v");

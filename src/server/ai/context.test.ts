@@ -271,12 +271,11 @@ describe("buildContextSystemPrompt", () => {
     expect(p).toMatch(/context/i);
   });
 
-  it("guides the writer on literals: keep tokens verbatim, don't relabel or strip quotes", () => {
+  it("guides the writer on literals: verbatim tokens, not placeholders to translate", () => {
     const p = buildContextSystemPrompt();
     expect(p).toMatch(/literal/i);
     expect(p).toMatch(/exactly|verbatim/i);
-    // the apostrophe-quoted form must be referenced so the writer doesn't strip it
-    expect(p).toMatch(/'\{|apostrophe/i);
+    expect(p).toMatch(/not.*placeholder|never.*(translat|alter)/i);
   });
 
   it("names the source language so the writer reasons about translation nuance", () => {
@@ -294,12 +293,14 @@ describe("buildContextSystemPrompt", () => {
 });
 
 describe("buildContextBatchPrompt literals", () => {
-  it("surfaces apostrophe-quoted literal tokens verbatim under a literals field", () => {
+  it("surfaces literal tokens in rendered runtime form under a literals field", () => {
     const req = { id: "0", key: "tpl", source: "Dear '{{gardener}}', visit '{{site}}'.", usageSnippets: [] };
     const out = buildContextBatchPrompt([req]);
     expect(out).toMatch(/"literals"/);
-    expect(out).toContain("'{{gardener}}'");
-    expect(out).toContain("'{{site}}'");
+    expect(out).toContain('"{{gardener}}"');
+    expect(out).toContain('"{{site}}"');
+    // never leak glotfile's internal escape apostrophes to the writer
+    expect(out).not.toContain("'{{gardener}}'");
   });
 
   it("omits the literals field when the source has no literal tokens", () => {

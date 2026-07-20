@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import type { State } from "../schema.js";
 import type { UsageCacheFile, Reference } from "../scan.js";
 import type { ImageData } from "./provider.js";
-import { quotedLiterals } from "../placeholders.js";
+import { renderForModel, modelLiterals } from "../placeholders.js";
 
 export interface CodeSnippet {
   file: string;
@@ -187,7 +187,7 @@ export function buildContextSystemPrompt(guidance: ContextGuidance = {}): string
     "- Do NOT restate the source string itself.",
     "- Do NOT say 'This string is...' — write the context as a direct description.",
     "- If no code snippets are available, infer from the key path and source value.",
-    "- Tokens: a source may contain interpolation placeholders ({name}, {{name}}, :name, %s) and ICU-apostrophe-quoted LITERAL tokens (e.g. '{{gardener}}', '{name}') that the app fills at runtime. Any provided `literals` are literal tokens, NOT plain placeholders. If you reference a token, write it EXACTLY as it appears in the source — keep apostrophe-quoted literals quoted, and never relabel a quoted literal as a placeholder or strip its quotes. The translation engine needs these to survive verbatim, so a note may simply remind translators to reproduce them exactly.",
+    "- Tokens: a source may contain interpolation placeholders ({name}, {{name}}, :name, %s) and app-managed literal tokens, listed in `literals`, that the app fills at runtime. The `literals` are verbatim tokens, NOT plain placeholders to translate. If you reference a token, write it EXACTLY as it appears in the source and explain what it stands for; never suggest translating or altering it. (A literal shown wrapped in apostrophes keeps them — they are part of the token, not prose.)",
   ];
   if (projectContext) {
     lines.push(
@@ -207,11 +207,11 @@ export function buildContextBatchPrompt(reqs: ContextRequest[]): string {
           return `File: ${s.file} (lines ${s.startLine}+, scanner: ${s.scanner})${extra}\n\`\`\`\n${s.lines}\n\`\`\``;
         }).join("\n\n")
       : "(no code references found — infer from key path and source value)";
-    const literals = quotedLiterals(r.source);
+    const literals = modelLiterals(r.source);
     return {
       id: r.id,
       key: r.key,
-      source: r.source,
+      source: renderForModel(r.source),
       ...(literals.length ? { literals } : {}),
       codeSnippets: snippetText,
     };

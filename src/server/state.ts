@@ -9,6 +9,7 @@ import {
 import { formsToIcu } from "./plurals.js";
 import { splitDirFor, detectFormat, loadSplit, saveSplit, stripEmptySuggestions } from "./storage.js";
 import { normalizeSource } from "./normalize.js";
+import { canonicalizeLiterals } from "./placeholders.js";
 import { sourceHash, pruneStaleSuppressions } from "./lint/suppress.js";
 import { RULE_IDS, type RuleId, type Severity } from "./lint/registry.js";
 
@@ -21,6 +22,15 @@ export const systemClock: Clock = () => new Date().toISOString();
 // export time via locale aliasing.
 export function canonLocale(locale: string): string {
   return locale.trim().toLowerCase().replace(/_/g, "-");
+}
+
+// The stored form of any value/form body: trimmed, with bare doubled-brace
+// literals ({{name}}) escaped to their canonical ICU-quoted form ('{{name}}').
+// Every write path (UI edits, AI results, plural forms) funnels through here so
+// the catalog never holds a raw {{name}} that would export to a broken token —
+// and so a value typed in its rendered form matches what import/AI produce.
+function canonValue(value: string): string {
+  return canonicalizeLiterals(value.trim());
 }
 
 // Keep config deterministic: canonical codes, deduped case-insensitively,
@@ -204,7 +214,7 @@ function normalizeForms(forms: Partial<Record<PluralForm, string>>): Partial<Rec
     // A selector is a CLDR category (one, other, …) or an explicit value match (=1).
     if (!isPluralForm(cat)) throw new GlotfileError(`Invalid plural category: ${cat}`);
     if (typeof body !== "string") throw new GlotfileError(`Plural form "${cat}" must be a string`);
-    out[cat as PluralForm] = body.trim();
+    out[cat as PluralForm] = canonValue(body);
   }
   if (typeof out.other !== "string") throw new GlotfileError(`Plural forms must include the "other" form`);
   return out;
@@ -228,12 +238,12 @@ export function createKey(
       createdAt: clock(),
       plural: { arg: opts.plural.arg },
       // The source value seeds the required "other" form so nothing is empty.
-      values: { [sl]: { forms: { other: sourceValue.trim() }, state: "source" } },
+      values: { [sl]: { forms: { other: canonValue(sourceValue) }, state: "source" } },
     };
   } else {
     state.keys[key] = {
       createdAt: clock(),
-      values: { [sl]: { value: sourceValue.trim(), state: "source" } },
+      values: { [sl]: { value: canonValue(sourceValue), state: "source" } },
     };
   }
 }
@@ -276,9 +286,10 @@ export function pruneEmptySourceKeys(state: State): string[] {
 export function setSourceValue(state: State, key: string, value: string): void {
   const entry = requireKey(state, key);
   if (entry.plural) throw new GlotfileError(`Key is a plural; use the plural setters: ${key}`);
+  const canon = canonValue(value);
   const oldNorm = normalizeSource(entry.values[state.config.sourceLocale]?.value ?? "");
-  const newNorm = normalizeSource(value);
-  entry.values[state.config.sourceLocale] = { value: value.trim(), state: "source" };
+  const newNorm = normalizeSource(canon);
+  entry.values[state.config.sourceLocale] = { value: canon, state: "source" };
   if (oldNorm !== newNorm) {
     for (const [locale, lv] of Object.entries(entry.values)) {
       if (locale === state.config.sourceLocale) continue;
@@ -293,7 +304,7 @@ export function setSourceValue(state: State, key: string, value: string): void {
 export function setTargetValue(state: State, key: string, locale: string, value: string): void {
   const entry = requireKey(state, key);
   if (entry.plural) throw new GlotfileError(`Key is a plural; use the plural setters: ${key}`);
-  entry.values[canonLocale(locale)] = { value: value.trim(), state: "reviewed" };
+  entry.values[canonLocale(locale)] = { value: canonValue(value), state: "reviewed" };
 }
 
 function formSignature(forms: Partial<Record<PluralForm, string>>): string {
@@ -574,7 +585,7 @@ export function applyMachineTranslation(state: State, key: string, locale: strin
   if (entry.plural) throw new GlotfileError(`Key is a plural; use applyMachineTranslationForms: ${key}`);
   const loc = canonLocale(locale);
   if (!force && entry.values[loc]?.state === "reviewed") return false;
-  entry.values[loc] = { value: value.trim(), state: "machine", source: "ai" };
+  entry.values[loc] = { value: canonValue(value), state: "machine", source: "ai" };
   return true;
 }
 

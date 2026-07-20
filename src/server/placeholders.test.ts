@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractPlaceholders, extractLiterals, toLaravel, toI18next, toRuby, isIcuPluralOrSelect, placeholdersMatch, placeholdersSubset } from "./placeholders.js";
+import { extractPlaceholders, extractLiterals, canonicalizeLiterals, renderForModel, modelLiterals, hasBareDoubledBrace, toLaravel, toI18next, toRuby, isIcuPluralOrSelect, placeholdersMatch, placeholdersSubset } from "./placeholders.js";
 
 describe("extractPlaceholders", () => {
   it("extracts canonical {name} tokens", () => {
@@ -30,6 +30,65 @@ describe("extractLiterals", () => {
   });
   it("returns nothing when there are no literal spans", () => {
     expect(extractLiterals("no literals {here}")).toEqual([]);
+  });
+});
+
+describe("canonicalizeLiterals", () => {
+  it("escapes a bare doubled-brace token as a canonical literal", () => {
+    expect(canonicalizeLiterals("Dear {{visitor}}")).toBe("Dear '{{visitor}}'");
+  });
+  it("escapes every doubled-brace token, leaving surrounding text", () => {
+    expect(canonicalizeLiterals("Dear {{visitor}}, see {{site}}.")).toBe("Dear '{{visitor}}', see '{{site}}'.");
+  });
+  it("leaves a single-brace placeholder untouched", () => {
+    expect(canonicalizeLiterals("Hi {name}, you have {count} files")).toBe("Hi {name}, you have {count} files");
+  });
+  it("is idempotent on an already-canonical literal", () => {
+    expect(canonicalizeLiterals("Dear '{{visitor}}'")).toBe("Dear '{{visitor}}'");
+  });
+  it("leaves an existing single-brace literal span intact", () => {
+    expect(canonicalizeLiterals("See '{site}' now")).toBe("See '{site}' now");
+  });
+  it("passes ICU plural/select structure through unchanged", () => {
+    const s = "{count, plural, one {# item} other {# items}}";
+    expect(canonicalizeLiterals(s)).toBe(s);
+  });
+});
+
+describe("hasBareDoubledBrace", () => {
+  it("detects an unescaped doubled-brace token", () => {
+    expect(hasBareDoubledBrace("Dear {{visitor}}")).toBe(true);
+  });
+  it("does not flag a canonically-escaped literal", () => {
+    expect(hasBareDoubledBrace("Dear '{{visitor}}'")).toBe(false);
+  });
+  it("does not flag single-brace placeholders", () => {
+    expect(hasBareDoubledBrace("Hi {name}, {count} files")).toBe(false);
+  });
+});
+
+describe("renderForModel", () => {
+  it("unwraps a doubled-brace literal to its runtime form", () => {
+    expect(renderForModel("Dear '{{gardener}}', hi")).toBe("Dear {{gardener}}, hi");
+  });
+  it("keeps a single-brace literal apostrophe-quoted (not safely re-escapable)", () => {
+    expect(renderForModel("See '{site}'")).toBe("See '{site}'");
+  });
+  it("leaves real placeholders untouched while unwrapping doubled-brace literals", () => {
+    expect(renderForModel("Hi {name} in '{{site}}'")).toBe("Hi {name} in {{site}}");
+  });
+  it("passes ICU plural/select through unchanged", () => {
+    const s = "{count, plural, one {# item} other {# items}}";
+    expect(renderForModel(s)).toBe(s);
+  });
+});
+
+describe("modelLiterals", () => {
+  it("renders doubled-brace literals and keeps single-brace literals quoted", () => {
+    expect(modelLiterals("Dear '{{gardener}}', see '{site}'")).toEqual(["{{gardener}}", "'{site}'"]);
+  });
+  it("returns nothing when there are no literal spans", () => {
+    expect(modelLiterals("Hello {name}")).toEqual([]);
   });
 });
 

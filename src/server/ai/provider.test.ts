@@ -65,22 +65,23 @@ describe("prompt assembly", () => {
 
   it("system prompt tells the model to reproduce the provided literals verbatim", () => {
     const sys = buildSystemPrompt([req]);
-    // references the per-item `literals` field, not just generic apostrophe advice
+    // references the per-item `literals` field as verbatim tokens
     expect(sys).toMatch(/literals/i);
     expect(sys).toMatch(/exactly|verbatim/i);
-    expect(sys).toMatch(/'\{/);
   });
 
-  it("batch prompt surfaces a request's literals field verbatim", () => {
+  it("batch prompt surfaces a request's literals field and renders its source", () => {
     const withLiteral: TranslationRequest = {
       ...req,
       source: "Dear '{{gardener}}', visit '{{site}}'.",
       placeholders: [],
-      literals: ["'{{gardener}}'", "'{{site}}'"],
+      literals: ["{{gardener}}", "{{site}}"],
     };
     const text = buildBatchPrompt([withLiteral]);
     expect(text).toContain('"literals"');
-    expect(text).toContain("'{{gardener}}'");
+    expect(text).toContain('"{{gardener}}"');
+    // the internal escape apostrophes are never shown for a doubled-brace token
+    expect(text).not.toContain("'{{gardener}}'");
   });
 
   it("system prompt includes plural handling when a request is a plural item", () => {

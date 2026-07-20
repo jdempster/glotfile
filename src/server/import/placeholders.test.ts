@@ -22,6 +22,11 @@ describe("laravelToCanonical", () => {
     expect(laravelToCanonical("Visit {site}")).toBe("Visit '{site}'");
     expect(laravelToCanonical("Hi :name, visit {site}")).toBe("Hi {name}, visit '{site}'");
   });
+
+  it("wraps a doubled-brace literal as one canonical token, matching the AI path", () => {
+    expect(laravelToCanonical("Dear {{visitor}}")).toBe("Dear '{{visitor}}'");
+    expect(laravelToCanonical("Dear {{visitor}}, from :name")).toBe("Dear '{{visitor}}', from {name}");
+  });
 });
 
 describe("railsToCanonical", () => {
@@ -31,5 +36,8 @@ describe("railsToCanonical", () => {
   it("treats a bare {name} as a literal — Rails interpolates %{name}, not braces", () => {
     expect(railsToCanonical("Visit {site}")).toBe("Visit '{site}'");
     expect(railsToCanonical("%{count} of {total}")).toBe("{count} of '{total}'");
+  });
+  it("wraps a doubled-brace literal as one canonical token, matching the AI path", () => {
+    expect(railsToCanonical("Dear {{visitor}}")).toBe("Dear '{{visitor}}'");
   });
 });

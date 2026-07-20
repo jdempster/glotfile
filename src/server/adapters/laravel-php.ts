@@ -2,7 +2,7 @@ import type { Adapter, ExportResult, ExportedFile, ExportWarning } from "./index
 import { resolvePath, localeCollisionWarnings } from "./index.js";
 import { nestKeys } from "./shared.js";
 import { resolveFormat, resolveEmptyAs, resolveScalar, resolveForms, resolveLocaleToken, type LocaleCase } from "./options.js";
-import { toLaravel, isIcuPluralOrSelect, extractPlaceholders } from "../placeholders.js";
+import { toLaravel, isIcuPluralOrSelect, extractPlaceholders, hasBareDoubledBrace } from "../placeholders.js";
 import { PLURAL_CATEGORIES, type State, type OutputConfig } from "../schema.js";
 
 function splitKey(key: string): { namespace: string; inner: string } {
@@ -76,6 +76,16 @@ export const laravelPhp: Adapter = {
               key,
               locale,
               message: "laravel-php cannot represent ICU plural/select; written unconverted",
+            });
+          }
+          // A bare {{name}} that bypassed canonicalization has no Laravel escape:
+          // toLaravel rewrites its inner {name} to :name, yielding a broken {:name}.
+          if (raw && hasBareDoubledBrace(raw)) {
+            warnings.push({
+              code: "lossy-literal",
+              key,
+              locale,
+              message: "unescaped {{…}} literal will export to a broken {:name}; store it as '{{…}}'",
             });
           }
           // Laravel has no escape for its :name syntax, so a literal :name that

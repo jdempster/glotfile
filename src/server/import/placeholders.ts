@@ -1,9 +1,13 @@
 // A bare {name} in a format whose interpolation sigil is NOT a brace (Laravel
 // :name, Rails %{name}) is literal text, so mark it as a canonical apostrophe-
-// quoted literal. The (?<!%) guard leaves Rails' own %{name} placeholders for
-// the format-specific pass that follows.
+// quoted literal. A doubled brace ({{name}}) is one literal token wrapped whole
+// ('{{name}}') so it matches the AI path's canonical form byte-for-byte; the
+// alternation tries the doubled form first. The (?<!%) guard on the single-brace
+// alternative leaves Rails' own %{name} placeholders for the pass that follows.
 export function markBareBracesLiteral(value: string): string {
-  return value.replace(/(?<!%)\{(\w+)\}/g, "'{$1}'");
+  return value.replace(/\{\{(\w+)\}\}|(?<!%)\{(\w+)\}/g, (_m, dbl, sgl) =>
+    dbl !== undefined ? `'{{${dbl}}}'` : `'{${sgl}}'`,
+  );
 }
 
 // Laravel :name -> glotfile canonical {name}. Only converts letter-led tokens

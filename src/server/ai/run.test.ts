@@ -64,13 +64,13 @@ describe("selectRequests", () => {
     expect(selectRequests(s, { states: ["reviewed"], onlyMissing: true }).map((r) => r.targetLocale)).toEqual(["fr"]);
   });
 
-  it("attaches verbatim quoted literals from the source, omitting the field when there are none", () => {
+  it("attaches literal tokens in rendered runtime form, omitting the field when there are none", () => {
     const s = defaultState();
     s.config.locales = ["en", "fr"];
-    createKey(s, "tpl", "Dear '{{gardener}}', see '{{site}}'.");
+    createKey(s, "tpl", "Dear {{gardener}}, see {{site}}.");
     createKey(s, "plain", "Hello {name}");
     const reqs = selectRequests(s, { onlyMissing: true });
-    expect(reqs.find((r) => r.key === "tpl")!.literals).toEqual(["'{{gardener}}'", "'{{site}}'"]);
+    expect(reqs.find((r) => r.key === "tpl")!.literals).toEqual(["{{gardener}}", "{{site}}"]);
     expect(reqs.find((r) => r.key === "plain")!.literals).toBeUndefined();
   });
 

@@ -51,6 +51,14 @@ export function isIcuPluralOrSelect(value: string): boolean {
   return ICU_PLURAL_SELECT.test(value);
 }
 
+// A doubled-brace token that is NOT inside an ICU-quoted literal span, i.e. one
+// that escaped canonicalization (e.g. a hand-edited glotfile.json). Adapters
+// whose interpolation sigil is a brace can't tell it from a placeholder and
+// would rewrite it to a broken token (Laravel {{name}} -> {:name}), so they warn.
+export function hasBareDoubledBrace(value: string): boolean {
+  return /\{\{\w+\}\}/.test(withoutQuotedSpans(value));
+}
+
 // Walk a value applying `convertGap` to the text outside ICU apostrophe-quoted
 // literal spans, and `emitLiteral` to the unescaped content of each span. A span
 // is `'` immediately followed by { } # | running to the next `'`; `''` is a
@@ -108,11 +116,49 @@ export function extractLiterals(value: string): string[] {
   return out;
 }
 
-// Each literal in its verbatim apostrophe-quoted form, e.g.
-// "Dear '{{gardener}}'" -> ["'{{gardener}}'"]. The AI prompts (translation +
-// context) show these so the model reproduces the quoting exactly.
-export function quotedLiterals(value: string): string[] {
-  return extractLiterals(value).map((content) => `'${content}'`);
+// True for the one literal shape that is safe to show the model unquoted: a
+// doubled-brace token ({{name}}). On the way back, canonicalizeLiterals re-wraps
+// a bare {{name}}, so the round trip is lossless — whereas a bare single {name}
+// is indistinguishable from a real placeholder and could not be re-escaped.
+function isDoubledBraceLiteral(content: string): boolean {
+  return /^\{\{\w+\}\}$/.test(content);
+}
+
+// Render a stored value for display to the AI (translation + context): unwrap
+// doubled-brace literals ('{{name}}') to their runtime form ({{name}}) so the
+// model never sees glotfile's internal escape apostrophes on a token it must
+// reproduce; single-brace literals stay quoted (see isDoubledBraceLiteral). The
+// store path re-escapes the returned {{name}}, so nothing is lost.
+export function renderForModel(value: string): string {
+  if (isIcuPluralOrSelect(value)) return value;
+  return withLiterals(
+    value,
+    (gap) => gap,
+    (lit) => (isDoubledBraceLiteral(lit) ? lit : `'${lit}'`),
+  );
+}
+
+// The literal tokens of a value in the same shape renderForModel shows them:
+// doubled-brace literals rendered ({{name}}), single-brace literals quoted
+// ('{name}'). The AI prompts attach this as the item's `literals` list.
+export function modelLiterals(value: string): string[] {
+  return extractLiterals(value).map((lit) => (isDoubledBraceLiteral(lit) ? lit : `'${lit}'`));
+}
+
+// Escape any bare doubled-brace token ({{name}}) into a canonical ICU-quoted
+// literal ('{{name}}'). In canonical storage a real placeholder is always a
+// single brace ({name}), so a doubled brace is unambiguously a literal the app
+// fills at runtime — left bare it would export to a broken token (Laravel
+// {:name}). Content already inside a quoted span is re-emitted verbatim, so the
+// function is idempotent. ICU plural/select values are left alone (their nested
+// braces are structure, and adapters never rewrite tokens inside them).
+export function canonicalizeLiterals(value: string): string {
+  if (isIcuPluralOrSelect(value)) return value;
+  return withLiterals(
+    value,
+    (gap) => gap.replace(/\{\{(\w+)\}\}/g, "'{{$1}}'"),
+    (lit) => `'${lit}'`,
+  );
 }
 
 // {name} -> :name, but leave ICU plural/select blocks untouched. Literal spans

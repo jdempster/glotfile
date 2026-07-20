@@ -3,7 +3,7 @@ import { resolve, extname } from "node:path";
 import type { State } from "../schema.js";
 import type { TranslationProvider, TranslationRequest, TranslationResult } from "./provider.js";
 import { matchGlossary, matchGlossaryForms, glossaryHints } from "../glossary.js";
-import { extractPlaceholders, quotedLiterals } from "../placeholders.js";
+import { extractPlaceholders, modelLiterals } from "../placeholders.js";
 import { categoriesFor } from "../plurals.js";
 import { applyMachineTranslation, applyMachineTranslationForms } from "../state.js";
 import { cellState, type EffectiveState } from "../cell-state.js";
@@ -52,7 +52,7 @@ export function selectRequests(state: State, opts: SelectOptions): TranslationRe
         Object.values(sourceForms).filter((f): f is string => !!f),
         state.glossary,
       );
-      const literals = quotedLiterals(other);
+      const literals = modelLiterals(other);
       for (const locale of targets) {
         // A plural target is "missing" when it lacks any required category for
         // that locale (an empty form counts as missing) — so converting a
@@ -81,7 +81,7 @@ export function selectRequests(state: State, opts: SelectOptions): TranslationRe
     if (!source) continue;
     // Glossary relevance is locale-independent — match once, shape per locale.
     const matches = matchGlossary(source, state.glossary);
-    const literals = quotedLiterals(source);
+    const literals = modelLiterals(source);
     for (const locale of targets) {
       if (skip(cellState(entry, locale, state.config.sourceLocale))) continue;
       const glossary = glossaryHints(matches, locale);

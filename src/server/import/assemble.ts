@@ -3,8 +3,17 @@ import { CURRENT_VERSION } from "../schema.js";
 import { parseIcuPlural, exactFormsToCldr } from "../plurals.js";
 import type { ParseResult } from "./types.js";
 import { canonLocale } from "../state.js";
+import { canonicalizeLiterals } from "../placeholders.js";
 import { getAdapter } from "../adapters/index.js";
 import { inferLocaleStyle } from "../adapters/options.js";
+
+// Canonicalize every plural form body so a bare doubled-brace literal ({{name}})
+// from a brace-agnostic format is escaped, matching the scalar path.
+function canonForms<T extends Record<string, string>>(forms: T): T {
+  return Object.fromEntries(
+    Object.entries(forms).map(([cat, body]) => [cat, canonicalizeLiterals(body)]),
+  ) as T;
+}
 
 // rootRelative: the path template is relative to the detected locale root rather
 // than the project root, so the locale root's offset is prepended (see runImport).
@@ -76,11 +85,11 @@ export function assemble(
         const parsedForms = locale === opts.sourceLocale ? sourcePlural : parseIcuPlural(value);
         if (parsedForms) {
           const forms = opts.cldr ? exactFormsToCldr(locale, parsedForms.forms) : parsedForms.forms;
-          entry.values[locale] = { forms, state };
+          entry.values[locale] = { forms: canonForms(forms), state };
         } else {
           // Don't drop a translation we can't parse: keep it verbatim under "other"
           // (the one form ICU always requires) and flag it for review.
-          entry.values[locale] = { forms: { other: value }, state };
+          entry.values[locale] = { forms: { other: canonicalizeLiterals(value) }, state };
           warnings.push(
             `key "${key}" locale "${locale}": value is not a parseable ICU plural; preserved under "other".`,
           );
@@ -89,7 +98,7 @@ export function assemble(
     } else {
       for (const [locale, value] of Object.entries(parsed_key.values)) {
         entry.values[locale] = {
-          value,
+          value: canonicalizeLiterals(value),
           state: locale === opts.sourceLocale ? "source" : "reviewed",
         };
       }

@@ -1,4 +1,5 @@
 import type { PluralCategory } from "../schema.js";
+import { renderForModel } from "../placeholders.js";
 import type { ReplyItem } from "./batch.js";
 import type { TokenUsage } from "./pricing.js";
 import type { ChatMessage, ToolDef, ChatEvent } from "./chat-types.js";
@@ -189,7 +190,7 @@ export function buildSystemPrompt(reqs: TranslationRequest[]): string {
     "",
     "Hard rules:",
     "- Preserve every interpolation placeholder EXACTLY as written: {name}, {{count}}, %s, %d, :name. Never translate, rename, reorder, or remove them.",
-    "- Reproduce every entry of the item's `literals` array EXACTLY, including its surrounding apostrophes (e.g. '{{gardener}}', '{name}'). These are app-managed literal tokens, not prose: translate the words around them, but never translate, rename, unquote, or drop them. The apostrophes are required — a result with bare {{gardener}} instead of '{{gardener}}' is wrong.",
+    "- The item's `literals` array lists app-managed verbatim tokens (e.g. {{gardener}}). Reproduce each one EXACTLY as shown — translate the words around them, but never translate, rename, or drop a literal token. If a literal is shown wrapped in apostrophes ('{name}'), keep the apostrophes: they are part of that token, not prose.",
     "- Preserve ICU plural/select structure verbatim (e.g. {count, plural, one {…} other {…}}); translate only the human-readable text inside each branch.",
     "- Glossary: a term marked do-not-translate MUST appear unchanged in the translation. A term with a forced translation for the target locale MUST use that exact translation.",
     "- Respect the max length (characters) when given; prefer a shorter natural phrasing over exceeding it.",
@@ -236,10 +237,14 @@ export function buildBatchPrompt(reqs: TranslationRequest[]): string {
     };
     if (r.plural) {
       // Plural items carry the source forms + the required categories instead
-      // of a single `source`; the model must reply with `forms`.
-      return { ...base, plural: { arg: r.plural.arg, categories: r.plural.categories, sourceForms: r.plural.sourceForms } };
+      // of a single `source`; the model must reply with `forms`. Render each
+      // form so doubled-brace literals show in runtime form, not escaped.
+      const sourceForms = Object.fromEntries(
+        Object.entries(r.plural.sourceForms).map(([cat, body]) => [cat, renderForModel(body)]),
+      );
+      return { ...base, plural: { arg: r.plural.arg, categories: r.plural.categories, sourceForms } };
     }
-    return { ...base, source: r.source };
+    return { ...base, source: renderForModel(r.source) };
   });
   const returnFormat = hasPluralItems
     ? "For a scalar item (has `source`) return {\"id\",\"translation\"}; for a plural item (has `plural`) return {\"id\",\"forms\"} with one string per required category."
