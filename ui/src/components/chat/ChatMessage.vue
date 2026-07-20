@@ -67,14 +67,20 @@ function onLinkKeydown(e: KeyboardEvent) {
   if ((e.key === "Enter" || e.key === " ") && activate(e.target)) e.preventDefault();
 }
 
-// Per-tool expand state (reveals the applied change / raw result).
+// Per-tool expand state (reveals the applied change / raw result). Pending
+// edits awaiting Approve/Skip start OPEN — the summary line truncates, and the
+// user is being asked to approve, so the full proposed change must be visible
+// without a click. Resolved rows start closed.
 const expanded = ref<Record<string, boolean>>({});
-const toggle = (id: string) => { expanded.value[id] = !expanded.value[id]; };
+const isExpanded = (tool: UiToolCall) => expanded.value[tool.id] ?? tool.status === "pending-confirm";
+const toggle = (tool: UiToolCall) => { expanded.value[tool.id] = !isExpanded(tool); };
 
 // A row has something to reveal — and so is clickable — once it's resolved. A
 // skipped (declined) row counts too: it reads like a done row (collapsed, with a
-// chevron) and expands to show what the edit would have been.
-const expandable = (tool: UiToolCall) => tool.status === "done" || tool.status === "error" || tool.status === "declined";
+// chevron) and expands to show what the edit would have been. A pending-confirm
+// row is expandable so the proposal can be collapsed/reopened while deciding.
+const expandable = (tool: UiToolCall) =>
+  tool.status === "done" || tool.status === "error" || tool.status === "declined" || tool.status === "pending-confirm";
 
 // Coerce a tool result/input (which may arrive as a JSON string on reload) to a
 // plain object, or null if it isn't one.
@@ -138,7 +144,8 @@ function appliedValue(tool: UiToolCall): string | null {
 
 function detail(tool: UiToolCall): string {
   if (tool.status === "error") return tool.error ?? "error";
-  const raw = tool.result;
+  // A pending edit has no result yet — show its full proposed input instead.
+  const raw = tool.result ?? (tool.status === "pending-confirm" ? tool.input : undefined);
   if (raw === undefined || raw === null) return "";
   // Pretty-print as indented JSON: objects directly, and strings that are
   // themselves JSON after parsing. Plain (non-JSON) strings pass through as-is.
@@ -187,8 +194,8 @@ function detail(tool: UiToolCall): string {
           :type="expandable(tool) ? 'button' : undefined"
           class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors"
           :class="expandable(tool) ? 'hover:bg-background' : ''"
-          :aria-expanded="expandable(tool) ? expanded[tool.id] : undefined"
-          @click="expandable(tool) && toggle(tool.id)"
+          :aria-expanded="expandable(tool) ? isExpanded(tool) : undefined"
+          @click="expandable(tool) && toggle(tool)"
         >
           <span
             class="flex size-[18px] shrink-0 items-center justify-center rounded-full"
@@ -214,13 +221,13 @@ function detail(tool: UiToolCall): string {
           <ChevronRight
             v-if="expandable(tool)"
             class="size-3.5 shrink-0 text-muted-foreground transition-transform"
-            :class="expanded[tool.id] ? 'rotate-90' : ''"
+            :class="isExpanded(tool) ? 'rotate-90' : ''"
           />
         </component>
 
-        <!-- Expanded detail: the applied (or, for a skipped row, the would-be)
-             value for edits, else the raw result. -->
-        <div v-if="expanded[tool.id]" class="px-3 pb-3 pl-[42px]">
+        <!-- Expanded detail: the applied (or, for a pending/skipped row, the
+             proposed) value for edits, else the raw result/input. -->
+        <div v-if="isExpanded(tool)" class="px-3 pb-3 pl-[42px]">
           <div v-if="appliedValue(tool) !== null" class="flex flex-col gap-1.5">
             <span v-if="toolKey(tool)" class="break-all font-mono text-[11px] text-muted-foreground">{{ toolKey(tool) }}</span>
             <div class="flex items-start gap-1.5 text-[13px] leading-snug">
