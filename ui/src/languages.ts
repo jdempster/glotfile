@@ -18,14 +18,17 @@ export interface ResolvedLanguage {
   rtl: boolean; // base language is written right-to-left
 }
 
-const displayNames = new Intl.DisplayNames([DISPLAY_LOCALE], { type: "language" });
+// "standard" naming ("English (United States)") over the default "dialect"
+// ("American English"): regional variants share a prefix, so the A-Z sort
+// groups them under their base language instead of scattering them.
+const displayNames = new Intl.DisplayNames([DISPLAY_LOCALE], { type: "language", languageDisplay: "standard" });
 const endonymCache = new Map<string, string | undefined>();
 
 function endonymFor(bcp47: string): string | undefined {
   if (!endonymCache.has(bcp47)) {
     let value: string | undefined;
     try {
-      value = new Intl.DisplayNames([bcp47], { type: "language" }).of(bcp47) ?? undefined;
+      value = new Intl.DisplayNames([bcp47], { type: "language", languageDisplay: "standard" }).of(bcp47) ?? undefined;
     } catch {
       value = undefined;
     }

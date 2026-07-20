@@ -22,11 +22,12 @@ describe("resolveLanguage", () => {
     expect(() => resolveLanguage("en_US")).not.toThrow();
     const us = resolveLanguage("en_US");
     expect(us.bcp47).toBe("en-US");
-    expect(us.name).toContain("American");
+    // "standard" naming keeps regional variants prefixed with the base language.
+    expect(us.name).toBe("English (United States)");
     expect(us.flagRegion).toBe("US");
 
     const gb = resolveLanguage("en_GB");
-    expect(gb.name).toContain("British");
+    expect(gb.name).toBe("English (United Kingdom)");
     expect(gb.flagRegion).toBe("GB");
   });
 
