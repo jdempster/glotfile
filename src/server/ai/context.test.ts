@@ -290,6 +290,12 @@ describe("buildContextSystemPrompt", () => {
     expect(p).toMatch(/project context/i);
     expect(p).toContain("'feed' means fertilizer");
   });
+
+  it("tells the writer to keep domain terms verbatim, never paraphrased into a gloss", () => {
+    const p = buildContextSystemPrompt();
+    expect(p).toMatch(/domain term/i);
+    expect(p).toMatch(/never paraphrase/i);
+  });
 });
 
 describe("buildContextBatchPrompt literals", () => {

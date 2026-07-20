@@ -20,7 +20,7 @@ Glotfile translates via **one provider at a time**, chosen by the `ai.provider` 
 Stored per-machine in `.glotfile/settings.json` (gitignored). The default:
 
 ```json
-"ai": { "provider": "anthropic", "model": "claude-sonnet-4-6", "endpoint": null, "region": null, "batchSize": 25 }
+"ai": { "provider": "anthropic", "model": "claude-opus-4-8", "endpoint": null, "region": null, "batchSize": 10 }
 ```
 
 | Field | Meaning |
@@ -29,7 +29,7 @@ Stored per-machine in `.glotfile/settings.json` (gitignored). The default:
 | `model` | The model id for the chosen provider. |
 | `endpoint` | Base URL override (Anthropic / OpenAI / OpenRouter / Ollama). `null` for the provider default — OpenRouter defaults to `https://openrouter.ai/api/v1`, Ollama to `http://localhost:11434/v1`. An overridden Ollama endpoint must include the `/v1` suffix. |
 | `region` | AWS region (Bedrock). Falls back to `AWS_REGION`. |
-| `batchSize` | Strings per request (default `25`). |
+| `batchSize` | Strings per request (default `10`). Smaller batches follow glossary and per-language rules more faithfully; larger batches are cheaper per run. |
 
 ## Examples
 

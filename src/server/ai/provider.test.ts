@@ -188,6 +188,24 @@ describe("prompt guidance (project context + per-locale rules)", () => {
     expect(buildSystemPrompt([pluralReq])).toMatch(/plural items/i);
     expect(buildSystemPrompt([req])).not.toMatch(/plural items/i);
   });
+
+  it("states that locale rules override per-item context in the system prompt", () => {
+    const sys = buildSystemPrompt([frReq]);
+    expect(sys).toMatch(/never overrides/i);
+    // The precedence note only appears alongside an actual locale instruction.
+    expect(buildSystemPrompt([req])).not.toMatch(/never overrides/i);
+  });
+
+  it("restates the locale instruction next to the items in the batch prompt", () => {
+    const text = buildBatchPrompt([frReq, { ...frReq, id: "1", key: "auth.signOut" }]);
+    expect(text).toContain("Use vouvoiement throughout.");
+    expect(text).toMatch(/override any per-item context/i);
+  });
+
+  it("omits the locale instruction from the batch prompt for mixed-locale or bare requests", () => {
+    expect(buildBatchPrompt([frReq, deReq])).not.toContain("Use vouvoiement throughout.");
+    expect(buildBatchPrompt([req])).not.toMatch(/target-language rules/i);
+  });
 });
 
 describe("TranslationProvider interface", () => {

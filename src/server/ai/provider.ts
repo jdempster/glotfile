@@ -210,6 +210,8 @@ export function buildSystemPrompt(reqs: TranslationRequest[]): string {
       "",
       `Additional instructions for the target language (${targetLocale}) — apply these on top of the rules above:`,
       localeInstruction,
+      "",
+      "These target-language rules are authoritative for WORDING. A per-item `context` explains what the source means; it never overrides how these rules say the target language must phrase it. When a context's English gloss of a term pulls toward wording these rules forbid, the rules win.",
     );
   }
   return lines.join("\n");
@@ -223,6 +225,14 @@ export function buildBatchPrompt(reqs: TranslationRequest[]): string {
   const targetLocale = reqs[0]?.targetLocale ?? "";
   const hasPluralItems = reqs.some((r) => r.plural !== undefined);
   const hasGlossaryItems = reqs.some((r) => r.glossary !== undefined && r.glossary.length > 0);
+  // Restate the per-locale rules right next to the items: buried at the tail of
+  // the system prompt they lose to a per-item `context` that glosses a term the
+  // other way (seen in the wild: a context saying "sign in = register arrival"
+  // beat a rule forbidding the "register"-family rendering). Same single-locale
+  // guard as buildSystemPrompt.
+  const localeInstruction = new Set(reqs.map((r) => r.targetLocale)).size === 1
+    ? reqs[0]?.localeInstruction?.trim()
+    : undefined;
   const items = reqs.map((r) => {
     const base = {
       id: r.id,
@@ -251,6 +261,9 @@ export function buildBatchPrompt(reqs: TranslationRequest[]): string {
     ? "For a scalar item (has `source`) return {\"id\",\"translation\"} — one plain string, never an ICU plural/select expression; for a plural item (has `plural`) return {\"id\",\"forms\"} with one string per required category."
     : "Return {\"id\",\"translation\"} for each item — one plain string, never an ICU plural/select expression.";
   return `Translate every item below into the target locale: ${targetLocale}. All items share this one target language.\n` +
+    (localeInstruction
+      ? `Target-language rules for ${targetLocale} — authoritative for wording; they override any per-item context that suggests different phrasing:\n${localeInstruction}\n`
+      : "") +
     (hasGlossaryItems ? "Glossary entries are constraints you MUST apply. " : "") +
     "Items with hasScreenshot:true have a screenshot supplied as a separate image block above; use it for context. " +
     `${returnFormat} ` +

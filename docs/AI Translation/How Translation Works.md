@@ -13,7 +13,7 @@ For each string that needs translating, Glotfile sends the provider:
 - any **max length**, and
 - for vision-capable models, the key's **screenshot**.
 
-Strings are sent in batches (the `ai.batchSize` setting, default 25).
+Strings are sent in batches (the `ai.batchSize` setting, default 10). Smaller batches improve how faithfully the model applies glossary and per-language rules; larger batches cost less by repeating the system prompt over fewer requests.
 
 ### Project context and per-language rules
 

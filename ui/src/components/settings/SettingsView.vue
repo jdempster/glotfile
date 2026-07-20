@@ -191,7 +191,7 @@ const profileNameDraft = ref(""); // editable name for selected profile
 // The AI config being edited — either the active profile or the bare ai fallback
 const aiDraft = reactive({
   provider: "anthropic", model: "", endpoint: "", region: "",
-  batchSize: 25 as number | string,
+  batchSize: 10 as number | string,
   concurrency: "" as number | string,
   contextBatchSize: "" as number | string,
   contextConcurrency: "" as number | string,
@@ -245,7 +245,7 @@ function aiToSettings(): AiSettings {
     model: aiDraft.model.trim(),
     endpoint: endpoint === "" ? null : endpoint,
     region: region === "" ? null : region,
-    batchSize: Number.isFinite(n) && n > 0 ? n : 25,
+    batchSize: Number.isFinite(n) && n > 0 ? n : 10,
     concurrency: Number.isFinite(c) && c > 0 ? c : undefined,
     contextBatchSize: Number.isFinite(cb) && cb > 0 ? cb : undefined,
     contextConcurrency: Number.isFinite(cc) && cc > 0 ? cc : undefined,
@@ -1358,7 +1358,7 @@ function onSynced(): void {
 
               <div class="grid gap-1.5">
                 <Label for="ai-context-batch">Batch size</Label>
-                <Input id="ai-context-batch" v-model.number="aiDraft.contextBatchSize" type="number" min="1" :placeholder="String(aiDraft.batchSize || 25)" class="w-28" />
+                <Input id="ai-context-batch" v-model.number="aiDraft.contextBatchSize" type="number" min="1" :placeholder="String(aiDraft.batchSize || 10)" class="w-28" />
                 <p class="text-xs text-muted-foreground">Keys per request. Defaults to translation batch size.</p>
               </div>
 

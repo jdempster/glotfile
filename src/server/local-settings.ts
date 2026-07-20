@@ -28,10 +28,10 @@ export interface LocalSettings {
 
 const DEFAULT_AI: AiConfig = {
   provider: "anthropic",
-  model: "claude-sonnet-4-6",
+  model: "claude-opus-4-8",
   endpoint: null,
   region: null,
-  batchSize: 25,
+  batchSize: 10,
 };
 const DEFAULT_EDITOR: EditorId = "vscode";
 
