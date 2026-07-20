@@ -1,6 +1,6 @@
 import type { PluralCategory } from "../schema.js";
 import type { TranslationRequest, TranslationResult } from "./provider.js";
-import { canonicalizeLiterals, placeholdersMatch, pluralFormPlaceholdersMatch } from "../placeholders.js";
+import { canonicalizeLiterals, isIcuPluralOrSelect, placeholdersMatch, pluralFormPlaceholdersMatch } from "../placeholders.js";
 
 // What a provider's transport returns per item: scalar items carry `translation`,
 // plural items carry `forms`.
@@ -114,6 +114,13 @@ export function validateTranslation(
   translation: string | undefined,
 ): TranslationResult {
   if (translation === undefined) return { id: req.id, error: "No translation returned." };
+  // A model may "helpfully" wrap a scalar in an ICU plural for a plural-rich
+  // locale (pl, uk…). The arg name matches the source placeholder, so the
+  // placeholder check alone lets it through — and the stored blob then breaks
+  // every non-ICU export. The real remedy is converting the key to a plural.
+  if (!isIcuPluralOrSelect(req.source) && isIcuPluralOrSelect(translation)) {
+    return { id: req.id, error: "Model returned an ICU plural/select for a scalar string; convert the key to a plural instead." };
+  }
   // The model sees literals in rendered form ({{name}}, via renderForModel) and
   // echoes them back bare; the store path re-escapes them ('{{name}}'). Compare
   // placeholders on that canonical form — the same bytes that will be stored —

@@ -192,6 +192,7 @@ export function buildSystemPrompt(reqs: TranslationRequest[]): string {
     "- Preserve every interpolation placeholder EXACTLY as written: {name}, {{count}}, %s, %d, :name. Never translate, rename, reorder, or remove them.",
     "- The item's `literals` array lists app-managed verbatim tokens (e.g. {{gardener}}). Reproduce each one EXACTLY as shown — translate the words around them, but never translate, rename, or drop a literal token. If a literal is shown wrapped in apostrophes ('{name}'), keep the apostrophes: they are part of that token, not prose.",
     "- Preserve ICU plural/select structure verbatim (e.g. {count, plural, one {…} other {…}}); translate only the human-readable text inside each branch.",
+    "- NEVER add ICU plural/select structure the source does not have. An item is plural ONLY when it carries a `plural` field; every other item is a single plain string, even when the target language normally inflects by count — phrase that one string so it reads naturally for any value of its numeric placeholder.",
     "- Glossary: a term marked do-not-translate MUST appear unchanged in the translation. A term with a forced translation for the target locale MUST use that exact translation.",
     "- Respect the max length (characters) when given; prefer a shorter natural phrasing over exceeding it.",
     "- Quotation marks and apostrophes: punctuate exactly as a professional native translator instinctively would for the target language — its typographic conventions (e.g. „German“, «French», “English”, ’ for apostrophes), applied with judgment about what is quoted prose versus a literal that must stay untouched. Never emit a raw ASCII double-quote (\") inside a translated string — it corrupts the JSON reply.",
@@ -247,8 +248,8 @@ export function buildBatchPrompt(reqs: TranslationRequest[]): string {
     return { ...base, source: renderForModel(r.source) };
   });
   const returnFormat = hasPluralItems
-    ? "For a scalar item (has `source`) return {\"id\",\"translation\"}; for a plural item (has `plural`) return {\"id\",\"forms\"} with one string per required category."
-    : "Return {\"id\",\"translation\"} for each item.";
+    ? "For a scalar item (has `source`) return {\"id\",\"translation\"} — one plain string, never an ICU plural/select expression; for a plural item (has `plural`) return {\"id\",\"forms\"} with one string per required category."
+    : "Return {\"id\",\"translation\"} for each item — one plain string, never an ICU plural/select expression.";
   return `Translate every item below into the target locale: ${targetLocale}. All items share this one target language.\n` +
     (hasGlossaryItems ? "Glossary entries are constraints you MUST apply. " : "") +
     "Items with hasScreenshot:true have a screenshot supplied as a separate image block above; use it for context. " +

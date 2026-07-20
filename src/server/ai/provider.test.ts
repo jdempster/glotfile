@@ -97,6 +97,19 @@ describe("prompt assembly", () => {
     expect(sys).not.toMatch(/\bforms\b/i);
   });
 
+  it("system prompt forbids inventing plural/select structure on a scalar item, even without plural items in the batch", () => {
+    const sys = buildSystemPrompt([req]);
+    expect(sys).toMatch(/never.*(add|introduce|invent).*plural/i);
+  });
+
+  it("batch prompt tells the model a scalar translation is one plain string, never ICU plural", () => {
+    for (const reqs of [[req], [req, pluralReq]]) {
+      const text = buildBatchPrompt(reqs);
+      expect(text).toMatch(/one plain string/i);
+      expect(text).toMatch(/never.*plural/i);
+    }
+  });
+
   it("batch prompt emits a plural item's required categories and source forms", () => {
     const text = buildBatchPrompt([pluralReq]);
     expect(text).toContain('"categories"');

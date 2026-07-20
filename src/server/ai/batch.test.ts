@@ -31,6 +31,17 @@ describe("validateTranslation", () => {
     const r = req({ source: "Dear '{{gardener}}'.", placeholders: [] });
     expect(validateTranslation(r, "Cher {{gardener}} {name}.").error).toMatch(/placeholder/i);
   });
+  it("rejects an ICU plural reply to a scalar request even when the arg name matches", () => {
+    const r = req({ source: "{days} watering days", placeholders: ["days"] });
+    const res = validateTranslation(r, "{days, plural, one {{days} dzień} few {{days} dni} other {{days} dnia}}");
+    expect(res.error).toMatch(/plural/i);
+    expect(res.translation).toBeUndefined();
+  });
+  it("accepts an ICU plural reply when the source itself is ICU plural", () => {
+    const r = req({ source: "{count, plural, one {# plant} other {# plants}}", placeholders: ["count"] });
+    const res = validateTranslation(r, "{count, plural, one {# Pflanze} other {# Pflanzen}}");
+    expect(res.error).toBeUndefined();
+  });
 });
 
 describe("runBatched", () => {
