@@ -1,8 +1,9 @@
-import { setMetadata, setSourceValue, createKey, deleteKey } from "../../state.js";
+import { setMetadata, setSourceValue, createKey, deleteKey, convertToPlural, convertToScalar, setSourcePluralForms } from "../../state.js";
+import { isPluralForm, type PluralForm } from "../../schema.js";
 import type { ChatTool, ToolContext } from "../chat-types.js";
 
-// Per-key writes: source text, context, tags, and length budget — the per-string
-// guidance the assistant authors. Lingo never writes translations itself (that's
+// Per-key writes: source text, context, tags, length budget, and plural/single
+// shape — the per-string guidance the assistant authors. Lingo never writes translations itself (that's
 // the app's own translate/review controls), and it has no access to the human
 // Notes field (that's for the developer's own annotations); these tools only
 // shape the SOURCE and the guidance around it. Each is confirm-gated: the user
@@ -123,7 +124,7 @@ const setMaxLength: ChatTool = {
 const setSourceText: ChatTool = {
   confirm: true,
   def: {
-    name: "set_source_text",    description: "Change ONE key's SOURCE-locale text (the original string everything is translated from). Use to fix a typo or reword the source. If the wording actually changes, existing reviewed/machine translations are flagged needs-review automatically, since they may no longer match. Does not apply to plural keys.",
+    name: "set_source_text",    description: "Change ONE key's SOURCE-locale text (the original string everything is translated from). Use to fix a typo or reword the source. If the wording actually changes, existing reviewed/machine translations are flagged needs-review automatically, since they may no longer match. On a plural key this also converts the key to single (non-plural) — the reverse of convert_to_plural — collapsing every language's plural forms to one text, so only use it on a plural key that shouldn't be plural.",
     schema: {
       type: "object",
       properties: {
@@ -138,6 +139,10 @@ const setSourceText: ChatTool = {
   run: async (input, ctx: ToolContext) => {
     const { key, value } = input as { key: string; value: string };
     const s = ctx.load();
+    // A plural key becomes single first: giving it one plain text IS the
+    // conversion. setSourceValue then diffs against the collapsed text, so
+    // translations are only flagged when the wording actually changed.
+    if (s.keys[key]?.plural) convertToScalar(s, key);
     setSourceValue(s, key, value);
     ctx.persist(s);
     return { ok: true, key, source: s.keys[key]?.values[s.config.sourceLocale]?.value ?? "" };
@@ -147,7 +152,7 @@ const setSourceText: ChatTool = {
 const addKey: ChatTool = {
   confirm: true,
   def: {
-    name: "add_key",    description: "Create a NEW key with its source-locale text. Use when the user wants to add a string to the catalog. The key is the dotted/slashed path the code references (e.g. \"plant.repot\"); pick one that matches the project's existing naming. Creates a single (non-plural) key. Fails if the key already exists.",
+    name: "add_key",    description: "Create a NEW key with its source-locale text. Use when the user wants to add a string to the catalog. The key is the dotted/slashed path the code references (e.g. \"plant.repot\"); pick one that matches the project's existing naming. Creates a single (non-plural) key — follow up with convert_to_plural if its wording should vary with a count. Fails if the key already exists.",
     schema: {
       type: "object",
       properties: {
@@ -167,6 +172,46 @@ const addKey: ChatTool = {
     // drillToKey drives the UI to jump to the new key (filter the list to it and
     // open it) — a fresh key is otherwise easy to miss under the current filter.
     return { ok: true, key, source: value.trim(), drillToKey: key };
+  },
+};
+
+const convertKeyToPlural: ChatTool = {
+  confirm: true,
+  def: {
+    name: "convert_to_plural",    description: "Convert ONE single-text key into a plural key whose wording varies with a count placeholder. The existing text in every language becomes that language's \"other\" form, so nothing is lost. Optionally pass the source-locale forms to author them in the same step (e.g. one + other for English) — existing translations are then flagged needs-review since each language must author its own forms. Fails if the key is already plural.",
+    schema: {
+      type: "object",
+      properties: {
+        key: { type: "string", description: "The key path (e.g. \"plant.count\")." },
+        arg: { type: "string", description: "The placeholder the count comes from, e.g. \"count\" for {count}." },
+        forms: {
+          type: "object",
+          description: "Optional SOURCE-locale plural forms, keyed by ICU selector: a CLDR category (zero/one/two/few/many/other) or an exact match like \"=0\". Must include \"other\". Provide only the forms the source language needs.",
+          additionalProperties: { type: "string" },
+        },
+      },
+      required: ["key", "arg"],
+      additionalProperties: false,
+    },
+  },
+  humanSummary: (input) => {
+    const i = input as { key?: string; arg?: string };
+    return `make ${i.key ?? ""} plural on {${i.arg ?? ""}}`;
+  },
+  run: async (input, ctx: ToolContext) => {
+    const { key, arg, forms } = input as { key: string; arg: string; forms?: Record<string, string> };
+    const a = arg.trim();
+    if (!a) throw new Error("arg cannot be empty.");
+    if (forms) {
+      const bad = Object.keys(forms).filter((f) => !isPluralForm(f));
+      if (bad.length) throw new Error(`Not ICU plural selectors: ${bad.join(", ")}. Use zero/one/two/few/many/other or "=N".`);
+      if (!(forms.other ?? "").trim()) throw new Error('forms must include a non-empty "other".');
+    }
+    const s = ctx.load();
+    convertToPlural(s, key, a);
+    if (forms) setSourcePluralForms(s, key, forms as Partial<Record<PluralForm, string>>);
+    ctx.persist(s);
+    return { ok: true, key, arg: a, forms: s.keys[key]?.values[s.config.sourceLocale]?.forms ?? {} };
   },
 };
 
@@ -193,4 +238,4 @@ const deleteKeyTool: ChatTool = {
   },
 };
 
-export const keyWriteTools: ChatTool[] = [setKeyContext, addKeyTag, removeKeyTag, setMaxLength, setSourceText, addKey, deleteKeyTool];
+export const keyWriteTools: ChatTool[] = [setKeyContext, addKeyTag, removeKeyTag, setMaxLength, setSourceText, addKey, convertKeyToPlural, deleteKeyTool];

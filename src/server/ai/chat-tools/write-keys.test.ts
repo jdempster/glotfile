@@ -100,6 +100,74 @@ describe("key write tools", () => {
     await expect(tool("delete_key").run({ key: "nope.missing" }, ctx)).rejects.toThrow();
   });
 
+  it("convert_to_plural moves every locale's text into the \"other\" form and records the arg", async () => {
+    const res = await tool("convert_to_plural").run({ key: "plant.feed", arg: "count" }, ctx) as { arg: string };
+    expect(res.arg).toBe("count");
+    expect(state.keys["plant.feed"]!.plural).toEqual({ arg: "count" });
+    expect(state.keys["plant.feed"]!.values.en).toEqual({ forms: { other: "Feed" }, state: "source" });
+    expect(state.keys["plant.feed"]!.values.de!.forms).toEqual({ other: "Füttern" });
+  });
+
+  it("convert_to_plural with forms writes the source forms and flags translations needs-review", async () => {
+    await tool("convert_to_plural").run(
+      { key: "plant.feed", arg: "count", forms: { one: "Feed {count} plant", other: "Feed {count} plants" } },
+      ctx,
+    );
+    expect(state.keys["plant.feed"]!.values.en!.forms).toEqual({ one: "Feed {count} plant", other: "Feed {count} plants" });
+    // The source wording changed, so the existing machine translation is stale.
+    expect(state.keys["plant.feed"]!.values.de!.state).toBe("needs-review");
+  });
+
+  it("convert_to_plural rejects forms with an unknown selector or a missing \"other\"", async () => {
+    await expect(
+      tool("convert_to_plural").run({ key: "plant.feed", arg: "count", forms: { some: "x", other: "y" } }, ctx),
+    ).rejects.toThrow(/selector/i);
+    await expect(
+      tool("convert_to_plural").run({ key: "plant.feed", arg: "count", forms: { one: "x" } }, ctx),
+    ).rejects.toThrow(/other/i);
+    expect(state.keys["plant.feed"]!.plural).toBeUndefined();
+  });
+
+  it("convert_to_plural rejects an already-plural key and a blank arg", async () => {
+    state.keys["plant.feed"]!.plural = { arg: "count" };
+    await expect(tool("convert_to_plural").run({ key: "plant.feed", arg: "count" }, ctx)).rejects.toThrow(/plural/i);
+    delete state.keys["plant.feed"]!.plural;
+    await expect(tool("convert_to_plural").run({ key: "plant.feed", arg: "  " }, ctx)).rejects.toThrow(/arg/i);
+  });
+
+  it("set_source_text on a plural key converts it to single with the new text", async () => {
+    state.keys["plant.feed"] = {
+      plural: { arg: "count" },
+      values: {
+        en: { forms: { one: "{count} plant", other: "{count} plants" }, state: "source" },
+        de: { forms: { one: "{count} Pflanze", other: "{count} Pflanzen" }, state: "machine" },
+      },
+    };
+    const res = await tool("set_source_text").run({ key: "plant.feed", value: "Your plants" }, ctx) as { source: string };
+    expect(res.source).toBe("Your plants");
+    expect(state.keys["plant.feed"]!.plural).toBeUndefined();
+    expect(state.keys["plant.feed"]!.values.en).toEqual({ value: "Your plants", state: "source" });
+    // The target collapses to scalar (inline ICU, so no wording is lost) and,
+    // since the source wording changed, is flagged for re-review.
+    expect(state.keys["plant.feed"]!.values.de!.forms).toBeUndefined();
+    expect(state.keys["plant.feed"]!.values.de!.state).toBe("needs-review");
+  });
+
+  it("set_source_text on a plural key keeps translations intact when the text matches the collapsed form", async () => {
+    state.keys["plant.feed"] = {
+      plural: { arg: "count" },
+      values: { en: { forms: { other: "Feed" }, state: "source" }, de: { forms: { other: "Füttern" }, state: "machine" } },
+    };
+    await tool("set_source_text").run({ key: "plant.feed", value: "Feed" }, ctx);
+    // A lone "other" collapses to exactly this text, so nothing actually changed:
+    // the machine translation survives un-flagged.
+    expect(state.keys["plant.feed"]!.values.de).toEqual({ value: "Füttern", state: "machine" });
+  });
+
+  it("does not expose a convert_to_single tool — set_source_text on a plural key is the conversion", () => {
+    expect(keyWriteTools.find((t) => t.def.name === "convert_to_single")).toBeUndefined();
+  });
+
   it("every key-write tool is confirm-gated — edits run only after the user approves", () => {
     expect(keyWriteTools.every((t) => t.confirm === true)).toBe(true);
   });
