@@ -18,7 +18,7 @@ import { loadLocalSettings } from "./local-settings.js";
 import { selectRequests, applyResults, attachScreenshotsForProvider, runLocaleParallel } from "./ai/run.js";
 import { buildSystemPrompt, supportsBatchTranslate, supportsBatchComplete, type BatchTranslationProvider, type TranslationProvider } from "./ai/provider.js";
 import { submitBatchTranslation, applyBatchResults } from "./ai/batch-run.js";
-import { loadPendingBatch, clearPendingBatch, type PendingBatch } from "./ai/pending-batch.js";
+import { listPendingBatches, clearPendingBatch, type PendingBatch } from "./ai/pending-batch.js";
 import { submitContextBatch, applyContextBatchResults } from "./ai/context-batch-run.js";
 import { loadPendingContextBatch, clearPendingContextBatch, type PendingContextBatch } from "./ai/pending-context-batch.js";
 import { submitGlossarySuggestBatch, applyGlossarySuggestBatchResults } from "./ai/glossary-batch-run.js";
@@ -469,15 +469,15 @@ async function waitAndApply(args: ParsedArgs, provider: BatchTranslationProvider
 
 async function runBatch(args: ParsedArgs): Promise<void> {
   const projectRoot = dirname(resolve(args.statePath));
-  const pending = loadPendingBatch(projectRoot);
+  const pendings = listPendingBatches(projectRoot);
   const ctxPending = loadPendingContextBatch(projectRoot);
   const glossPending = loadPendingGlossaryBatch(projectRoot);
-  if (!pending && !ctxPending && !glossPending) {
+  if (!pendings.length && !ctxPending && !glossPending) {
     console.log("No pending batch. Start one with `glotfile translate --batch`, `glotfile build-context --batch`, or `glotfile suggest-glossary --batch`.");
     return;
   }
   const action = args.batchAction ?? "status";
-  if (pending) await runTranslationBatchAction(args, pending, action, projectRoot);
+  for (const pending of pendings) await runTranslationBatchAction(args, pending, action, projectRoot);
   if (ctxPending) await runContextBatchAction(args, ctxPending, action, projectRoot);
   if (glossPending) await runGlossaryBatchAction(args, glossPending, action, projectRoot);
 }
@@ -499,7 +499,7 @@ async function runTranslationBatchAction(args: ParsedArgs, pending: PendingBatch
     } catch {
       remoteFailed = true;
     }
-    clearPendingBatch(projectRoot);
+    clearPendingBatch(projectRoot, pending.batchId);
     const suffix = remoteFailed ? " (remote cancel failed — it will expire server-side)" : "";
     console.log(`Canceled batch ${pending.batchId}.${suffix}`);
     return;

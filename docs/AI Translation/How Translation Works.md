@@ -70,9 +70,9 @@ glotfile batch cancel               # cancel a pending batch
 
 When the Anthropic provider is active, the Translate dialog shows a **Batch (50% cost)** button alongside the normal Translate button. After submission, a banner in the editor tracks progress; when the batch finishes, click **Apply results** to write the translations.
 
-### Pending handle
+### Pending handles
 
-The in-flight batch state is stored in `.glotfile/batch.json` — project-local and machine-specific. Only one pending batch per project is tracked at a time. The `.glotfile/` directory is self-ignoring (it writes its own `.gitignore` entry), so `batch.json` is never committed.
+Each in-flight batch is stored as `.glotfile/batches/<batchId>.json` — project-local and machine-specific. Several batches can be pending at once (for example one per target language, so each language applies the moment it finishes); a new submission is rejected only when it overlaps a pending batch on the same string and language. The `.glotfile/` directory is self-ignoring (it writes its own `.gitignore` entry), so batch handles are never committed.
 
 ### Staleness and error recovery
 

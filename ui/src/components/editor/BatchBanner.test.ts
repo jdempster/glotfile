@@ -21,10 +21,10 @@ describe("BatchBanner", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("renders nothing when no batch is pending", async () => {
-    vi.mocked(batchStatus).mockResolvedValue({ supported: true, pending: null });
+    vi.mocked(batchStatus).mockResolvedValue({ supported: true, pending: [] });
     const w = mount(BatchBanner);
     await flushPromises();
-    // v-if="pending" renders a comment node when null — the wrapper should have no element.
+    // v-if renders a comment node when the list is empty — the wrapper should have no element.
     expect(w.find("div").exists()).toBe(false);
   });
 
@@ -34,14 +34,14 @@ describe("BatchBanner", () => {
     // can't be applied, so the banner must stay hidden.
     vi.mocked(batchStatus).mockResolvedValue({
       supported: false,
-      pending: {
+      pending: [{
         batchId: "batch_stale",
         createdAt: "2026-06-12T00:00:00Z",
         model: "claude-opus-4-8",
         total: 10,
         status: "ended",
         counts: { processing: 0, succeeded: 10, errored: 0, canceled: 0, expired: 0 },
-      },
+      }],
     });
     const w = mount(BatchBanner);
     await flushPromises();
@@ -51,14 +51,14 @@ describe("BatchBanner", () => {
   it("shows progress while in flight and disables Apply", async () => {
     vi.mocked(batchStatus).mockResolvedValue({
       supported: true,
-      pending: {
+      pending: [{
         batchId: "batch_1",
         createdAt: "2026-06-12T00:00:00Z",
         model: "claude-opus-4-8",
         total: 100,
         status: "in_progress",
         counts: { processing: 2, succeeded: 3, errored: 0, canceled: 0, expired: 0 },
-      },
+      }],
     });
 
     const w = mount(BatchBanner);
@@ -85,9 +85,9 @@ describe("BatchBanner", () => {
     };
 
     vi.mocked(batchStatus)
-      .mockResolvedValueOnce({ supported: true, pending: pendingEnded })
-      // After apply, batchStatus returns pending: null so banner disappears.
-      .mockResolvedValue({ supported: true, pending: null });
+      .mockResolvedValueOnce({ supported: true, pending: [pendingEnded] })
+      // After apply, batchStatus returns no pendings so the banner disappears.
+      .mockResolvedValue({ supported: true, pending: [] });
 
     vi.mocked(batchApply).mockResolvedValue({
       written: 5,
@@ -109,11 +109,39 @@ describe("BatchBanner", () => {
     await applyBtn!.trigger("click");
     await flushPromises();
 
-    expect(batchApply).toHaveBeenCalledOnce();
+    expect(batchApply).toHaveBeenCalledExactlyOnceWith("batch_2");
     expect(w.emitted("changed")).toBeTruthy();
 
-    // After refresh returns pending: null, the banner should be gone.
+    // After refresh returns no pendings, the banner should be gone.
     expect(w.find("div").exists()).toBe(false);
+  });
+
+  it("renders a row per pending batch and applies only the clicked one", async () => {
+    const base = {
+      createdAt: "2026-06-12T00:00:00Z",
+      model: "claude-opus-4-8",
+      counts: { processing: 0, succeeded: 1, errored: 0, canceled: 0, expired: 0 },
+    };
+    vi.mocked(batchStatus).mockResolvedValue({
+      supported: true,
+      pending: [
+        { ...base, batchId: "batch_fr", locales: ["fr"], total: 10, status: "ended" },
+        { ...base, batchId: "batch_de", locales: ["de"], total: 12, status: "in_progress" },
+      ],
+    });
+    vi.mocked(batchApply).mockResolvedValue({ written: 10, errors: [], staleSkipped: 0, retried: 0, screenshotsSkipped: 0 });
+
+    const w = mount(BatchBanner);
+    await flushPromises();
+
+    // Both rows render, labelled with their locales; only the finished one is applicable.
+    expect(w.text()).toContain("fr — 10");
+    expect(w.text()).toContain("de — 12");
+    const applyBtn = w.findAll("button").find((b) => b.text().includes("Apply results"));
+    expect(applyBtn).toBeTruthy();
+    await applyBtn!.trigger("click");
+    await flushPromises();
+    expect(batchApply).toHaveBeenCalledExactlyOnceWith("batch_fr");
   });
 });
 

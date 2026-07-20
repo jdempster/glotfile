@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { TranslationRequest } from "./provider.js";
 
@@ -27,13 +27,18 @@ export interface PendingBatch {
 
 // Project-specific but machine/account-bound transient state: lives beside the
 // project in ./.glotfile/, kept out of git by the self-ignoring .gitignore.
-export function pendingBatchPath(projectRoot: string): string {
-  return join(projectRoot, ".glotfile", "batch.json");
+// One file per batch, so several batches (e.g. one per target locale) can be
+// in flight at once and each applies the moment it finishes.
+export function pendingBatchesDir(projectRoot: string): string {
+  return join(projectRoot, ".glotfile", "batches");
 }
 
-export function loadPendingBatch(projectRoot: string): PendingBatch | undefined {
-  const path = pendingBatchPath(projectRoot);
-  if (!existsSync(path)) return undefined;
+// batchId comes from the provider — sanitize it for use as a filename.
+export function pendingBatchPath(projectRoot: string, batchId: string): string {
+  return join(pendingBatchesDir(projectRoot), batchId.replace(/[^a-zA-Z0-9_-]/g, "-") + ".json");
+}
+
+function parsePendingBatch(path: string): PendingBatch | undefined {
   try {
     const parsed = JSON.parse(readFileSync(path, "utf8"));
     // a corrupt or wrong-version handle is unrecoverable — treat as absent
@@ -45,14 +50,33 @@ export function loadPendingBatch(projectRoot: string): PendingBatch | undefined 
   }
 }
 
-export function savePendingBatch(projectRoot: string, pending: PendingBatch): void {
-  const dir = join(projectRoot, ".glotfile");
-  mkdirSync(dir, { recursive: true });
-  const gitignore = join(dir, ".gitignore");
-  if (!existsSync(gitignore)) writeFileSync(gitignore, "*\n");
-  writeFileSync(pendingBatchPath(projectRoot), JSON.stringify(pending, null, 2) + "\n");
+// All in-flight batches, oldest first (submission order).
+export function listPendingBatches(projectRoot: string): PendingBatch[] {
+  const dir = pendingBatchesDir(projectRoot);
+  if (!existsSync(dir)) return [];
+  const out: PendingBatch[] = [];
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith(".json")) continue;
+    const pending = parsePendingBatch(join(dir, name));
+    if (pending) out.push(pending);
+  }
+  out.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return out;
 }
 
-export function clearPendingBatch(projectRoot: string): void {
-  rmSync(pendingBatchPath(projectRoot), { force: true });
+export function loadPendingBatch(projectRoot: string, batchId: string): PendingBatch | undefined {
+  const path = pendingBatchPath(projectRoot, batchId);
+  if (!existsSync(path)) return undefined;
+  return parsePendingBatch(path);
+}
+
+export function savePendingBatch(projectRoot: string, pending: PendingBatch): void {
+  mkdirSync(pendingBatchesDir(projectRoot), { recursive: true });
+  const gitignore = join(projectRoot, ".glotfile", ".gitignore");
+  if (!existsSync(gitignore)) writeFileSync(gitignore, "*\n");
+  writeFileSync(pendingBatchPath(projectRoot, pending.batchId), JSON.stringify(pending, null, 2) + "\n");
+}
+
+export function clearPendingBatch(projectRoot: string, batchId: string): void {
+  rmSync(pendingBatchPath(projectRoot, batchId), { force: true });
 }

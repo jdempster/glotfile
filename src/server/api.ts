@@ -39,7 +39,7 @@ import { loadChat, saveChat, clearChat } from "./chats.js";
 import type { ToolContext } from "./ai/chat-types.js";
 import { explainProviderError } from "./ai/explain-error.js";
 import { submitBatchTranslation, applyBatchResults } from "./ai/batch-run.js";
-import { loadPendingBatch, clearPendingBatch } from "./ai/pending-batch.js";
+import { listPendingBatches, clearPendingBatch, type PendingBatch } from "./ai/pending-batch.js";
 import { submitContextBatch, applyContextBatchResults } from "./ai/context-batch-run.js";
 import { loadPendingContextBatch, clearPendingContextBatch } from "./ai/pending-context-batch.js";
 import { submitGlossarySuggestBatch, applyGlossarySuggestBatchResults } from "./ai/glossary-batch-run.js";
@@ -106,6 +106,18 @@ export interface ApiDeps {
 
 // Fill each target's usageSnippets from the scan index — shared by the
 // streaming context build and the context batch submit.
+// Pick the pending batch an apply/cancel targets: an explicit batchId wins;
+// with none given, a single pending batch is unambiguous, several are not.
+function resolvePendingBatch(projectRoot: string, batchId: unknown): PendingBatch | { error: string; code: 400 | 404 } {
+  const pendings = listPendingBatches(projectRoot);
+  if (!pendings.length) return { error: "No pending batch.", code: 404 };
+  if (typeof batchId === "string" && batchId) {
+    return pendings.find((p) => p.batchId === batchId) ?? { error: `No pending batch ${batchId}.`, code: 404 };
+  }
+  if (pendings.length === 1) return pendings[0]!;
+  return { error: "Multiple batches are pending — pass batchId.", code: 400 };
+}
+
 export function createApi(deps: ApiDeps): Hono {
   const app = new Hono();
   const load = () => loadState(deps.statePath);
@@ -1424,25 +1436,33 @@ export function createApi(deps: ApiDeps): Hono {
   app.get("/batch/status", async (c) => {
     const aiCfg = loadLocalSettings(projectRoot).ai;
     let supported = false;
-    let provider;
+    let provider: TranslationProvider | undefined;
     try {
       provider = deps.makeProvider ? deps.makeProvider() : makeProvider(aiCfg);
       supported = supportsBatchTranslate(provider);
     } catch {
       // No usable provider (e.g. missing API key) — report unsupported rather than erroring.
     }
-    const pending = loadPendingBatch(projectRoot);
-    if (!pending) return c.json({ supported, pending: null });
-    const base = { batchId: pending.batchId, createdAt: pending.createdAt, model: pending.model, total: pending.total };
-    if (!provider || !supportsBatchTranslate(provider)) {
-      return c.json({ supported, pending: { ...base, status: "unknown", counts: null } });
-    }
-    try {
-      const status = await provider.translationBatchStatus(pending.batchId);
-      return c.json({ supported, pending: { ...base, status: status.status, counts: status.counts } });
-    } catch (e) {
-      return c.json({ supported, pending: { ...base, status: "unknown", counts: null, error: (e as Error).message } });
-    }
+    const pendings = listPendingBatches(projectRoot);
+    const rows = await Promise.all(pendings.map(async (pending) => {
+      const base = {
+        batchId: pending.batchId,
+        createdAt: pending.createdAt,
+        model: pending.model,
+        total: pending.total,
+        locales: [...new Set(pending.jobs.map((j) => j.locale))],
+      };
+      if (!provider || !supportsBatchTranslate(provider)) {
+        return { ...base, status: "unknown", counts: null };
+      }
+      try {
+        const status = await provider.translationBatchStatus(pending.batchId);
+        return { ...base, status: status.status, counts: status.counts };
+      } catch (e) {
+        return { ...base, status: "unknown", counts: null, error: (e as Error).message };
+      }
+    }));
+    return c.json({ supported, pending: rows });
   });
 
   app.post("/batch/translate", (c) => withTranslateLock(async () => {
@@ -1486,8 +1506,9 @@ export function createApi(deps: ApiDeps): Hono {
   }));
 
   app.post("/batch/apply", (c) => withTranslateLock(async () => {
-    const pending = loadPendingBatch(projectRoot);
-    if (!pending) return c.json({ error: "No pending batch." }, 404);
+    const body = await c.req.json().catch(() => ({}));
+    const pending = resolvePendingBatch(projectRoot, body.batchId);
+    if ("error" in pending) return c.json({ error: pending.error }, pending.code);
     const aiCfg = loadLocalSettings(projectRoot).ai;
     let provider;
     try {
@@ -1505,8 +1526,9 @@ export function createApi(deps: ApiDeps): Hono {
   }));
 
   app.post("/batch/cancel", async (c) => {
-    const pending = loadPendingBatch(projectRoot);
-    if (!pending) return c.json({ error: "No pending batch." }, 404);
+    const body = await c.req.json().catch(() => ({}));
+    const pending = resolvePendingBatch(projectRoot, body.batchId);
+    if ("error" in pending) return c.json({ error: pending.error }, pending.code);
     const aiCfg = loadLocalSettings(projectRoot).ai;
     try {
       const provider = deps.makeProvider ? deps.makeProvider() : makeProvider(aiCfg);
@@ -1515,7 +1537,7 @@ export function createApi(deps: ApiDeps): Hono {
       // Cancel best-effort: clearing the local handle must work even when the
       // provider is unreachable (the remote batch simply expires server-side).
     }
-    clearPendingBatch(projectRoot);
+    clearPendingBatch(projectRoot, pending.batchId);
     return c.json({ canceled: pending.batchId });
   });
 

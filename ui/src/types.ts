@@ -138,11 +138,16 @@ export interface BatchPending {
   createdAt: string;
   model: string;
   total: number;
+  // Target locales covered (translation batches only; absent on context/glossary).
+  locales?: string[];
   status: "in_progress" | "canceling" | "ended" | "unknown";
   counts: BatchCounts | null;
   error?: string;
 }
+// Context and glossary batches keep a single server-side handle each…
 export interface BatchStatusResponse { supported: boolean; pending: BatchPending | null }
+// …while several translation batches (e.g. one per locale) can be in flight at once.
+export interface TranslateBatchStatusResponse { supported: boolean; pending: BatchPending[] }
 export interface Features { glossarySuggest: boolean }
 export interface BatchApplyResult {
   written: number;

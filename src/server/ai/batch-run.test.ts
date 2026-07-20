@@ -7,7 +7,7 @@ import { createKey } from "../state.js";
 import type { AiConfig, State } from "../schema.js";
 import type { BatchJobOutcome, BatchJobSpec, BatchTranslationProvider, TranslationRequest } from "./provider.js";
 import { buildBatchJobs, submitBatchTranslation, applyBatchResults } from "./batch-run.js";
-import { loadPendingBatch } from "./pending-batch.js";
+import { loadPendingBatch, listPendingBatches } from "./pending-batch.js";
 import { readLog } from "../log.js";
 import { selectRequests } from "./run.js";
 
@@ -21,7 +21,7 @@ function makeState(): State {
   return s;
 }
 
-function makeProvider(outcomes: Map<string, BatchJobOutcome>) {
+function makeProvider(outcomes: Map<string, BatchJobOutcome>, batchId = "msgbatch_test") {
   const seen: { jobs?: BatchJobSpec[]; syncBatches: TranslationRequest[][] } = { syncBatches: [] };
   const provider: BatchTranslationProvider = {
     supportsVision: () => false,
@@ -33,7 +33,7 @@ function makeProvider(outcomes: Map<string, BatchJobOutcome>) {
       onBatchComplete?.(reqs.length, reqs.length, results);
       return results;
     },
-    submitTranslationBatch: async (jobs) => { seen.jobs = jobs; return "msgbatch_test"; },
+    submitTranslationBatch: async (jobs) => { seen.jobs = jobs; return batchId; },
     translationBatchStatus: async () => ({ status: "ended", counts: { processing: 0, succeeded: 1, errored: 0, canceled: 0, expired: 0 } }),
     translationBatchResults: async () => outcomes,
     cancelTranslationBatch: async () => {},
@@ -76,19 +76,32 @@ describe("submitBatchTranslation", () => {
     const { provider } = makeProvider(new Map());
     const pending = await submitBatchTranslation(state, provider, reqs, 50, "claude-sonnet-4-6", root);
     expect(pending.batchId).toBe("msgbatch_test");
-    const onDisk = loadPendingBatch(root)!;
+    const onDisk = loadPendingBatch(root, pending.batchId)!;
     expect(onDisk.total).toBe(4);
     const stored = onDisk.jobs.flatMap((j) => j.requests);
     expect(stored.every((r) => typeof r.sourceHash === "string" && r.sourceHash.length > 0)).toBe(true);
     expect(stored.every((r) => !("image" in r))).toBe(true);
   });
 
-  it("refuses when a batch is already pending", async () => {
+  it("refuses when a pending batch covers the same key+locale cells", async () => {
     const state = makeState();
     const reqs = selectRequests(state, { onlyMissing: true });
     const { provider } = makeProvider(new Map());
     await submitBatchTranslation(state, provider, reqs, 50, "m", root);
-    await expect(submitBatchTranslation(state, provider, reqs, 50, "m", root)).rejects.toThrow(/already pending/);
+    const { provider: second } = makeProvider(new Map(), "msgbatch_other");
+    await expect(submitBatchTranslation(state, second, reqs, 50, "m", root)).rejects.toThrow(/already covers/);
+  });
+
+  it("allows concurrent batches over disjoint locales", async () => {
+    const state = makeState();
+    const all = selectRequests(state, { onlyMissing: true });
+    const de = all.filter((r) => r.targetLocale === "de");
+    const fr = all.filter((r) => r.targetLocale === "fr");
+    const { provider: p1 } = makeProvider(new Map(), "msgbatch_de");
+    const { provider: p2 } = makeProvider(new Map(), "msgbatch_fr");
+    await submitBatchTranslation(state, p1, de, 50, "m", root);
+    await submitBatchTranslation(state, p2, fr, 50, "m", root);
+    expect(listPendingBatches(root).map((p) => p.batchId).sort()).toEqual(["msgbatch_de", "msgbatch_fr"]);
   });
 });
 
@@ -114,7 +127,26 @@ describe("applyBatchResults", () => {
     expect(out.staleSkipped).toBe(0);
     expect(persisted).not.toBeNull();
     expect(state.keys.greeting!.values.de?.value).toBe("T:Hello");
-    expect(loadPendingBatch(root)).toBeUndefined();
+    expect(loadPendingBatch(root, pending.batchId)).toBeUndefined();
+  });
+
+  it("clears only the applied batch, leaving concurrent ones pending", async () => {
+    const state = makeState();
+    const all = selectRequests(state, { onlyMissing: true });
+    const de = all.filter((r) => r.targetLocale === "de");
+    const fr = all.filter((r) => r.targetLocale === "fr");
+    const { provider: pDe } = makeProvider(new Map(), "msgbatch_de");
+    const pendingDe = await submitBatchTranslation(state, pDe, de, 50, "m", root);
+    const { provider: pFr } = makeProvider(new Map(), "msgbatch_fr");
+    await submitBatchTranslation(state, pFr, fr, 50, "m", root);
+
+    const outcomes = new Map<string, BatchJobOutcome>(pendingDe.jobs.map((j) => [
+      j.customId,
+      { type: "items", items: j.requests.map((r) => ({ id: r.id, translation: `T:${r.source}` })) },
+    ]));
+    const { provider } = makeProvider(outcomes, "msgbatch_de");
+    await applyBatchResults(() => state, () => {}, provider, pendingDe, root, AI);
+    expect(listPendingBatches(root).map((p) => p.batchId)).toEqual(["msgbatch_fr"]);
   });
 
   it("skips results whose source changed since submit", async () => {
@@ -239,6 +271,6 @@ describe("applyBatchResults", () => {
       applyBatchResults(() => state, () => {}, failingProvider, pending, root, AI),
     ).rejects.toThrow("network timeout");
     // The handle must still be present so the caller can retry.
-    expect(loadPendingBatch(root)).toBeDefined();
+    expect(loadPendingBatch(root, pending.batchId)).toBeDefined();
   });
 });

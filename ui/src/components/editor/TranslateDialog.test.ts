@@ -38,7 +38,7 @@ vi.mock("@/api.js", () => ({
     estimatedCost: 0.003,
   } as TranslateEstimate)),
   // Default: batch unsupported. Tests that need the button override per-case.
-  batchStatus: vi.fn(async () => ({ supported: false, pending: null })),
+  batchStatus: vi.fn(async () => ({ supported: false, pending: [] })),
   batchSubmit: vi.fn(async () => ({ batchId: "b1", total: 2 })),
 }));
 
@@ -266,8 +266,8 @@ describe("TranslateDialog", () => {
     );
   });
 
-  it("shows the batch button when the provider supports batches and none is pending", async () => {
-    vi.mocked(batchStatus).mockResolvedValueOnce({ supported: true, pending: null });
+  it("shows the batch button when the provider supports batches", async () => {
+    vi.mocked(batchStatus).mockResolvedValueOnce({ supported: true, pending: [] });
     mountDialog({ open: true, state });
     await nextTick();
     await flushPromises();
@@ -279,7 +279,7 @@ describe("TranslateDialog", () => {
   });
 
   it("submits a batch with the dialog's scope and closes", async () => {
-    vi.mocked(batchStatus).mockResolvedValueOnce({ supported: true, pending: null });
+    vi.mocked(batchStatus).mockResolvedValueOnce({ supported: true, pending: [] });
     const wrapper = mount(TooltipProvider, {
       slots: { default: () => h(TranslateDialog, { open: true, state, filteredKeys: ["k1"], targetLocales: ["fr"], "onUpdate:open": vi.fn() }) },
     });
@@ -303,7 +303,7 @@ describe("TranslateDialog", () => {
 
   it("hides the batch button when unsupported", async () => {
     // Default mock already returns supported: false, but be explicit.
-    vi.mocked(batchStatus).mockResolvedValueOnce({ supported: false, pending: null });
+    vi.mocked(batchStatus).mockResolvedValueOnce({ supported: false, pending: [] });
     mountDialog({ open: true, state });
     await nextTick();
     await flushPromises();

@@ -1939,6 +1939,7 @@ describe("batch translation endpoints", () => {
     const s = defaultState();
     s.config.locales = ["en", "fr"];
     createKey(s, "a", "Hi");
+    createKey(s, "b", "Yo");
     saveState(file, s);
 
     if (!batchCapable) {
@@ -1950,24 +1951,30 @@ describe("batch translation endpoints", () => {
       return { dir, file, app: createApi({ statePath: file, makeProvider }) };
     }
 
-    // Batch-capable provider: captures submitted jobs so translationBatchResults
-    // can reconstruct per-item translations from them.
-    let capturedJobs: Array<{ customId: string; locale: string; requests: Array<{ id: string }> }> = [];
+    // Batch-capable provider: captures submitted jobs per batch id so
+    // translationBatchResults can reconstruct per-item translations from them.
+    type CapturedJobs = Array<{ customId: string; locale: string; requests: Array<{ id: string }> }>;
+    const jobsByBatch = new Map<string, CapturedJobs>();
+    let capturedJobs: CapturedJobs = [];
+    let submits = 0;
     const makeProvider = () => ({
       translate: async (reqs: { id: string }[]) => reqs.map((r) => ({ id: r.id, translation: "Salut" })),
       supportsVision: () => false,
       complete: async () => ({}),
-      submitTranslationBatch: async (jobs: Array<{ customId: string; locale: string; requests: Array<{ id: string }> }>) => {
+      submitTranslationBatch: async (jobs: CapturedJobs) => {
+        const id = submits === 0 ? "msgbatch_x" : `msgbatch_x${submits}`;
+        submits++;
+        jobsByBatch.set(id, jobs);
         capturedJobs = jobs;
-        return "msgbatch_x";
+        return id;
       },
       translationBatchStatus: async (_batchId: string) => ({
         status: "ended" as const,
         counts: { processing: 0, succeeded: 1, errored: 0, canceled: 0, expired: 0 },
       }),
-      translationBatchResults: async (_batchId: string) => {
+      translationBatchResults: async (batchId: string) => {
         const map = new Map<string, { type: "items"; items: Array<{ id: string; translation: string }> }>();
-        for (const job of capturedJobs) {
+        for (const job of jobsByBatch.get(batchId) ?? capturedJobs) {
           map.set(job.customId, {
             type: "items",
             items: job.requests.map((r) => ({ id: r.id, translation: "Salut" })),
@@ -1980,13 +1987,13 @@ describe("batch translation endpoints", () => {
     return { dir, file, app: createApi({ statePath: file, makeProvider }) };
   }
 
-  it("GET /batch/status with a non-batch provider returns supported:false and pending:null", async () => {
+  it("GET /batch/status with a non-batch provider returns supported:false and no pendings", async () => {
     const { app } = setupBatch(false);
     const res = await app.request("/batch/status");
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.supported).toBe(false);
-    expect(body.pending).toBeNull();
+    expect(body.pending).toEqual([]);
   });
 
   it("POST /batch/translate submits, returns batchId + total; GET /batch/status shows pending", async () => {
@@ -2003,10 +2010,11 @@ describe("batch translation endpoints", () => {
 
     const status = await (await app.request("/batch/status")).json();
     expect(status.supported).toBe(true);
-    expect(status.pending).not.toBeNull();
-    expect(status.pending.batchId).toBe("msgbatch_x");
-    expect(status.pending.status).toBe("ended");
-    expect(status.pending.counts).toMatchObject({ succeeded: 1 });
+    expect(status.pending).toHaveLength(1);
+    expect(status.pending[0].batchId).toBe("msgbatch_x");
+    expect(status.pending[0].locales).toEqual(["fr"]);
+    expect(status.pending[0].status).toBe("ended");
+    expect(status.pending[0].counts).toMatchObject({ succeeded: 1 });
   });
 
   it("POST /batch/apply applies results, returns written > 0; status then shows pending:null", async () => {
@@ -2025,10 +2033,10 @@ describe("batch translation endpoints", () => {
 
     // Pending must be cleared after apply.
     const status = await (await app.request("/batch/status")).json();
-    expect(status.pending).toBeNull();
+    expect(status.pending).toEqual([]);
   });
 
-  it("POST /batch/cancel after a submit returns 200 and status shows pending:null", async () => {
+  it("POST /batch/cancel after a submit returns 200 and status shows no pendings", async () => {
     const { app } = setupBatch(true);
     await app.request("/batch/translate", {
       method: "POST",
@@ -2042,7 +2050,7 @@ describe("batch translation endpoints", () => {
     expect(body.canceled).toBe("msgbatch_x");
 
     const status = await (await app.request("/batch/status")).json();
-    expect(status.pending).toBeNull();
+    expect(status.pending).toEqual([]);
   });
 
   it("POST /batch/apply with nothing pending returns 404", async () => {
@@ -2065,6 +2073,32 @@ describe("batch translation endpoints", () => {
       body: JSON.stringify({}),
     });
     expect(res.status).toBe(409);
+  });
+
+  it("runs concurrent batches over disjoint keys; apply and cancel target one by batchId", async () => {
+    const { app } = setupBatch(true);
+    const headers = { "content-type": "application/json" };
+    const b1 = (await (await app.request("/batch/translate", { method: "POST", headers, body: JSON.stringify({ keys: ["a"] }) })).json()).batchId;
+    const b2 = (await (await app.request("/batch/translate", { method: "POST", headers, body: JSON.stringify({ keys: ["b"] }) })).json()).batchId;
+    expect(b1).not.toBe(b2);
+
+    let status = await (await app.request("/batch/status")).json();
+    expect(status.pending.map((p: { batchId: string }) => p.batchId).sort()).toEqual([b1, b2].sort());
+
+    // Ambiguous apply with several pending: must name a batch.
+    const ambiguous = await app.request("/batch/apply", { method: "POST" });
+    expect(ambiguous.status).toBe(400);
+
+    const applied = await app.request("/batch/apply", { method: "POST", headers, body: JSON.stringify({ batchId: b1 }) });
+    expect(applied.status).toBe(200);
+    expect((await applied.json()).written).toBeGreaterThan(0);
+    status = await (await app.request("/batch/status")).json();
+    expect(status.pending.map((p: { batchId: string }) => p.batchId)).toEqual([b2]);
+
+    const canceled = await app.request("/batch/cancel", { method: "POST", headers, body: JSON.stringify({ batchId: b2 }) });
+    expect((await canceled.json()).canceled).toBe(b2);
+    status = await (await app.request("/batch/status")).json();
+    expect(status.pending).toEqual([]);
   });
 
   describe("POST /sync", () => {

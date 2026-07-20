@@ -149,7 +149,7 @@ describe("batchApply", () => {
     const spy = vi.fn(async () => jsonResponse(payload));
     vi.stubGlobal("fetch", spy);
     try {
-      const result = await batchApply();
+      const result = await batchApply("batch_abc");
       expect(spy).toHaveBeenCalledTimes(1);
       const [url, init] = spy.mock.calls[0] as unknown as [string, RequestInit];
       expect(url).toBe("/api/batch/apply");
@@ -167,7 +167,7 @@ describe("batchCancel", () => {
     const spy = vi.fn(async () => jsonResponse(payload));
     vi.stubGlobal("fetch", spy);
     try {
-      const result = await batchCancel();
+      const result = await batchCancel("batch_abc");
       expect(spy).toHaveBeenCalledTimes(1);
       const [url, init] = spy.mock.calls[0] as unknown as [string, RequestInit];
       expect(url).toBe("/api/batch/cancel");

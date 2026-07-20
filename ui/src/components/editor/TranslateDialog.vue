@@ -78,8 +78,9 @@ const missingCount = computed(() => {
 const lockedCount = ref<number | null>(null);
 const displayCount = computed(() => lockedCount.value ?? missingCount.value);
 
-// Batch availability, fetched on open. Hidden whenever unsupported, a batch is
-// already pending (the editor banner owns that state), or the check fails.
+// Batch availability, fetched on open. Hidden whenever unsupported or the
+// check fails. Pending batches don't block new ones — several can run at once
+// (the server rejects only a submission overlapping an in-flight key+locale).
 const batchAvailable = ref(false);
 const submittingBatch = ref(false);
 
@@ -87,7 +88,7 @@ async function loadBatchAvailability() {
   batchAvailable.value = false;
   try {
     const s = await batchStatus();
-    batchAvailable.value = s.supported && !s.pending;
+    batchAvailable.value = s.supported;
   } catch {
     // Advisory only — a failed check just hides the batch button.
   }
