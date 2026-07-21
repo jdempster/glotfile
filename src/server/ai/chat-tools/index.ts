@@ -7,6 +7,7 @@ import { glossaryWriteTools } from "./glossary.js";
 import { keyWriteTools } from "./write-keys.js";
 import { viewTools } from "./view.js";
 import { lintTools } from "./lint.js";
+import { retranslateTools } from "./retranslate.js";
 
 // The tools the assistant may call: read the project state, read the user's
 // codebase (incl. where each key is used), drive the editor's view (filter the
@@ -14,10 +15,11 @@ import { lintTools } from "./lint.js";
 // silence noise (ignore globs, per-locale severities, per-key dismissals), and
 // make FOCUSED, single-item changes to the SETUP that steers translation —
 // project/locale guidance, adding a target language, glossary terms, per-key
-// context/tags/length, and source text. Deliberately NO translation writes at all: Lingo never sets or
-// reviews translations (single or bulk) — it gets the guidance right and the user
-// runs translation from the app's own translate/review controls. It also has no
-// access to the human Notes field.
+// context/tags/length, and source text. Lingo never AUTHORS a translation and
+// never re-marks review states — but it may aim the app's own translation
+// pipeline at specific broken cells via retranslate (approval-gated), e.g. to
+// repair lint findings in bulk without the user hand-editing each one. It has
+// no access to the human Notes field.
 export function buildToolRegistry(): ChatTool[] {
-  return [...stateReadTools, ...codebaseTools, ...usageReadTools, ...guidanceWriteTools, ...glossaryWriteTools, ...keyWriteTools, ...viewTools, ...lintTools];
+  return [...stateReadTools, ...codebaseTools, ...usageReadTools, ...guidanceWriteTools, ...glossaryWriteTools, ...keyWriteTools, ...viewTools, ...lintTools, ...retranslateTools];
 }
