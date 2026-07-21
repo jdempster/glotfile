@@ -124,7 +124,7 @@ const setMaxLength: ChatTool = {
 const setSourceText: ChatTool = {
   confirm: true,
   def: {
-    name: "set_source_text",    description: "Change ONE key's SOURCE-locale text (the original string everything is translated from). Use to fix a typo or reword the source. If the wording actually changes, existing reviewed/machine translations are flagged needs-review automatically, since they may no longer match. On a plural key this also converts the key to single (non-plural) — the reverse of convert_to_plural — collapsing every language's plural forms to one text, so only use it on a plural key that shouldn't be plural.",
+    name: "set_source_text",    description: "Change ONE key's SOURCE-locale text (the original string everything is translated from). Use to fix a typo or reword the source. If the wording actually changes, existing reviewed/machine translations are flagged needs-review automatically, since they may no longer match. On a plural key this also converts the key to single (non-plural) — the reverse of convert_to_plural — collapsing every language's plural forms to one text, so only use it on a plural key that shouldn't be plural, and check its code usage first (read_key_usage) to confirm no call site passes a count.",
     schema: {
       type: "object",
       properties: {
@@ -178,7 +178,7 @@ const addKey: ChatTool = {
 const convertKeyToPlural: ChatTool = {
   confirm: true,
   def: {
-    name: "convert_to_plural",    description: "Convert ONE single-text key into a plural key whose wording varies with a count placeholder. The existing text in every language becomes that language's \"other\" form, so nothing is lost. Optionally pass the source-locale forms to author them in the same step (e.g. one + other for English) — existing translations are then flagged needs-review since each language must author its own forms. Fails if the key is already plural.",
+    name: "convert_to_plural",    description: "Convert ONE single-text key into a plural key whose wording varies with a count placeholder. FIRST check the code with read_key_usage: confirm the call sites actually pass a numeric count and that `arg` matches the variable name they use — a string that merely mentions a quantity is not plural unless the code drives it, and a wrong conversion flags every language needs-review. If the key has no code references, say so and get the user's confirmation of the placeholder name before converting. The existing text in every language becomes that language's \"other\" form, so nothing is lost. Optionally pass the source-locale forms to author them in the same step (e.g. one + other for English) — existing translations are then flagged needs-review since each language must author its own forms. Fails if the key is already plural.",
     schema: {
       type: "object",
       properties: {

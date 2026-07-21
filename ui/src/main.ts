@@ -8,6 +8,7 @@ import "@fontsource/ibm-plex-mono/500.css";
 import "./styles.css";
 import { initTheme, syncFromServer } from "./theme.js";
 import { syncPanelWidths } from "./panel-widths.js";
+import { syncAutoApprove } from "./chat.js";
 import { hydrateEditor } from "./editor.js";
 import { hydrateMultilingualLocales } from "./multilingualLocales.js";
 
@@ -18,6 +19,8 @@ initTheme();
 createApp(App).mount("#app");
 void syncFromServer();
 void syncPanelWidths();
+// Lingo's auto-approve toggle is a machine-wide pref too.
+void syncAutoApprove();
 // Pull the per-project editor preference (gitignored local settings) after mount.
 void hydrateEditor();
 // Same source: the multilingual view's remembered locale subset.

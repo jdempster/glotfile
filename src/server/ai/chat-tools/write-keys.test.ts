@@ -100,6 +100,14 @@ describe("key write tools", () => {
     await expect(tool("delete_key").run({ key: "nope.missing" }, ctx)).rejects.toThrow();
   });
 
+  it("plural conversions tell Lingo to verify code usage first", () => {
+    // A key that merely mentions a quantity isn't plural unless the code passes
+    // a count — and a wrong conversion flags every language needs-review. Both
+    // directions must steer Lingo to read_key_usage before converting.
+    expect(tool("convert_to_plural").def.description).toMatch(/read_key_usage/);
+    expect(tool("set_source_text").def.description).toMatch(/read_key_usage/);
+  });
+
   it("convert_to_plural moves every locale's text into the \"other\" form and records the arg", async () => {
     const res = await tool("convert_to_plural").run({ key: "plant.feed", arg: "count" }, ctx) as { arg: string };
     expect(res.arg).toBe("count");

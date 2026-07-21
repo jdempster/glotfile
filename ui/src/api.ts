@@ -295,6 +295,7 @@ export interface UiPrefs {
   detailPanelWidth?: number;
   chatPanelWidth?: number;
   detailPanelOpen?: boolean;
+  chatAutoApprove?: boolean;
 }
 export const getUiPrefs = () => fetch("/api/ui-prefs").then((r) => json<UiPrefs>(r));
 export const putUiPrefs = (patch: Partial<UiPrefs>) =>

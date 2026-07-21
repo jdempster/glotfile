@@ -2,8 +2,9 @@
 import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from "vue";
 import { Pencil, ArrowUp, Sparkles, X, Maximize2, Minimize2 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import ChatMessage from "./ChatMessage.vue";
-import { messages, isSending, loaded, expanded, focusNonce, inputFocused, send, cancel, clear, loadHistory, toggleExpanded, pendingConfirm, respondConfirm } from "@/chat";
+import { messages, isSending, loaded, expanded, focusNonce, inputFocused, send, cancel, clear, loadHistory, toggleExpanded, pendingConfirm, respondConfirm, autoApprove, setAutoApprove } from "@/chat";
 
 // `dock` shows a close affordance in the header for the floating panel.
 defineProps<{ dock?: boolean }>();
@@ -172,6 +173,14 @@ onMounted(() => {
         <span class="text-base font-bold tracking-tight text-foreground">Lingo</span>
       </div>
       <div class="flex items-center gap-0.5">
+        <label
+          class="mr-1.5 flex cursor-pointer select-none items-center gap-1.5 text-xs"
+          :class="autoApprove ? 'text-foreground' : 'text-muted-foreground'"
+          title="Apply Lingo's proposed edits without the Approve card. Every change still shows as a row you can follow — and re-translations still spend AI credit."
+        >
+          <Switch :model-value="autoApprove" aria-label="Auto-approve Lingo's edits" @update:model-value="(v: boolean) => setAutoApprove(v)" />
+          Auto-approve
+        </label>
         <Button v-if="!isEmpty" variant="ghost" size="sm" class="h-7 gap-1.5 text-muted-foreground" @click="clear">
           <Pencil class="size-3.5" />New chat
         </Button>

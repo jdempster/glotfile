@@ -28,6 +28,33 @@ describe("ui-prefs", () => {
     expect(loadUiPrefs(path)).toEqual({ theme: "dark" });
   });
 
+  it("round-trips chatAutoApprove and drops non-boolean values", () => {
+    const path = tmpFile();
+    saveUiPrefs(path, { chatAutoApprove: true });
+    expect(loadUiPrefs(path).chatAutoApprove).toBe(true);
+    writeFileSync(path, JSON.stringify({ chatAutoApprove: "yes" }), "utf8");
+    expect(loadUiPrefs(path).chatAutoApprove).toBeUndefined();
+  });
+
+  it("PUT /ui-prefs accepts chatAutoApprove and chatPanelWidth", async () => {
+    const { uiPrefsPath, app } = apiSetup();
+    const res = await app.request("/ui-prefs", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chatAutoApprove: true, chatPanelWidth: 480 }),
+    });
+    expect(res.status).toBe(200);
+    const prefs = loadUiPrefs(uiPrefsPath);
+    expect(prefs.chatAutoApprove).toBe(true);
+    expect(prefs.chatPanelWidth).toBe(480);
+    const bad = await app.request("/ui-prefs", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chatAutoApprove: "yes" }),
+    });
+    expect(bad.status).toBe(400);
+  });
+
   it("falls back to system when the file is corrupt", () => {
     const path = tmpFile();
     writeFileSync(path, "{ this is not json", "utf8");

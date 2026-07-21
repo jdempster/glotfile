@@ -1,5 +1,5 @@
-import { ref, computed } from "vue";
-import { chatStream, getChat, clearChat as apiClearChat, confirmChatTool, getLocalSettings } from "./api";
+import { ref, computed, watch } from "vue";
+import { chatStream, getChat, clearChat as apiClearChat, confirmChatTool, getLocalSettings, getUiPrefs, putUiPrefs } from "./api";
 import { drillTo, drillToKey, selectKey } from "./drilldown";
 import { addKnownKey } from "./keyIndex";
 import type { ChatStreamEvent, ChatMessage } from "./types";
@@ -271,6 +271,32 @@ export async function respondConfirm(batchId: string, approved: boolean): Promis
   }
   await confirmChatTool(batchId, approved);
 }
+
+// Auto-approve: when on, a pending Approve/Skip card resolves itself — Lingo's
+// edits still render as rows (the audit trail stays), they just apply without
+// the click. Persisted per-machine in the UI prefs, default off.
+export const autoApprove = ref(false);
+
+export function setAutoApprove(on: boolean): void {
+  autoApprove.value = on;
+  void putUiPrefs({ chatAutoApprove: on }).catch(() => {});
+}
+
+// Reconcile with the machine-wide pref after mount (same pattern as the theme).
+export async function syncAutoApprove(): Promise<void> {
+  try {
+    const prefs = await getUiPrefs();
+    if (typeof prefs.chatAutoApprove === "boolean") autoApprove.value = prefs.chatAutoApprove;
+  } catch {
+    /* offline or API error: keep the default (off) */
+  }
+}
+
+// The watcher (not the stream loop) drives the auto-response so it also covers
+// flipping the toggle on while a card is already waiting.
+watch([pendingConfirm, autoApprove], ([pc, on]) => {
+  if (on && pc) void respondConfirm(pc.batchId, true);
+});
 
 export function open(): void { isOpen.value = true; }
 export function toggleOpen(): void {

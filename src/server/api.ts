@@ -223,15 +223,17 @@ export function createApi(deps: ApiDeps): Hono {
       if (!isThemeMode(body.theme)) return c.json({ error: "theme must be system, light, or dark" }, 400);
       patch.theme = body.theme;
     }
-    for (const field of ["keyColumnWidth", "detailPanelWidth"] as const) {
+    for (const field of ["keyColumnWidth", "detailPanelWidth", "chatPanelWidth"] as const) {
       if (field in body) {
         if (!isPanelWidth(body[field])) return c.json({ error: `${field} must be a number between 120 and 1200` }, 400);
         patch[field] = Math.round(body[field]);
       }
     }
-    if ("detailPanelOpen" in body) {
-      if (typeof body.detailPanelOpen !== "boolean") return c.json({ error: "detailPanelOpen must be a boolean" }, 400);
-      patch.detailPanelOpen = body.detailPanelOpen;
+    for (const field of ["detailPanelOpen", "chatAutoApprove"] as const) {
+      if (field in body) {
+        if (typeof body[field] !== "boolean") return c.json({ error: `${field} must be a boolean` }, 400);
+        patch[field] = body[field];
+      }
     }
     if (Object.keys(patch).length === 0) return c.json({ error: "no recognized preferences in body" }, 400);
     saveUiPrefs(uiPrefsPath, patch);

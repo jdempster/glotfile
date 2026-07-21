@@ -14,6 +14,9 @@ export interface UiPrefs {
   chatPanelWidth?: number;
   // Whether the editor's key-details sidebar is shown; absent means the UI default (shown).
   detailPanelOpen?: boolean;
+  // Auto-approve Lingo's confirm-gated edits (the Approve card resolves itself).
+  // Absent means the UI default (off).
+  chatAutoApprove?: boolean;
 }
 
 const THEMES: ThemeMode[] = ["system", "light", "dark"];
@@ -45,6 +48,7 @@ export function loadUiPrefs(path: string): UiPrefs {
   if (isPanelWidth(raw.detailPanelWidth)) prefs.detailPanelWidth = Math.round(raw.detailPanelWidth);
   if (isPanelWidth(raw.chatPanelWidth)) prefs.chatPanelWidth = Math.round(raw.chatPanelWidth);
   if (typeof raw.detailPanelOpen === "boolean") prefs.detailPanelOpen = raw.detailPanelOpen;
+  if (typeof raw.chatAutoApprove === "boolean") prefs.chatAutoApprove = raw.chatAutoApprove;
   return prefs;
 }
 
