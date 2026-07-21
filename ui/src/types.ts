@@ -109,6 +109,8 @@ export interface Config {
   projectContext?: string;
   // Per-locale extra AI translation rules, keyed by canonical (lowercase BCP-47) locale.
   localeInstructions?: Record<string, string>;
+  // Custom instructions appended to Lingo's system prompt (project-level).
+  chatInstructions?: string;
 }
 
 export type LintSeverity = "error" | "warn" | "off";

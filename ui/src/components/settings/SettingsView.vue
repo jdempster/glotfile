@@ -83,6 +83,7 @@ const draft = reactive<ConfigForm>({
   lintRules: {}, lintIgnore: [], lintLocaleRules: {},
   scanAccessors: [], scanPatterns: [], scanInclude: [], scanExclude: [], scanKeep: [],
   projectContext: "", localeInstructions: {},
+  chatInstructions: "",
 });
 
 const loaded = ref(false);
@@ -141,6 +142,7 @@ function applyForm(f: ConfigForm) {
   draft.scanKeep     = [...f.scanKeep];
   draft.projectContext = f.projectContext;
   draft.localeInstructions = { ...f.localeInstructions };
+  draft.chatInstructions = f.chatInstructions;
 }
 
 function snapSaved() {
@@ -164,6 +166,7 @@ function snapSaved() {
     scanKeep:     [...draft.scanKeep],
     projectContext: draft.projectContext,
     localeInstructions: { ...draft.localeInstructions },
+    chatInstructions: draft.chatInstructions,
   };
 }
 
@@ -426,7 +429,8 @@ function sectionEq(id: SectionId): boolean {
   const d = draft, s = saved.value;
   if (id === "languages") return JSON.stringify(d.locales) === JSON.stringify(s.locales) && d.sourceLocale === s.sourceLocale;
   if (id === "guidance") return d.projectContext === s.projectContext
-    && JSON.stringify(d.localeInstructions) === JSON.stringify(s.localeInstructions);
+    && JSON.stringify(d.localeInstructions) === JSON.stringify(s.localeInstructions)
+    && d.chatInstructions === s.chatInstructions;
   // Outputs now also owns the global format defaults + auto-export + export-language limit (Format folded in).
   if (id === "outputs")   return JSON.stringify(d.outputs) === JSON.stringify(s.outputs)
     && String(d.indent) === String(s.indent) && d.finalNewline === s.finalNewline && d.autoExport === s.autoExport
@@ -504,7 +508,8 @@ function sectionSummary(id: SectionId): string {
   if (id === "guidance") {
     const ctx = draft.projectContext.trim() ? 1 : 0;
     const rules = Object.values(draft.localeInstructions).filter((v) => v.trim()).length;
-    const parts = [ctx && "Project context", rules && `${rules} locale rule${rules === 1 ? "" : "s"}`].filter(Boolean);
+    const lingo = draft.chatInstructions.trim() ? 1 : 0;
+    const parts = [ctx && "Project context", rules && `${rules} locale rule${rules === 1 ? "" : "s"}`, lingo && "Lingo instructions"].filter(Boolean);
     return parts.length ? parts.join(" · ") : "Not set";
   }
   if (id === "outputs")    return `${draft.outputs.length} target${draft.outputs.length === 1 ? "" : "s"}${draft.autoExport ? " · auto" : ""}${draft.exportLocales.length ? " · limited" : ""}`;
@@ -1102,6 +1107,21 @@ function onSynced(): void {
                   />
                 </div>
               </div>
+            </div>
+
+            <div class="grid gap-1.5">
+              <Label for="chat-instructions">Lingo instructions</Label>
+              <Textarea
+                id="chat-instructions"
+                v-model="draft.chatInstructions"
+                :rows="6"
+                class="min-h-[130px] resize-y leading-relaxed"
+                placeholder="Extra instructions for the Lingo assistant. e.g. “Answer in British English. Our team calls locales ‘markets’. Prefer fixing guidance over dismissing lint findings.”"
+              />
+              <p class="text-xs text-muted-foreground">
+                Added to Lingo's system prompt for everyone on this project — tune its tone, terminology, and priorities.
+                It doesn't affect translations themselves (use the project context and per-language rules above for that).
+              </p>
             </div>
           </div>
 

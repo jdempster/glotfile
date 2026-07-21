@@ -84,6 +84,13 @@ describe("config-form", () => {
     expect(formToConfig(configToForm(guided))).toEqual(guided);
   });
 
+  it("round-trips chatInstructions and omits it when blank", () => {
+    const guided: Config = { ...config, chatInstructions: "Answer in British English." };
+    expect(formToConfig(configToForm(guided))).toEqual(guided);
+    expect(configToForm(config).chatInstructions).toBe("");
+    expect(formToConfig(configToForm({ ...config, chatInstructions: "  " }))).not.toHaveProperty("chatInstructions");
+  });
+
   it("reads projectContext and localeInstructions into the form", () => {
     const form = configToForm({ ...config, projectContext: "Hello", localeInstructions: { fr: "Tu" } });
     expect(form.projectContext).toBe("Hello");

@@ -36,6 +36,10 @@ Lingo opens beside your work, and remembers the layout you last used:
 
 Every change Lingo makes is written straight to `glotfile.json` — so it shows up as an ordinary git diff you can review or revert — and is recorded in the AI Log alongside your translation runs.
 
+## Customizing Lingo
+
+Add your own standing instructions under **Settings → Translation guidance → Lingo instructions** — tone, terminology ("we call locales *markets*"), language, or priorities ("prefer fixing guidance over dismissing lint findings"). They're appended to Lingo's system prompt for everyone on the project and committed with your config, so the whole team gets the same assistant. They shape how Lingo behaves in chat; they can't grant it new abilities or bypass the Approve flow, and they don't affect translations themselves (use the project context and per-language rules for that).
+
 ## Conversation history & privacy
 
 - Your conversation is stored **locally, per project**, under `./.glotfile/chats/` (git-ignored) and survives page reloads. **New chat** clears it.

@@ -165,6 +165,9 @@ export interface Config {
   // Per-locale extra translation rules, keyed by canonical (lowercase BCP-47)
   // locale; each value is appended to that locale's AI system prompt.
   localeInstructions?: Record<string, string>;
+  // Custom instructions appended to the Lingo assistant's system prompt —
+  // project-level tuning of its tone, language, priorities, and workflow.
+  chatInstructions?: string;
 }
 export interface GlossaryEntry {
   // The source-language term, exactly as it appears in strings. Matching is
@@ -291,6 +294,9 @@ export function validate(raw: unknown): State {
   }
   if (config.projectContext !== undefined && typeof config.projectContext !== "string") {
     fail("config.projectContext must be a string");
+  }
+  if (config.chatInstructions !== undefined && typeof config.chatInstructions !== "string") {
+    fail("config.chatInstructions must be a string");
   }
   if (config.localeInstructions !== undefined) {
     if (!isObject(config.localeInstructions)) fail("config.localeInstructions must be an object");

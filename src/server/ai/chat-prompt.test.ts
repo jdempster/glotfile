@@ -40,4 +40,19 @@ describe("chat system prompt", () => {
     // stay warm across turns, so guard against it creeping back in.
     expect(buildChatSystemPrompt()).not.toContain("Current project snapshot:");
   });
+
+  it("appends custom chat instructions as a fenced final section", () => {
+    const prompt = buildChatSystemPrompt("Answer in British English. Call locales 'markets'.");
+    expect(prompt).toContain("Answer in British English. Call locales 'markets'.");
+    // Framed as team tuning that cannot mint new abilities or bypass approval.
+    expect(prompt).toContain("Custom instructions from this project's team");
+    expect(prompt).toContain("cannot grant tools or abilities");
+    // Appended after the built-in behaviour rules, never before them.
+    expect(prompt.indexOf("Custom instructions")).toBeGreaterThan(prompt.indexOf("Approve button"));
+  });
+
+  it("omits the custom section when instructions are absent or blank", () => {
+    expect(buildChatSystemPrompt()).not.toContain("Custom instructions");
+    expect(buildChatSystemPrompt("  \n ")).not.toContain("Custom instructions");
+  });
 });

@@ -43,6 +43,8 @@ export interface ConfigForm {
   projectContext: string;
   // config.localeInstructions — per-locale AI guidance, keyed by locale ({} when unset).
   localeInstructions: Record<string, string>;
+  // config.chatInstructions — custom additions to Lingo's system prompt ("" when unset).
+  chatInstructions: string;
 }
 
 // Number inputs hand us strings; coerce while tolerating "" / NaN with a fallback.
@@ -85,6 +87,7 @@ export function configToForm(config: Config): ConfigForm {
     scanKeep: [...(config.scan?.keep ?? [])],
     projectContext: config.projectContext ?? "",
     localeInstructions: config.localeInstructions ? structuredClone(config.localeInstructions) : {},
+    chatInstructions: config.chatInstructions ?? "",
   };
 }
 
@@ -153,6 +156,8 @@ export function formToConfig(form: ConfigForm, original?: Config): Config {
       .filter(([, v]) => v !== ""),
   );
   if (Object.keys(localeInstructions).length) config.localeInstructions = localeInstructions;
+  const chatInstructions = form.chatInstructions.trim();
+  if (chatInstructions) config.chatInstructions = chatInstructions;
 
   // config.lint: persist only severities that deviate from the built-in defaults,
   // plus ignore globs. lint.spelling (per-locale dictionary ids) isn't modeled by

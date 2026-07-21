@@ -1756,7 +1756,7 @@ export function createApi(deps: ApiDeps): Hono {
           provider,
           tools: buildToolRegistry(),
           ctx,
-          system: buildChatSystemPrompt(),
+          system: buildChatSystemPrompt(st.config.chatInstructions),
           context,
           onEvent: (e) => { void stream.writeSSE({ event: e.type, data: JSON.stringify(e) }); },
           confirm: (req) => new Promise<boolean>((resolve) => {
