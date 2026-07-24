@@ -5,7 +5,61 @@ import { assemble } from "./assemble.js";
 import { mergeStates, type SyncPlan } from "./merge.js";
 import { loadState } from "../state.js";
 import { validate } from "../schema.js";
-import type { State } from "../schema.js";
+import { categoriesFor } from "../plurals.js";
+import { PLURAL_CATEGORIES } from "../schema.js";
+import type { State, PluralForm } from "../schema.js";
+
+// The separator the vue-i18n adapter joins plural forms with.
+const VUE_PLURAL_SEP = " | ";
+
+// Which categories the pipe-separated parts map onto, in canonical order. vue-i18n
+// forms are positional with no labels, so we recover them by count, most-faithful
+// first: the shape the catalog already recorded, then the locale's full CLDR set,
+// then vue-i18n's default positional convention (2 → one/other, 3 → zero/one/other,
+// mirroring its getChoiceIndex), then a leading-categories fallback.
+function partCategories(
+  locale: string,
+  count: number,
+  existingForms: Partial<Record<PluralForm, string>> | undefined,
+): PluralForm[] {
+  if (existingForms) {
+    const present = PLURAL_CATEGORIES.filter((c) => existingForms[c] !== undefined);
+    if (present.length === count) return present;
+  }
+  const cldr = categoriesFor(locale);
+  if (count === cldr.length) return cldr;
+  if (count === 1) return ["other"];
+  if (count === 2) return ["one", "other"];
+  if (count === 3) return ["zero", "one", "other"];
+  const lead = PLURAL_CATEGORIES.filter((c) => c !== "other").slice(0, count - 1);
+  return [...lead, "other"];
+}
+
+// vue-i18n serializes plural forms as a positional "a | b | c" string with no
+// in-file marker, so its parser reads them back as scalars. Left alone, a resync
+// would shape-flip a catalog plural into a scalar and drop its translations. For
+// any key the catalog already knows is a plural whose re-parsed source still
+// carries the pipe shape, rebuild the incoming forms by splitting on the vue
+// separator. Guarded by the existing plural, so plain (first-time) import — where
+// a pipe could be a legitimate scalar — is untouched.
+function restoreVuePluralShapes(incoming: State, existing: State): void {
+  const src = existing.config.sourceLocale;
+  for (const [key, inc] of Object.entries(incoming.keys)) {
+    const cur = existing.keys[key];
+    if (!cur?.plural || inc.plural) continue;
+    const srcVal = inc.values[src]?.value;
+    if (srcVal === undefined || !srcVal.includes(VUE_PLURAL_SEP)) continue;
+    inc.plural = { arg: cur.plural.arg };
+    for (const [loc, lv] of Object.entries(inc.values)) {
+      if (lv.value === undefined) continue;
+      const parts = lv.value.split(VUE_PLURAL_SEP);
+      const cats = partCategories(loc, parts.length, cur.values[loc]?.forms);
+      const forms: Partial<Record<PluralForm, string>> = {};
+      cats.forEach((c, i) => { if (parts[i] !== undefined) forms[c] = parts[i]!; });
+      inc.values[loc] = { forms, state: lv.state };
+    }
+  }
+}
 
 export interface RunImportOptions {
   /** Absolute path to the project root (same dir as glotfile.json). */
@@ -108,6 +162,9 @@ export function runSync(opts: RunSyncOptions): RunSyncResult {
   const incoming = validate(rest);
 
   const existing = loadState(opts.statePath);
+  // vue-i18n plurals lose their shape through its lossy pipe serialization; rebuild
+  // them from the catalog before merging so resync doesn't clobber a known plural.
+  if (det.format === "vue-i18n-json") restoreVuePluralShapes(incoming, existing);
   const { state, plan } = mergeStates(existing, incoming, { prune: opts.prune, liveKeys });
 
   return { state, plan, warnings, keyCount: Object.keys(state.keys).length };

@@ -3,8 +3,8 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runImport, runSync } from "./run.js";
-import { saveState } from "../state.js";
-import type { KeyEntry } from "../schema.js";
+import { saveState, createKey, setPluralForms, setSourcePluralForms } from "../state.js";
+import type { KeyEntry, State } from "../schema.js";
 
 function xlf(units: { id: string; source: string; loc?: string }[]): string {
   const body = units
@@ -124,5 +124,50 @@ describe("runSync", () => {
     const { state, plan } = runSync({ projectRoot: root, statePath, prune: true });
     expect(plan.removed).toEqual(["old"]);
     expect(state.keys.old).toBeUndefined();
+  });
+
+  // vue-i18n serializes plural forms as a positional "a | b" string with no
+  // in-file marker, so the parser reads them back as scalars. Resync must not let
+  // that shape-flip a catalog plural into a scalar and drop its translations.
+  it("keeps a vue-i18n plural on resync instead of collapsing it to a scalar", () => {
+    const { root, statePath } = setup();
+    const localeDir = join(root, "src", "locale");
+
+    const state: State = {
+      version: 1,
+      config: {
+        sourceLocale: "en",
+        locales: ["en", "fr"],
+        outputs: [{ adapter: "vue-i18n-json", path: "src/locale/{locale}.json" }],
+        format: { indent: 2, sortKeys: true, finalNewline: true },
+      },
+      glossary: [],
+      glossarySuggestions: [],
+      keys: {},
+    } as unknown as State;
+    createKey(state, "greeting", "Hello");
+    createKey(state, "cart.items", "{count} items", () => "2026-01-01T00:00:00.000Z", { plural: { arg: "count" } });
+    setSourcePluralForms(state, "cart.items", { one: "{count} item", other: "{count} items" });
+    setPluralForms(state, "cart.items", "fr", { one: "{count} article", other: "{count} articles" });
+    saveState(statePath, state);
+
+    // The on-disk vue files, exactly as the adapter serializes plurals.
+    writeFileSync(
+      join(localeDir, "en.json"),
+      JSON.stringify({ greeting: "Hello", cart: { items: "{count} item | {count} items" } }, null, 2),
+    );
+    writeFileSync(
+      join(localeDir, "fr.json"),
+      JSON.stringify({ greeting: "Bonjour", cart: { items: "{count} article | {count} articles" } }, null, 2),
+    );
+
+    const { state: synced, plan } = runSync({ projectRoot: root, statePath, format: "vue-i18n-json" });
+
+    expect(plan.removed).not.toContain("cart.items");
+    expect(plan.sourceChanged).not.toContain("cart.items");
+    expect(synced.keys["cart.items"]!.plural).toEqual({ arg: "count" });
+    expect(synced.keys["cart.items"]!.values.en!.forms).toEqual({ one: "{count} item", other: "{count} items" });
+    expect(synced.keys["cart.items"]!.values.en!.value).toBeUndefined();
+    expect(synced.keys["cart.items"]!.values.fr!.forms).toEqual({ one: "{count} article", other: "{count} articles" });
   });
 });
