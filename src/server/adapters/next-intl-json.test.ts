@@ -42,9 +42,61 @@ describe("next-intl-json", () => {
     setPluralForms(s, "cart.items", "fr", { one: "{count} article", other: "{count} articles" });
     const r = nextIntlJson.export(s, { adapter: "next-intl-json", path: "messages/{locale}.json" });
     const en = JSON.parse(r.files.find((f) => f.path.endsWith("en.json"))!.contents);
-    expect(en.cart.items).toBe("{count, plural, one {{count} item} other {{count} items}}");
+    expect(en.cart.items).toBe("{count, plural, one {# item} other {# items}}");
     const fr = JSON.parse(r.files.find((f) => f.path.endsWith("fr.json"))!.contents);
-    expect(fr.cart.items).toBe("{count, plural, one {{count} article} other {{count} articles}}");
+    expect(fr.cart.items).toBe("{count, plural, one {# article} other {# articles}}");
+  });
+
+  // ICU formats `#` with the locale's number rules but substitutes a bare
+  // {count} raw, so emitting the token would print "1234 items" where next-intl
+  // users expect "1,234 items".
+  it("emits the plural arg as ICU '#', not as a {arg} token", () => {
+    const s = fixture();
+    createKey(s, "cart.items", "{count} items", undefined, { plural: { arg: "count" } });
+    s.keys["cart.items"]!.values.en!.forms = { other: "{count} items left" };
+    const r = nextIntlJson.export(s, { adapter: "next-intl-json", path: "messages/{locale}.json" });
+    const en = JSON.parse(r.files.find((f) => f.path.endsWith("en.json"))!.contents);
+    expect(en.cart.items).toBe("{count, plural, other {# items left}}");
+  });
+
+  it("omits a category the locale does not use rather than emitting an empty body", () => {
+    const s = fixture();
+    createKey(s, "cart.items", "{count} items", undefined, { plural: { arg: "count" } });
+    s.keys["cart.items"]!.values.en!.forms = { one: undefined, other: "{count} items" };
+    const r = nextIntlJson.export(s, { adapter: "next-intl-json", path: "messages/{locale}.json" });
+    const en = JSON.parse(r.files.find((f) => f.path.endsWith("en.json"))!.contents);
+    expect(en.cart.items).toBe("{count, plural, other {# items}}");
+  });
+
+  it("leaves non-arg placeholders in a plural body alone", () => {
+    const s = fixture();
+    createKey(s, "cart.items", "{count} items", undefined, { plural: { arg: "count" } });
+    s.keys["cart.items"]!.values.en!.forms = { other: "{gardener} has {count} of {total}" };
+    const r = nextIntlJson.export(s, { adapter: "next-intl-json", path: "messages/{locale}.json" });
+    const en = JSON.parse(r.files.find((f) => f.path.endsWith("en.json"))!.contents);
+    expect(en.cart.items).toBe("{count, plural, other {{gardener} has # of {total}}}");
+  });
+
+  it("keeps a quoted-literal '{count}' in a plural body verbatim", () => {
+    const s = fixture();
+    createKey(s, "cart.items", "{count} items", undefined, { plural: { arg: "count" } });
+    s.keys["cart.items"]!.values.en!.forms = { other: "{count} items, literally '{count}'" };
+    const r = nextIntlJson.export(s, { adapter: "next-intl-json", path: "messages/{locale}.json" });
+    const en = JSON.parse(r.files.find((f) => f.path.endsWith("en.json"))!.contents);
+    expect(en.cart.items).toBe("{count, plural, other {# items, literally '{count}'}}");
+  });
+
+  // A nested plural rebinds `#` to its own argument, so the outer arg must stay
+  // a {token} inside one or it would silently print the inner number.
+  it("does not rewrite the outer arg inside a nested plural block", () => {
+    const s = fixture();
+    createKey(s, "cart.items", "{count} items", undefined, { plural: { arg: "count" } });
+    s.keys["cart.items"]!.values.en!.forms = {
+      other: "{count} of {bags, plural, other {{count} bagged}}",
+    };
+    const r = nextIntlJson.export(s, { adapter: "next-intl-json", path: "messages/{locale}.json" });
+    const en = JSON.parse(r.files.find((f) => f.path.endsWith("en.json"))!.contents);
+    expect(en.cart.items).toBe("{count, plural, other {# of {bags, plural, other {{count} bagged}}}}");
   });
 
   it("does not warn lossy on a structured plural key", () => {

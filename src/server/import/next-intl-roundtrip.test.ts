@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { detect } from "./detect.js";
 import { runImport } from "./run.js";
@@ -53,8 +54,21 @@ describe("next-intl import + round-trip", () => {
     const { state } = runImport({ projectRoot: ROOT });
     const r = nextIntlJson.export(state, state.config.outputs[0]!);
     const en = JSON.parse(r.files.find((f) => f.path.endsWith("en-gb.json"))!.contents);
-    expect(en.cart.items).toBe("{count, plural, one {{count} item} other {{count} items}}");
+    expect(en.cart.items).toBe("{count, plural, one {# item} other {# items}}");
     expect(en.form.terms).toBe("Accept <terms>Terms</terms> and <privacy>Privacy</privacy>");
     expect(en.index.heading).toBe("Your package");
+  });
+
+  // The catalogue is a middleman: importing a hand-written next-intl project and
+  // exporting it again must reproduce the input byte for byte, or the first
+  // export after onboarding shows up as spurious churn in the user's diff.
+  it("round-trips every fixture file byte for byte", () => {
+    const { state } = runImport({ projectRoot: ROOT });
+    const r = nextIntlJson.export(state, state.config.outputs[0]!);
+    expect(r.files.length).toBe(2);
+    for (const file of r.files) {
+      const onDisk = readFileSync(resolve(ROOT, file.path), "utf8");
+      expect(file.contents, `${file.path} differs from the source fixture`).toBe(onDisk);
+    }
   });
 });

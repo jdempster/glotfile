@@ -8,6 +8,72 @@ import type { State, OutputConfig } from "../schema.js";
 
 const DEFAULT_LOCALE_CASE: LocaleCase = "lower-hyphen";
 
+const NESTED_PLURAL_HEAD = /^\{\s*\w+\s*,\s*(?:plural|selectordinal)\s*,/;
+
+// Index of the `}` closing the block that opens at `start`, skipping quoted
+// literal spans so an apostrophe-escaped brace never shifts the depth count.
+// Returns the last index when the block is unbalanced, so callers copy the rest
+// verbatim rather than truncating.
+function closingBrace(s: string, start: number): number {
+  let depth = 0;
+  for (let i = start; i < s.length; i++) {
+    const c = s[i];
+    if (c === "'") {
+      const next = s[i + 1];
+      if (next === "'") { i++; continue; }
+      if (next === "{" || next === "}" || next === "#" || next === "|") {
+        let j = i + 1;
+        while (j < s.length && s[j] !== "'") j++;
+        i = j;
+        continue;
+      }
+    }
+    if (c === "{") depth++;
+    else if (c === "}" && --depth === 0) return i;
+  }
+  return s.length - 1;
+}
+
+// Canonical storage normalizes ICU's `#` to the plural's {arg} token
+// (parseIcuPlural), so a plural body has to be turned back on the way out. This
+// is not cosmetic: ICU formats `#` with the locale's number rules but
+// substitutes a bare {count} raw, so the token form prints "1234 items" where
+// next-intl is expected to print "1,234 items". Emitting `#` also keeps
+// import → export idempotent for catalogues imported from a hand-written
+// next-intl project. Two spans are copied through untouched — a quoted literal
+// ('{count}'), which ICU renders verbatim, and a nested plural, which rebinds
+// `#` to its own argument.
+function argToHash(body: string, arg: string): string {
+  const token = `{${arg}}`;
+  let out = "";
+  for (let i = 0; i < body.length; ) {
+    const c = body[i];
+    if (c === "'") {
+      const next = body[i + 1];
+      if (next === "'") { out += "''"; i += 2; continue; }
+      if (next === "{" || next === "}" || next === "#" || next === "|") {
+        let j = i + 1;
+        while (j < body.length && body[j] !== "'") j++;
+        out += body.slice(i, j + 1);
+        i = j + 1;
+        continue;
+      }
+    }
+    if (c === "{") {
+      if (NESTED_PLURAL_HEAD.test(body.slice(i))) {
+        const end = closingBrace(body, i);
+        out += body.slice(i, end + 1);
+        i = end + 1;
+        continue;
+      }
+      if (body.startsWith(token, i)) { out += "#"; i += token.length; continue; }
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
 // next-intl reads ICU MessageFormat directly, so the canonical storage form needs
 // no rewriting: {name} is native interpolation; an ICU apostrophe-quoted literal
 // ('{site}') renders verbatim; ICU select strings and <tag> rich-text markup are
@@ -38,7 +104,13 @@ export const nextIntlJson: Adapter = {
         if (entry.plural) {
           const forms = resolveForms(entry, locale, state.config.sourceLocale, emptyAs);
           if (!forms) continue;
-          flat[key] = formsToIcu(entry.plural.arg, forms);
+          const arg = entry.plural.arg;
+          // An undefined form is a category this locale doesn't use; formsToIcu
+          // skips it, so it must stay undefined rather than collapse to "".
+          const bodies = Object.fromEntries(
+            Object.entries(forms).map(([cat, body]) => [cat, body === undefined ? undefined : argToHash(body, arg)]),
+          ) as typeof forms;
+          flat[key] = formsToIcu(arg, bodies);
         } else {
           const raw = resolveScalar(entry, locale, state.config.sourceLocale, emptyAs);
           if (raw === null) continue;

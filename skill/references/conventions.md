@@ -16,6 +16,27 @@ saved to the state file, exported, and committed.
 - When you see a stale or wrong translation in an exported file, fix it in
   `keys.<name>.values.<locale>` and re-export.
 
+## Translations come from `glotfile translate` — never from you
+
+You are the operator of the translation pipeline, not the translator. Every target-locale
+value is produced by `glotfile translate`, which sees `config.projectContext`, the
+per-locale `localeInstructions`, the glossary, and each key's `context` — none of which
+your inline wording has. Writing a translation by hand (`set --locale`, or an `apply`
+`set-target`) is only correct when a **human** supplied that exact string; to fix a bad
+machine translation, `glotfile clear` the cell and re-run `translate`, or
+`glotfile translate --state needs-review`. If no provider/API key is configured, say so and
+stop — hand-translating is not the fallback.
+
+## Context before translation, always
+
+A new key (from `set --create`, `apply` `create` ops, `import`, or `sync`) lands with an
+empty `context`. Give it one **before** anything translates it:
+`glotfile scan` → `glotfile build-context` → `glotfile translate`. A bare `build-context`
+only fills keys that are missing context, so it costs little and is safe to put in front of
+any `translate`. Getting the order wrong isn't just lower quality — the blind machine
+translations are already written, and later context won't revisit them without a full
+`glotfile translate --all`.
+
 ## Keep diffs minimal
 
 - Glotfile serializes deterministically (stable key order, fixed indent, trailing

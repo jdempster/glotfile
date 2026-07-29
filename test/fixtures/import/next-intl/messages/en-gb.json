@@ -1,6 +1,6 @@
 {
   "cart": {
-    "items": "{count, plural, one {{count} item} other {{count} items}}"
+    "items": "{count, plural, one {# item} other {# items}}"
   },
   "form": {
     "terms": "Accept <terms>Terms</terms> and <privacy>Privacy</privacy>"

@@ -20,6 +20,10 @@ glotfile import
 
 Detection looks for `messages/`, `src/messages/`, `locales/`, or `src/locales/` **together with** a next-intl signal (a `next-intl` dependency in `package.json`, or an `i18n/request.ts`), so a plain Vue project isn't mistaken for next-intl. The source locale is read from `defaultLocale` in `i18n/routing.ts` when present.
 
+Only the top-level `<locale>.json` files are read; subdirectories are ignored. Message data you want to keep out of the catalogue — hand-maintained option lists, for example — can live in `messages/<locale>/…` and import them directly in code, and glotfile will leave them alone on both import and export.
+
+Import → export is byte-for-byte idempotent, so onboarding an existing project shouldn't produce a diff in `messages/` beyond key ordering and indentation.
+
 ## Wire next-intl to the exports
 
 `i18n/request.ts` loads the per-locale file glotfile writes:
@@ -50,7 +54,7 @@ The code scanner understands this: it tracks each `useTranslations('ns')` / `get
 ## Format notes
 
 - **Placeholders** — `{name}` is used verbatim (next-intl's ICU interpolation).
-- **Plurals** — emitted as native ICU (`{count, plural, one {…} other {…}}`), not pipe-delimited. See Plurals.
+- **Plurals** — emitted as native ICU (`{count, plural, one {# item} other {# items}}`), not pipe-delimited. The count appears as ICU's `#`, which next-intl formats with the locale's number rules (`1,234 items` in `en-gb`, `1.234 items` in `de-de`); a plain `{count}` token would print the raw `1234`. Other placeholders in a plural body are left as `{name}`. See Plurals.
 - **Select** — ICU select (`{gender, select, …}`) passes through natively.
 - **Rich text** — `t.rich` markup such as `<terms>…</terms>` is preserved verbatim; supply the tag renderers in code.
 - **Literals** — mark literal braces with ICU apostrophe quoting (`'{site}'`); next-intl honours ICU quoting, so it renders verbatim. See Placeholders and ICU.

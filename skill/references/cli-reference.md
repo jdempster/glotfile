@@ -45,6 +45,10 @@ Adapter names: `flutter-arb`, `laravel-php`, `i18next-json`, `vue-i18n-json`,
 
 Requires a configured AI provider + API key in per-machine local settings.
 
+**This command is the only way translations get written.** Don't compose target-language
+text yourself, and run `glotfile build-context` first for any key that doesn't have context
+yet (see below) — translating a brand-new key blind can only be undone with `--all`.
+
 ## get
 `glotfile get [<key-glob>…] [--key <glob>] [--search <query>] [--locale <list>] [--state <list>] [--fields <list>] [--keys-only] [--format json|ndjson]`
 — extract values from the catalog **without loading the whole file**. Prints JSON to stdout.
@@ -173,6 +177,11 @@ one-time `import`). Format is auto-detected if omitted.
 AI-generate per-key context (where/how a string is used) to improve translation quality.
 **Requires a prior `glotfile scan`** to index code references. `--batch` submits through the
 batch API (anthropic only), like `translate --batch`.
+
+Run this **before** `translate` whenever keys are new (`set --create`, `apply` `create`,
+`import`, `sync`). With no flags it only fills keys that are missing context, so it is cheap
+and non-destructive — put it in front of any translate. `--all` rebuilds context for every
+key; only use it for a deliberate refresh.
 
 ## scan
 `glotfile scan` — index the codebase's references to translation keys, writing
