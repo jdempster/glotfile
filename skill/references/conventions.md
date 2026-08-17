@@ -55,7 +55,8 @@ must match exactly). Use the commands that read and write it precisely:
 - **Read:** `glotfile get` (filter by key glob, `--locale`, `--state`), `get --keys-only`,
   `glotfile stats`.
 - **Write:** `glotfile set` (source or `--locale` target), `glotfile set-state`,
-  `glotfile clear`, and `glotfile apply` for a batch of edits in one atomic write.
+  `glotfile clear`, `glotfile delete` (whole keys), and `glotfile apply` for a batch of edits
+  in one atomic write.
 
 Editing the **source** value (`glotfile set <key> "<text>"`) automatically flips the other
 locales to `needs-review`; re-fill just those with `glotfile translate --state needs-review`.

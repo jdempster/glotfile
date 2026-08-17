@@ -3,7 +3,7 @@ import { readFileSync, existsSync, mkdirSync, cpSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   loadState, saveState, findEmptySourceKeys, canonLocale, createKey,
-  setSourceValue, setTargetValue, setKeyState, clearValue, mergeGlossarySuggestions,
+  setSourceValue, setTargetValue, setKeyState, clearValue, deleteKey, mergeGlossarySuggestions,
 } from "./state.js";
 import { computeStats, type Stats } from "./stats.js";
 import { runGet, applyOps, parseOps } from "./agent-cli.js";
@@ -45,7 +45,7 @@ import { formatText, formatJson, formatSarif, type SarifContext } from "./lint/r
 import type { LintReport } from "./lint/types.js";
 
 export interface ParsedArgs {
-  command: "serve" | "export" | "translate" | "lint" | "check" | "import" | "sync" | "build-context" | "suggest-glossary" | "suggest-guidance" | "scan" | "prune" | "split" | "skill" | "batch" | "prices" | "get" | "stats" | "set" | "set-state" | "clear" | "apply" | "help" | "version";
+  command: "serve" | "export" | "translate" | "lint" | "check" | "import" | "sync" | "build-context" | "suggest-glossary" | "suggest-guidance" | "scan" | "prune" | "split" | "skill" | "batch" | "prices" | "get" | "stats" | "set" | "set-state" | "clear" | "delete" | "apply" | "help" | "version";
   help?: boolean;
   unknownCommand?: string;
   dev?: boolean;
@@ -103,7 +103,7 @@ export interface ParsedArgs {
   refresh?: boolean;
 }
 
-const COMMANDS = ["serve", "export", "translate", "lint", "check", "import", "sync", "build-context", "suggest-glossary", "suggest-guidance", "scan", "prune", "split", "skill", "batch", "prices", "get", "stats", "set", "set-state", "clear", "apply"] as const;
+const COMMANDS = ["serve", "export", "translate", "lint", "check", "import", "sync", "build-context", "suggest-glossary", "suggest-guidance", "scan", "prune", "split", "skill", "batch", "prices", "get", "stats", "set", "set-state", "clear", "delete", "apply"] as const;
 const isCommand = (s: string | undefined): s is ParsedArgs["command"] =>
   s != null && (COMMANDS as readonly string[]).includes(s);
 
@@ -1340,6 +1340,32 @@ function runClearCmd(args: ParsedArgs): void {
   console.log(`Cleared ${n} value(s) → untranslated.`);
 }
 
+// delete — remove whole keys (source + every translation). Destructive and not
+// undoable outside git, so a glob only previews its matches until --write.
+function runDeleteCmd(args: ParsedArgs): void {
+  const sel = args.keyGlob ?? args.positionals?.[0];
+  if (!sel) {
+    console.error("Usage: glotfile delete <key|glob> [--write]");
+    process.exitCode = 1;
+    return;
+  }
+  const state = loadState(args.statePath);
+  const keys = matchKeys(state, sel);
+  if (!keys.length) {
+    console.error(`No keys match '${sel}'.`);
+    process.exitCode = 1;
+    return;
+  }
+  if (sel.includes("*") && !args.write) {
+    for (const k of keys) console.log(k);
+    console.log(`${keys.length} key(s) would be deleted. Run with --write to remove them.`);
+    return;
+  }
+  for (const key of keys) deleteKey(state, key);
+  saveState(args.statePath, state);
+  console.log(`Deleted ${keys.length} key(s). Run \`glotfile export\` to drop them from the locale files.`);
+}
+
 // apply — a JSON batch of write ops from stdin, applied in one load → save.
 function runApply(args: ParsedArgs): void {
   let ops;
@@ -1601,6 +1627,15 @@ const COMMAND_HELP: Record<Exclude<ParsedArgs["command"], "help" | "version">, {
       ["--locale <list>", "Required: the locale(s) to empty (cannot be the source)"],
     ],
   },
+  delete: {
+    summary: "Delete whole keys — source text and every translation. Destructive; a glob only lists its matches until --write.",
+    usage: "glotfile delete <key|glob> [--write]",
+    options: [
+      ["<key|glob>", "Key or glob to delete"],
+      ["--key <glob>", "Glob selecting keys (alternative to the positional key)"],
+      ["--write", "Required for a glob: actually remove the matched keys"],
+    ],
+  },
   apply: {
     summary: "Apply a JSON batch of write operations from stdin in one load → save (atomic by default).",
     usage: "glotfile apply [--dry-run] [--continue-on-error] < ops.json",
@@ -1682,6 +1717,7 @@ export async function main(argv: string[]): Promise<void> {
   if (args.command === "set") return runSet(args);
   if (args.command === "set-state") return runSetStateCmd(args);
   if (args.command === "clear") return runClearCmd(args);
+  if (args.command === "delete") return runDeleteCmd(args);
   if (args.command === "apply") return runApply(args);
   const { startServer } = await import("./server.js");
   const { url } = await startServer({ statePath: args.statePath, dev: args.dev, open: !args.noOpen });

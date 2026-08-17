@@ -541,6 +541,35 @@ describe("agent commands (get/set/set-state/clear/stats)", () => {
     expect(err.mock.calls.flat().join("\n")).toContain("source locale");
   });
 
+  it("delete removes a whole key; an unknown key exits 1", async () => {
+    const file = tmpState((s) => {
+      createKey(s, "auth.login", "Log in");
+      s.keys["auth.login"]!.values.fr = { value: "Connexion", state: "reviewed" };
+      createKey(s, "home.title", "Welcome");
+    });
+    captureLog();
+    await main(["delete", "auth.login", "--file", file]);
+    const saved = read(file);
+    expect(saved.keys["auth.login"]).toBeUndefined();
+    expect(saved.keys["home.title"]).toBeDefined();
+
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    await main(["delete", "auth.login", "--file", file]);
+    expect(process.exitCode).toBe(1);
+    expect(err.mock.calls.flat().join("\n")).toContain("No keys match");
+  });
+
+  it("delete only previews a glob until --write", async () => {
+    const file = tmpState((s) => { createKey(s, "auth.login", "Log in"); createKey(s, "auth.logout", "Log out"); });
+    const log = captureLog();
+    await main(["delete", "auth.*", "--file", file]);
+    expect(Object.keys(read(file).keys)).toEqual(["auth.login", "auth.logout"]);
+    expect(log.mock.calls.flat().join("\n")).toContain("2 key(s) would be deleted");
+
+    await main(["delete", "auth.*", "--write", "--file", file]);
+    expect(read(file).keys).toEqual({});
+  });
+
   it("stats reports per-locale counts as JSON", async () => {
     const file = tmpState((s) => {
       createKey(s, "auth.login", "Log in");

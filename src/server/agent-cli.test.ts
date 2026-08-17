@@ -106,6 +106,18 @@ describe("applyOps", () => {
     expect(s.keys["auth.logout"]!.values.fr).toBeUndefined();
   });
 
+  it("delete removes the whole key, and errors on one that isn't there", () => {
+    const s = fx();
+    const r = applyOps(s, [{ op: "delete", key: "auth.logout" }], { clock: CLOCK });
+    expect(r.errors).toEqual([]);
+    expect(r.keysTouched).toEqual(["auth.logout"]);
+    expect(s.keys["auth.logout"]).toBeUndefined();
+
+    const bad = applyOps(s, [{ op: "delete", key: "auth.logout" }], { clock: CLOCK });
+    expect(bad.applied).toBe(0);
+    expect(bad.errors[0]).toMatchObject({ index: 0, op: "delete", key: "auth.logout" });
+  });
+
   it("stops at the first error by default (atomic — caller skips save)", () => {
     const s = fx();
     const ops: ApplyOp[] = [

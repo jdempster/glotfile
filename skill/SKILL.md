@@ -120,7 +120,8 @@ with the CLI:
 - **Read / extract** with `glotfile get` (filter by key glob, `--search`, `--locale`, `--state`),
   `glotfile get --keys-only`, and `glotfile stats` (per-locale progress). All emit JSON.
 - **Write** with `glotfile set` (source or `--locale` target), `glotfile set-state`,
-  `glotfile clear`, or `glotfile apply` (a JSON batch of edits applied in one atomic write).
+  `glotfile clear`, `glotfile delete`, or `glotfile apply` (a JSON batch of edits applied in
+  one atomic write).
 
 These are the supported, stable way to inspect and change a glotfile from the CLI — prefer
 them. Reach for a raw-file edit only for something no command covers, and then match the
@@ -157,6 +158,7 @@ decisions. See `references/schema.md`.
 | Translate missing strings | Context first: `glotfile scan` → `glotfile build-context` (fills keys missing context) → `glotfile translate` (fills empties only). `--state needs-review` re-translates stale strings; `--all` redoes everything. Never hand-write the translations yourself. |
 | Mark a review state | `glotfile set-state <key|glob> <reviewed\|needs-review\|machine> [--locale <list>]`. |
 | Empty a translation (force re-translate) | `glotfile clear <key|glob> --locale <list>`. |
+| Delete a key outright | `glotfile delete <key|glob>` — removes the key's source text **and every translation of it**. Only for a key the user asked you to remove, or one `prune` reports dead; it does not touch the call sites in their code, so check `glotfile scan` usage first. A glob only lists its matches until `--write`. Finish with `glotfile export`. |
 | Make many edits at once | Pipe a JSON op list to `glotfile apply` — one atomic write; the right tool for bulk edits on a big file. |
 | Write locale files | `glotfile export` |
 | Find problems | `glotfile lint` (catalog issues) / `glotfile check` (lint + exports up to date) |

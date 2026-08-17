@@ -1,7 +1,7 @@
 import type { State, KeyEntry, LocaleState, PluralForm, LocaleValue } from "./schema.js";
 import {
   canonLocale, createKey, setSourceValue, setTargetValue, setSourcePluralForms,
-  setPluralForms, setKeyState, clearValue, type Clock, systemClock,
+  setPluralForms, setKeyState, clearValue, deleteKey, type Clock, systemClock,
 } from "./state.js";
 import { cellState, type EffectiveState } from "./cell-state.js";
 import { globToRegExp } from "./glob.js";
@@ -115,7 +115,8 @@ export type ApplyOp =
   | { op: "set-source-forms"; key: string; forms: Record<string, string> }
   | { op: "set-forms"; key: string; locale: string; forms: Record<string, string>; state?: LocaleState }
   | { op: "set-state"; key: string; locale: string; state: LocaleState }
-  | { op: "clear"; key: string; locale: string };
+  | { op: "clear"; key: string; locale: string }
+  | { op: "delete"; key: string };
 
 export interface ApplyOptions {
   // Keep going past a failing op (collect errors) instead of stopping at the first.
@@ -144,6 +145,7 @@ function applyOne(state: State, op: ApplyOp, clock: Clock): void {
       return;
     case "set-state": setKeyState(state, op.key, op.locale, op.state); return;
     case "clear": clearValue(state, op.key, op.locale); return;
+    case "delete": deleteKey(state, op.key); return;
     default: throw new Error(`Unknown op: ${(op as { op?: string }).op ?? "(missing)"}`);
   }
 }

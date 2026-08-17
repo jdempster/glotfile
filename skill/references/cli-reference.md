@@ -103,6 +103,17 @@ all of `auth.*`'s French. Only cells that already have a value are touched.
 **untranslated**, which makes a plain `glotfile translate` refill them. `--locale` is required
 and cannot be the source locale (edit that with `set`).
 
+## delete
+`glotfile delete <key|glob> [--write]` — remove whole keys: the source text **and every
+locale's translation**. Destructive and only undoable through git, so:
+- A glob (`auth.*`) prints its matches and deletes nothing until you pass `--write`; an exact
+  key deletes immediately, and exits non-zero if it isn't in the catalog.
+- Deleting does **not** touch the key's call sites in the user's code. Check `glotfile scan` /
+  usage first, and only delete a key the user asked you to remove or one `prune` reports dead.
+- `glotfile export` afterwards to drop the key from the locale files on disk.
+
+To empty one translation but keep the key, use `clear`. To sweep dead keys, use `prune`.
+
 ## apply
 `glotfile apply [--dry-run] [--continue-on-error]` — read a JSON **array of write operations**
 from stdin and apply them all in one load → mutate → save. Use this for bulk edits on a large
@@ -116,9 +127,13 @@ catalog: one file rewrite instead of N. Each op is one object:
   { "op": "set-forms",        "key": "cart.items", "locale": "pl", "forms": { "one": "…", "few": "…", "many": "…", "other": "…" } },
   { "op": "set-state",        "key": "auth.title", "locale": "de", "state": "reviewed" },
   { "op": "clear",            "key": "auth.title", "locale": "es" },
-  { "op": "create",           "key": "home.cta",   "value": "Get started" }
+  { "op": "create",           "key": "home.cta",   "value": "Get started" },
+  { "op": "delete",           "key": "home.old-cta" }
 ]
 ```
+
+- `delete` removes the key and **every locale's translation of it** — there is no undo beyond
+  git. Only delete a key a human asked you to remove, or one `glotfile prune` reports as unused.
 
 - **Atomic by default:** if any op fails, nothing is written (the file is untouched) and the
   command exits non-zero, reporting which op failed.

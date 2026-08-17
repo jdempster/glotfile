@@ -10,6 +10,7 @@ Run `glotfile <command>` (or `node bin/glotfile.js <command>` from a checkout â€
 | set | Set a source string (marks the others stale) or one target translation. |
 | set-state | Flip review state across keys/locales. |
 | clear | Empty target value(s) so they re-translate. |
+| delete | Delete whole keys â€” source string and every translation. |
 | apply | Apply a JSON batch of edits from stdin in one atomic write. |
 | translate | AI-translate strings, writing results back to `glotfile.json`. |
 | export | Write the locale files for every configured output. |
@@ -24,7 +25,7 @@ Run `glotfile <command>` (or `node bin/glotfile.js <command>` from a checkout â€
 
 Running `glotfile` with no command is the same as `glotfile serve`. Run `glotfile <command> --help` for a command's options.
 
-`get`, `stats`, `set`, `set-state`, `clear` and `apply` are the precise, scriptable way to read and edit a large catalog from the command line â€” or from an AI agent. See Reading and Extraction and Editing from the CLI.
+`get`, `stats`, `set`, `set-state`, `clear`, `delete` and `apply` are the precise, scriptable way to read and edit a large catalog from the command line â€” or from an AI agent. See Reading and Extraction and Editing from the CLI.
 
 ## Global option
 
@@ -38,7 +39,7 @@ glotfile export -f ./i18n/glotfile.json
 ## Exit codes
 
 - `serve`, `translate`, `export`, `get`, `stats`, `set`, `set-state`, `clear` exit `0` on success.
-- `apply` exits `1` if any operation fails; `set`/`set-state`/`clear` exit `1` on a bad key/locale.
+- `apply` exits `1` if any operation fails; `set`/`set-state`/`clear`/`delete` exit `1` on a bad key/locale.
 - `lint` exits `1` when there are errors (or warnings over `--max-warnings`).
 - `check` exits `1` when there are any errors (including out-of-date exports).
 

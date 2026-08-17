@@ -62,6 +62,25 @@ glotfile clear "promo.*" --locale fr,de
 | `--locale <list>` | **Required** — the locale(s) to empty. Cannot be the source (edit that with `set`). |
 | `--file`, `-f <path>` | Target a different state file. |
 
+## `glotfile delete`
+
+Delete whole keys — the source string **and every locale's translation of it**. Use `clear` if you only want to empty a translation.
+
+```bash
+glotfile delete checkout.old-title          # one key, deleted straight away
+glotfile delete "promo.summer.*"            # a glob: lists its matches, deletes nothing
+glotfile delete "promo.summer.*" --write    # …and now removes them
+```
+
+| Option | Description |
+|---|---|
+| `<key\|glob>` | The key or glob to delete. |
+| `--key <glob>` | Glob selecting keys (instead of the positional key). |
+| `--write` | Required for a glob — actually remove the matched keys. |
+| `--file`, `-f <path>` | Target a different state file. |
+
+There is no undo beyond git, so a glob is a dry run until `--write`; an exact key deletes immediately and exits `1` if it isn't in the catalog. Deleting a key doesn't touch the code that references it — check its usage first (`glotfile scan`, or the Usage tree in the UI), and run `glotfile export` afterwards to drop it from the locale files. To sweep keys that are already dead, `glotfile prune --unused` is the better tool.
+
 ## `glotfile apply`
 
 Apply a JSON **array of write operations** read from stdin, all in one load → save. This is the tool for bulk edits on a large catalog: one file rewrite instead of one per edit, applied atomically.
@@ -82,6 +101,7 @@ Each op is one object. Supported operations:
 | `set-forms` | `key`, `locale`, `forms`, `state?` | Set a plural target's forms. |
 | `set-state` | `key`, `locale`, `state` | Flip one cell's state. |
 | `clear` | `key`, `locale` | Empty a target value. |
+| `delete` | `key` | Delete the whole key — source and every translation. |
 
 ```json
 [
