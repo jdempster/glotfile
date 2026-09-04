@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { runImport, runSync } from "./run.js";
 import { saveState, createKey, setPluralForms, setSourcePluralForms } from "../state.js";
 import type { KeyEntry, State } from "../schema.js";
@@ -169,5 +169,30 @@ describe("runSync", () => {
     expect(synced.keys["cart.items"]!.values.en!.forms).toEqual({ one: "{count} item", other: "{count} items" });
     expect(synced.keys["cart.items"]!.values.en!.value).toBeUndefined();
     expect(synced.keys["cart.items"]!.values.fr!.forms).toEqual({ one: "{count} article", other: "{count} articles" });
+  });
+});
+
+// Regression: a conventional vue-i18n layout (src/locales/en-US.json + siblings)
+// used to import with the source slot given to ru-RU, an output path pointing at a
+// src/locale directory that does not exist, and an identity localeMap that forced
+// lowercase filenames — between them enough to orphan every real locale file.
+describe("runImport auto-detection on a conventional vue-i18n layout", () => {
+  const projectRoot = resolve("test/fixtures/import/vue-bcp47");
+
+  it("writes an output path pointing at the directory the files were found in", () => {
+    const { state } = runImport({ projectRoot });
+    expect(state.config.outputs[0]!.path).toBe("src/locales/{locale}.json");
+  });
+
+  it("does not invent a localeMap when the filenames already match localeCase", () => {
+    const { state } = runImport({ projectRoot, sourceLocale: "en-us" });
+    expect(state.config.outputs[0]!.localeCase).toBe("bcp47-hyphen");
+    expect(state.config.outputs[0]!.localeMap).toBeUndefined();
+  });
+
+  it("resolves en-US as the source locale", () => {
+    const { state } = runImport({ projectRoot });
+    expect(state.config.sourceLocale).toBe("en-us");
+    expect(state.config.locales).toEqual(["de-de", "en-us", "ru-ru"]);
   });
 });

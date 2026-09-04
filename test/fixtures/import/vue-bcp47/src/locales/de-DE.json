@@ -1,0 +1,6 @@
+{
+  "plant": {
+    "water": "Gieße deinen Farn",
+    "feed": "Dünge {gardener}s Farn"
+  }
+}

@@ -9,6 +9,7 @@ export interface Detection {
 }
 
 const LOCALE_RE = /^[a-z]{2,3}([_-][A-Za-z]{2,4}){0,2}$/;
+const ENGLISH_RE = /^en([_-]|$)/i;
 const VUE_DIR_CANDIDATES = ["src/locale", "src/locales", "src/i18n/locales", "locales", "lang"];
 
 function safeIsDir(p: string): boolean {
@@ -23,9 +24,17 @@ function fileCount(dir: string): number {
   try { return readdirSync(dir).length; } catch { return 0; }
 }
 
+// English is the authored locale by convention, so an en/en-* file wins outright.
+// The size fallback (biggest file = most complete) only applies when there is no
+// English locale at all: byte length is not comparable across scripts, and the
+// same text in Cyrillic or CJK outweighs its English original, which is how a
+// full en-US catalog used to lose the source slot to ru-RU.
 function pickSource(locales: string[], sizeOf: (loc: string) => number): string {
+  const byCompleteness = (a: string, b: string) => sizeOf(b) - sizeOf(a) || a.localeCompare(b);
   if (locales.includes("en")) return "en";
-  return [...locales].sort((a, b) => sizeOf(b) - sizeOf(a) || a.localeCompare(b))[0] ?? "en";
+  const english = locales.filter((l) => ENGLISH_RE.test(l));
+  if (english.length > 0) return [...english].sort(byCompleteness)[0]!;
+  return [...locales].sort(byCompleteness)[0] ?? "en";
 }
 
 function detectLaravel(root: string): Detection | null {

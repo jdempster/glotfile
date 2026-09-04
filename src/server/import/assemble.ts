@@ -24,7 +24,10 @@ const OUTPUT_BY_FORMAT: Record<
   { adapter: string; path: string; rootRelative?: boolean; skipSourceLocale?: boolean }
 > = {
   "laravel-php": { adapter: "laravel-php", path: "lang/{locale}/{namespace}.php" },
-  "vue-i18n-json": { adapter: "vue-i18n-json", path: "src/locale/{locale}.json" },
+  // rootRelative: the locale dir is one of several conventions (src/locale,
+  // src/locales, src/i18n/locales, locales, lang) — write the export back to the
+  // one detection actually found instead of hardcoding a single guess.
+  "vue-i18n-json": { adapter: "vue-i18n-json", path: "{locale}.json", rootRelative: true },
   // rootRelative: write back to wherever the messages dir was found (messages/,
   // src/messages/, …) rather than assuming the conventional root-level location.
   "next-intl-json": { adapter: "next-intl-json", path: "{locale}.json", rootRelative: true },
@@ -59,8 +62,11 @@ export function assemble(
   const path = base.rootRelative && prefix ? `${prefix}/${base.path}` : base.path;
 
   // Observed filename tokens (raw, pre-canonicalization) drive locale inference.
+  // opts.sourceLocale is excluded: it is a caller-supplied locale code (--source-locale
+  // en-us), not a filename, so pairing it with itself invented an identity localeMap
+  // entry that pinned the source locale to the flag's casing and orphaned its real file.
   const rawLocales = [...new Set([opts.sourceLocale, ...parsed.locales])];
-  const pairs: [string, string][] = rawLocales.map((obs) => [canonLocale(obs), obs]);
+  const pairs: [string, string][] = parsed.locales.map((obs) => [canonLocale(obs), obs]);
   const inferred = inferLocaleStyle(pairs, getAdapter(base.adapter).defaultLocaleCase);
   const { rootRelative: _rootRelative, ...baseOutput } = base;
   const output: OutputConfig = { ...baseOutput, path, ...inferred };
