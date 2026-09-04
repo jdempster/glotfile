@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { resolve } from "node:path";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { detect } from "./detect.js";
 
 describe("detect", () => {
@@ -111,5 +113,50 @@ describe("detect", () => {
     // Source locale comes from the source-language attribute, not a filename.
     expect(d!.sourceLocale).toBe("en-US");
     expect(d!.locales.sort()).toEqual(["en-US", "es"]);
+  });
+
+  // `--source` sets the search root, so it is routinely pointed straight at the
+  // directory holding the locale files rather than at a project root.
+  it("detects a directory that itself holds the locale files", () => {
+    const d = detect(resolve("test/fixtures/import/vue/src/locale"));
+    expect(d).not.toBeNull();
+    expect(d!.format).toBe("vue-i18n-json");
+    expect(d!.locales.sort()).toEqual(["en", "fr"]);
+    expect(d!.localeRoot).toMatch(/locale$/);
+  });
+
+  it("prefers a conventional subdirectory over the search root itself", () => {
+    const d = detect(resolve("test/fixtures/import/vue"));
+    expect(d!.localeRoot).toBe(resolve("test/fixtures/import/vue/src/locale"));
+  });
+
+  describe("split-storage catalogs", () => {
+    // config.json + keys.json + locales/<locale>.json holding { value, state }
+    // records — glotfile's own storage, not framework locale files.
+    function makeCatalog(): string {
+      const dir = join(mkdtempSync(join(tmpdir(), "glot-")), "glotfile");
+      mkdirSync(join(dir, "locales"), { recursive: true });
+      writeFileSync(join(dir, "config.json"), JSON.stringify({ version: 1, config: { sourceLocale: "en-us" } }));
+      writeFileSync(join(dir, "keys.json"), JSON.stringify({ "plant.water": {} }));
+      for (const loc of ["en-us", "fr-fr"]) {
+        writeFileSync(
+          join(dir, "locales", `${loc}.json`),
+          JSON.stringify({ "plant.water": { state: "reviewed", value: "Water your plant, {gardener}" } }),
+        );
+      }
+      return dir;
+    }
+
+    it("never treats the catalog directory as a locale source", () => {
+      expect(detect(makeCatalog())).toBeNull();
+    });
+
+    it("never treats the catalog's locales/ directory as a locale source", () => {
+      expect(detect(join(makeCatalog(), "locales"))).toBeNull();
+    });
+
+    it("ignores the catalog even with an explicit format override", () => {
+      expect(detect(join(makeCatalog(), "locales"), "vue-i18n-json")).toBeNull();
+    });
   });
 });
