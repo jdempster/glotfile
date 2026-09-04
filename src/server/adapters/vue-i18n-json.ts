@@ -13,9 +13,14 @@ const DEFAULT_LOCALE_CASE: LocaleCase = "lower-hyphen";
 // interpolation {'{site}'}, which renders verbatim instead of substituting.
 // ICU plural/select strings are passed through unconverted (their braces are
 // not gaps), matching the existing lossy-plural behaviour.
+//
+// A bare @ is vue-i18n's linked-message operator, so ordinary text containing
+// one (an email address) fails to compile: unplugin-vue-i18n rejects the file
+// with error code 10. Escape it as the literal interpolation {'@'}, which the
+// parser reads back as plain text.
 function toVueI18n(value: string): string {
   if (isIcuPluralOrSelect(value)) return value;
-  return withLiterals(value, (gap) => gap, (content) => `{'${content}'}`);
+  return withLiterals(value, (gap) => gap.replace(/@/g, "{'@'}"), (content) => `{'${content}'}`);
 }
 
 export const vueI18nJson: Adapter = {

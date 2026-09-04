@@ -91,6 +91,24 @@ describe("vue-i18n-json", () => {
     expect(en.tour.line).toBe("Dear {gardener}, see {'{site}'}");
   });
 
+  it("escapes a bare @ as {'@'} so unplugin-vue-i18n can compile the file", () => {
+    const s = fixture();
+    createKey(s, "support.email", "help@sprout.example");
+    const r = vueI18nJson.export(s, { adapter: "vue-i18n-json", path: "resources/locales/{locale}.json" });
+    const en = JSON.parse(r.files.find((f) => f.path.endsWith("en.json"))!.contents);
+    // A bare @ is vue-i18n's linked-message operator; left unescaped the
+    // compiler rejects the whole file with error code 10.
+    expect(en.support.email).toBe("help{'@'}sprout.example");
+  });
+
+  it("escapes every @ in a value, not just the first", () => {
+    const s = fixture();
+    createKey(s, "support.pair", "a@b@c");
+    const r = vueI18nJson.export(s, { adapter: "vue-i18n-json", path: "resources/locales/{locale}.json" });
+    const en = JSON.parse(r.files.find((f) => f.path.endsWith("en.json"))!.contents);
+    expect(en.support.pair).toBe("a{'@'}b{'@'}c");
+  });
+
   it("re-export is byte-identical", () => {
     const a = vueI18nJson.export(fixture(), { adapter: "vue-i18n-json", path: "resources/locales/{locale}.json" });
     const b = vueI18nJson.export(fixture(), { adapter: "vue-i18n-json", path: "resources/locales/{locale}.json" });
