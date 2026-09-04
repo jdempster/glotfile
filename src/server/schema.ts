@@ -286,6 +286,16 @@ export function validate(raw: unknown): State {
   if (config.storage !== undefined && config.storage !== "single" && config.storage !== "split") {
     fail('config.storage must be "single" or "split"');
   }
+  // AI settings are per-developer and live in .glotfile/settings.json, so an `ai`
+  // block here never takes effect. Rejecting it beats silently translating with
+  // the default model when someone has pinned one in the committed file.
+  if (config.ai !== undefined) {
+    fail(
+      "config.ai is not part of the committed config — AI provider settings are per-developer " +
+      "and live in .glotfile/settings.json (edit them in Settings, or by hand). " +
+      "Remove config.ai from this file and set the provider and model there instead.",
+    );
+  }
   if (config.spelling !== undefined) {
     const sp = config.spelling;
     if (!isObject(sp) || !Array.isArray(sp.customWords) || !sp.customWords.every((w) => typeof w === "string")) {

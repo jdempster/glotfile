@@ -53,7 +53,6 @@ newline) so git diffs stay small and reviewable. A fresh file looks like this:
       { "adapter": "flutter-arb", "path": "lib/l10n/app_{locale}.arb" },
       { "adapter": "laravel-php", "path": "lang/{locale}/{namespace}.php" }
     ],
-    "ai": { "provider": "anthropic", "model": "claude-opus-4-8", "endpoint": null, "region": null, "batchSize": 25 },
     "format": { "indent": 2, "sortKeys": true, "finalNewline": true },
     "spelling": { "customWords": [] }
   },
@@ -65,7 +64,6 @@ newline) so git diffs stay small and reviewable. A fresh file looks like this:
 - **`sourceLocale` / `locales`** — the language you author in, and every language you maintain.
 - **`keys`** — a flat map of dot-notation keys (e.g. `auth.signIn.button`), each with a value per locale, a review `state`, and optional metadata (context, tags, max length, screenshot, notes).
 - **`outputs`** — where exported locale files are written, one entry per format (see [Output formats](#output-formats)).
-- **`ai`** — which model translates and how (see [AI translation](#ai-translation)).
 - **`glossary`** — do-not-translate terms and forced per-locale translations.
 
 You normally never edit this file by hand — the UI does it for you.
@@ -169,9 +167,11 @@ export warns rather than corrupting output.
 ## AI translation
 
 Translation is the only feature that needs network access or credentials —
-everything else works offline. Configure the provider in `config.ai` (via the
-Settings panel or by editing the file), make sure the credentials are in your
-environment, then translate from the **Editor** or with `glotfile translate`.
+everything else works offline. AI settings are per-developer: they live in
+`.glotfile/settings.json` (gitignored), not in the committed `glotfile.json`.
+Configure the provider and model in the Settings panel or by editing that file,
+make sure the credentials are in your environment, then translate from the
+**Editor** or with `glotfile translate`.
 
 Glotfile reads credentials from the environment, including a local `.env` file
 in the project directory. For example:

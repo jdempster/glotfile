@@ -46,7 +46,6 @@ describe("load/save", () => {
         sourceLocale: "en",
         locales: ["en", "fr"],
         outputs: [],
-        ai: { provider: "anthropic", model: "claude", endpoint: null, batchSize: 25 },
         format: { indent: 2, sortKeys: true, finalNewline: true },
       },
       glossary: [],
@@ -162,7 +161,6 @@ describe("load/save", () => {
       version: 2,
       config: {
         sourceLocale: "en", locales: ["en"], outputs: [],
-        ai: { provider: "anthropic", model: "m", endpoint: null, batchSize: 25 },
         format: { indent: 2, sortKeys: true, finalNewline: true },
       },
       glossary: [],
@@ -230,7 +228,6 @@ describe("load/save", () => {
       version: 1,
       config: {
         sourceLocale: "en", locales: ["en"], outputs: [],
-        ai: { provider: "anthropic", model: "m", endpoint: null, batchSize: 25 },
         format: { indent: 2, sortKeys: true, finalNewline: true },
       },
       glossary: [],
@@ -250,7 +247,6 @@ describe("loadState (no migration)", () => {
         version: 1,
         config: {
           sourceLocale: "en", locales: ["en"], outputs: [],
-          ai: { provider: "anthropic", model: "m", endpoint: null, batchSize: 1 },
           format: { indent: 2, sortKeys: true, finalNewline: true },
         },
         glossary: [],
