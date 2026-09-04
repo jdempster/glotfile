@@ -70,19 +70,27 @@ export function assemble(
   const sourceLocale = canonLocale(opts.sourceLocale);
   const locales = [...new Set(rawLocales.map(canonLocale))].sort();
 
+  // Parsed locale tokens are raw (filename case, "en-US") while opts.sourceLocale
+  // is free-form — detection supplies the raw token, but --source-locale is whatever
+  // the user typed. Matching the two raw would miss the source value entirely: no
+  // cell gets stamped "source", the plural probe below reads undefined, and every
+  // key reports a missing source. Compare canonically instead.
+  const isSourceLocale = (locale: string) => canonLocale(locale) === sourceLocale;
+
   const keys: Record<string, KeyEntry> = {};
   for (const [key, parsed_key] of Object.entries(parsed.keys)) {
     const entry: KeyEntry = { values: {} };
     // The source value is the structural authority: a key is plural only when its
     // source parses as a single ICU plural. This keeps a stray ICU-looking
     // translation from flipping an otherwise-scalar key.
-    const sourceRaw = parsed_key.values[opts.sourceLocale];
+    const sourceKey = Object.keys(parsed_key.values).find(isSourceLocale);
+    const sourceRaw = sourceKey !== undefined ? parsed_key.values[sourceKey] : undefined;
     const sourcePlural = sourceRaw !== undefined ? parseIcuPlural(sourceRaw) : null;
     if (sourcePlural) {
       entry.plural = { arg: sourcePlural.arg };
       for (const [locale, value] of Object.entries(parsed_key.values)) {
-        const state: LocaleState = locale === opts.sourceLocale ? "source" : "reviewed";
-        const parsedForms = locale === opts.sourceLocale ? sourcePlural : parseIcuPlural(value);
+        const state: LocaleState = isSourceLocale(locale) ? "source" : "reviewed";
+        const parsedForms = isSourceLocale(locale) ? sourcePlural : parseIcuPlural(value);
         if (parsedForms) {
           const forms = opts.cldr ? exactFormsToCldr(locale, parsedForms.forms) : parsedForms.forms;
           entry.values[locale] = { forms: canonForms(forms), state };
@@ -99,18 +107,17 @@ export function assemble(
       for (const [locale, value] of Object.entries(parsed_key.values)) {
         entry.values[locale] = {
           value: canonicalizeLiterals(value),
-          state: locale === opts.sourceLocale ? "source" : "reviewed",
+          state: isSourceLocale(locale) ? "source" : "reviewed",
         };
       }
     }
-    if (!(opts.sourceLocale in entry.values)) {
+    if (!Object.keys(entry.values).some(isSourceLocale)) {
       warnings.push(
-        `key "${key}" has no ${opts.sourceLocale} (source) value; its values are marked reviewed without a source.`,
+        `key "${key}" has no ${sourceLocale} (source) value; its values are marked reviewed without a source.`,
       );
     }
     // Remap value keys to canonical form so the returned state is self-consistent
-    // with config.locales (which are also canonical). Must run AFTER the orphan
-    // warning check above, which compares raw opts.sourceLocale to raw value keys.
+    // with config.locales (which are also canonical).
     const canonValues: typeof entry.values = {};
     for (const [loc, lv] of Object.entries(entry.values)) canonValues[canonLocale(loc)] = lv;
     entry.values = canonValues;
