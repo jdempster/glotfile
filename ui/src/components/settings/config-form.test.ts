@@ -208,11 +208,12 @@ describe("config-form", () => {
       scan: { accessors: ["t"], patterns: ["x"], include: ["src/**"], exclude: ["dist/**"], keep: ["keep.*"] },
       lint: { rules: { spelling: "off" }, ignore: ["a.*"], spelling: { locales: { en: "en-US" } } },
       storage: "split",
+      preserveWhitespace: true,
     };
     // Tripwire: the fixture must cover the whole Config surface, so the round-trip
     // below actually exercises every section. Update both when a field is added.
     expect(Object.keys(full).sort()).toEqual(
-      ["autoExport", "exportLocales", "format", "lint", "locales", "outputs", "scan", "sourceLocale", "spelling", "storage"],
+      ["autoExport", "exportLocales", "format", "lint", "locales", "outputs", "preserveWhitespace", "scan", "sourceLocale", "spelling", "storage"],
     );
     const result = formToConfig(configToForm(full), full);
     expect(Object.keys(result).sort()).toEqual(Object.keys(full).sort());

@@ -287,6 +287,20 @@ describe("mutations", () => {
     expect(s.keys["k"]!.values.fr).toEqual({ value: "Salut", state: "reviewed" });
   });
 
+  it("keeps surrounding whitespace on every write path when config.preserveWhitespace is set", () => {
+    const s = defaultState();
+    s.config.locales = ["en", "fr", "es"];
+    s.config.preserveWhitespace = true;
+    createKey(s, "k", "  Padded  ");
+    expect(s.keys["k"]!.values.en!.value).toBe("  Padded  ");
+    setSourceValue(s, "k", " Water {gardener}'s plant ");
+    expect(s.keys["k"]!.values.en!.value).toBe(" Water {gardener}'s plant ");
+    setTargetValue(s, "k", "fr", ", ");
+    expect(s.keys["k"]!.values.fr!.value).toBe(", ");
+    applyMachineTranslation(s, "k", "es", " | ");
+    expect(s.keys["k"]!.values.es!.value).toBe(" | ");
+  });
+
   it("trims surrounding whitespace on save and folds whitespace-only to an empty string", () => {
     const s = defaultState();
     s.config.locales = ["en", "fr", "es"];

@@ -180,6 +180,7 @@ export function formToConfig(form: ConfigForm, original?: Config): Config {
 
   // Passthrough allow-list for config the form doesn't own.
   if (original?.storage !== undefined) config.storage = original.storage;
+  if (original?.preserveWhitespace !== undefined) config.preserveWhitespace = original.preserveWhitespace;
 
   return config;
 }

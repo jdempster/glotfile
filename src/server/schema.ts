@@ -168,6 +168,12 @@ export interface Config {
   // Custom instructions appended to the Lingo assistant's system prompt —
   // project-level tuning of its tone, language, priorities, and workflow.
   chatInstructions?: string;
+  // Keep leading/trailing whitespace in stored values instead of trimming it.
+  // Off by default: trimmed values are the storage contract everywhere else
+  // (empty-key detection folds whitespace-only to ""). Catalogs whose strings
+  // are concatenated at runtime — list separators like ", ", sentence fragments
+  // joined in a template — need the padding preserved or words run together.
+  preserveWhitespace?: boolean;
 }
 export interface GlossaryEntry {
   // The source-language term, exactly as it appears in strings. Matching is
@@ -279,6 +285,10 @@ export function validate(raw: unknown): State {
   if (typeof fmt.sortKeys !== "boolean") fail("config.format.sortKeys must be a boolean");
   if (typeof fmt.finalNewline !== "boolean") fail("config.format.finalNewline must be a boolean");
   if (config.autoExport !== undefined && typeof config.autoExport !== "boolean") fail("config.autoExport must be a boolean");
+  if (config.preserveWhitespace !== undefined && typeof config.preserveWhitespace !== "boolean") {
+    fail("config.preserveWhitespace must be a boolean");
+  }
+  const preserveWhitespace = config.preserveWhitespace === true;
   if (config.exportLocales !== undefined &&
       (!Array.isArray(config.exportLocales) || !config.exportLocales.every((l) => typeof l === "string"))) {
     fail("config.exportLocales must be an array of strings");
@@ -392,9 +402,10 @@ export function validate(raw: unknown): State {
         }
       } else {
         if (typeof lv.value !== "string") fail(`key "${key}" locale "${loc}" value must be a string`);
-        // Normalize on load: stored values never carry surrounding/whitespace-only content,
-        // so legacy data folds to the same shape the setters produce on save.
-        lv.value = lv.value.trim();
+        // Normalize on load unless the catalog opts out: by default stored values
+        // never carry surrounding/whitespace-only content, so legacy data folds to
+        // the same shape the setters produce on save.
+        if (!preserveWhitespace) lv.value = lv.value.trim();
       }
     }
     if (entry.suppressions !== undefined) {

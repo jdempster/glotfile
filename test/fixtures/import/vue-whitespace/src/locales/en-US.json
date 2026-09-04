@@ -1,0 +1,10 @@
+{
+  "common": {
+    "list_separator": ", ",
+    "pipe": " | "
+  },
+  "plant": {
+    "watered_prefix": " Watered by {gardener}",
+    "feed_reminder": "Time to feed your plant"
+  }
+}

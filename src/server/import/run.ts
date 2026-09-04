@@ -69,6 +69,8 @@ export interface RunImportOptions {
   locales?: string[];
   /** Convert exact "=N" plural selectors into CLDR categories (Crowdin-style). */
   cldr?: boolean;
+  /** Keep leading/trailing whitespace on imported values (sets config.preserveWhitespace). */
+  preserveWhitespace?: boolean;
 }
 
 export interface RunImportResult {
@@ -152,16 +154,19 @@ export function runSync(opts: RunSyncOptions): RunSyncResult {
   const sourceParse = parser.parse(det.localeRoot, { locales: [sourceLocale] });
   const liveKeys = new Set(Object.keys(sourceParse.keys));
 
+  const existing = loadState(opts.statePath);
+
   const assembled = assemble(parsed, {
     sourceLocale,
     format: det.format,
     cldr: opts.cldr,
     localeRootRel: relative(opts.projectRoot, det.localeRoot),
+    // A resync inherits the catalog's own whitespace contract, so re-reading the
+    // locale files can't silently re-trim values the catalog deliberately pads.
+    preserveWhitespace: opts.preserveWhitespace ?? existing.config.preserveWhitespace,
   });
   const { warnings, ...rest } = assembled;
   const incoming = validate(rest);
-
-  const existing = loadState(opts.statePath);
   // vue-i18n plurals lose their shape through its lossy pipe serialization; rebuild
   // them from the catalog before merging so resync doesn't clobber a known plural.
   if (det.format === "vue-i18n-json") restoreVuePluralShapes(incoming, existing);
@@ -185,6 +190,7 @@ export function runImport(opts: RunImportOptions): RunImportResult {
     format: det.format,
     cldr: opts.cldr,
     localeRootRel: relative(opts.projectRoot, det.localeRoot),
+    preserveWhitespace: opts.preserveWhitespace,
   });
 
   const { warnings, ...rest } = assembled;

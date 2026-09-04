@@ -29,8 +29,11 @@ export function canonLocale(locale: string): string {
 // Every write path (UI edits, AI results, plural forms) funnels through here so
 // the catalog never holds a raw {{name}} that would export to a broken token —
 // and so a value typed in its rendered form matches what import/AI produce.
-function canonValue(value: string): string {
-  return canonicalizeLiterals(value.trim());
+// config.preserveWhitespace opts out of the trim for catalogs whose values are
+// concatenated at runtime and depend on their padding.
+function canonValue(state: State, value: string): string {
+  const text = state.config.preserveWhitespace ? value : value.trim();
+  return canonicalizeLiterals(text);
 }
 
 // Keep config deterministic: canonical codes, deduped case-insensitively,
@@ -206,15 +209,15 @@ function requirePlural(state: State, key: string): KeyEntry {
 
 // Validate + trim form bodies at every plural write boundary so a bad payload
 // (e.g. unvalidated client JSON) can never persist a self-inconsistent catalog
-// that fails to reload. Trimming matches the scalar contract (stored values
-// never carry surrounding whitespace).
-function normalizeForms(forms: Partial<Record<PluralForm, string>>): Partial<Record<PluralForm, string>> {
+// that fails to reload. Form bodies go through canonValue, so they follow the
+// same whitespace contract as scalar values.
+function normalizeForms(state: State, forms: Partial<Record<PluralForm, string>>): Partial<Record<PluralForm, string>> {
   const out: Partial<Record<PluralForm, string>> = {};
   for (const [cat, body] of Object.entries(forms)) {
     // A selector is a CLDR category (one, other, …) or an explicit value match (=1).
     if (!isPluralForm(cat)) throw new GlotfileError(`Invalid plural category: ${cat}`);
     if (typeof body !== "string") throw new GlotfileError(`Plural form "${cat}" must be a string`);
-    out[cat as PluralForm] = canonValue(body);
+    out[cat as PluralForm] = canonValue(state, body);
   }
   if (typeof out.other !== "string") throw new GlotfileError(`Plural forms must include the "other" form`);
   return out;
@@ -238,12 +241,12 @@ export function createKey(
       createdAt: clock(),
       plural: { arg: opts.plural.arg },
       // The source value seeds the required "other" form so nothing is empty.
-      values: { [sl]: { forms: { other: canonValue(sourceValue) }, state: "source" } },
+      values: { [sl]: { forms: { other: canonValue(state, sourceValue) }, state: "source" } },
     };
   } else {
     state.keys[key] = {
       createdAt: clock(),
-      values: { [sl]: { value: canonValue(sourceValue), state: "source" } },
+      values: { [sl]: { value: canonValue(state, sourceValue), state: "source" } },
     };
   }
 }
@@ -286,7 +289,7 @@ export function pruneEmptySourceKeys(state: State): string[] {
 export function setSourceValue(state: State, key: string, value: string): void {
   const entry = requireKey(state, key);
   if (entry.plural) throw new GlotfileError(`Key is a plural; use the plural setters: ${key}`);
-  const canon = canonValue(value);
+  const canon = canonValue(state, value);
   const oldNorm = normalizeSource(entry.values[state.config.sourceLocale]?.value ?? "");
   const newNorm = normalizeSource(canon);
   entry.values[state.config.sourceLocale] = { value: canon, state: "source" };
@@ -304,7 +307,7 @@ export function setSourceValue(state: State, key: string, value: string): void {
 export function setTargetValue(state: State, key: string, locale: string, value: string): void {
   const entry = requireKey(state, key);
   if (entry.plural) throw new GlotfileError(`Key is a plural; use the plural setters: ${key}`);
-  entry.values[canonLocale(locale)] = { value: canonValue(value), state: "reviewed" };
+  entry.values[canonLocale(locale)] = { value: canonValue(state, value), state: "reviewed" };
 }
 
 function formSignature(forms: Partial<Record<PluralForm, string>>): string {
@@ -316,7 +319,7 @@ function formSignature(forms: Partial<Record<PluralForm, string>>): string {
 
 export function setSourcePluralForms(state: State, key: string, forms: Partial<Record<PluralForm, string>>): void {
   const entry = requirePlural(state, key);
-  const normalized = normalizeForms(forms);
+  const normalized = normalizeForms(state, forms);
   const oldSig = formSignature(entry.values[state.config.sourceLocale]?.forms ?? {});
   const newSig = formSignature(normalized);
   entry.values[state.config.sourceLocale] = { forms: normalized, state: "source" };
@@ -340,7 +343,7 @@ export function setPluralForms(
   const entry = requirePlural(state, key);
   const loc = canonLocale(locale);
   if (loc === state.config.sourceLocale) throw new GlotfileError("Use setSourcePluralForms for the source locale");
-  entry.values[loc] = { forms: normalizeForms(forms), state: "reviewed" };
+  entry.values[loc] = { forms: normalizeForms(state, forms), state: "reviewed" };
 }
 
 export function convertToPlural(state: State, key: string, arg: string): void {
@@ -585,7 +588,7 @@ export function applyMachineTranslation(state: State, key: string, locale: strin
   if (entry.plural) throw new GlotfileError(`Key is a plural; use applyMachineTranslationForms: ${key}`);
   const loc = canonLocale(locale);
   if (!force && entry.values[loc]?.state === "reviewed") return false;
-  entry.values[loc] = { value: canonValue(value), state: "machine", source: "ai" };
+  entry.values[loc] = { value: canonValue(state, value), state: "machine", source: "ai" };
   return true;
 }
 
@@ -602,6 +605,6 @@ export function applyMachineTranslationForms(
   const entry = requirePlural(state, key);
   const loc = canonLocale(locale);
   if (!force && entry.values[loc]?.state === "reviewed") return false;
-  entry.values[loc] = { forms: normalizeForms(forms), state: "machine", source: "ai" };
+  entry.values[loc] = { forms: normalizeForms(state, forms), state: "machine", source: "ai" };
   return true;
 }

@@ -105,6 +105,12 @@ When `true` (the default), `glotfile serve` re-exports the locale files to disk 
 
 An allow-list narrowing which locales every export writes. Empty or absent means export all of `locales`. Persisted so the serve auto-export hook honours it too.
 
+## `preserveWhitespace` (boolean, optional)
+
+Absent or `false` (the default) trims leading and trailing whitespace from every stored value, and folds a whitespace-only value to `""`. Set `true` when strings are concatenated at runtime and their padding carries meaning — list separators like `", "`, or sentence fragments joined in a template — because trimming those runs the words together.
+
+Applies to the whole catalog, on load and on every write. `glotfile import --preserve-whitespace` sets it while creating the catalog; `glotfile sync` inherits whatever the catalog already has.
+
 ## `storage` (`"single"` | `"split"`, optional)
 
 On-disk layout. Absent or `"single"` keeps the monolithic `glotfile.json`; `"split"` persists the catalog as a `glotfile/` directory of per-locale files. Set automatically by `glotfile split` — see The State File.
