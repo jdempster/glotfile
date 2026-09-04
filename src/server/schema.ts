@@ -216,7 +216,22 @@ export interface State {
   keys: Record<string, KeyEntry>;
 }
 
-export class GlotfileError extends Error {}
+// One problem found while validating a locale value, or a key (with an empty
+// locale). Carried on the error so callers can report each problem against the
+// key and locale it belongs to rather than as one opaque string.
+export interface ValidationIssue {
+  key: string;
+  locale: string;
+  message: string;
+}
+
+export class GlotfileError extends Error {
+  readonly issues: readonly ValidationIssue[];
+  constructor(message: string, issues: readonly ValidationIssue[] = []) {
+    super(message);
+    this.issues = issues;
+  }
+}
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -356,69 +371,110 @@ export function validate(raw: unknown): State {
   }
 
   if (!isObject(raw.keys)) fail("keys must be an object");
+  // Catalogs are hand-editable, so a bad edit is usually one of several. Collect
+  // every problem across all keys and report them together: aborting on the
+  // first one turns fixing a hand-edit into one re-run per mistake.
+  const issues: ValidationIssue[] = [];
+  const bad = (key: string, locale: string, message: string): void => {
+    issues.push({ key, locale, message });
+  };
   for (const [key, entry] of Object.entries(raw.keys)) {
-    if (!isObject(entry)) fail(`key "${key}" must be an object`);
-    if (!isObject(entry.values)) fail(`key "${key}" must have a values object`);
+    if (!isObject(entry)) {
+      bad(key, "", `key "${key}" must be an object`);
+      continue;
+    }
+    if (!isObject(entry.values)) {
+      bad(key, "", `key "${key}" must have a values object`);
+      continue;
+    }
     const plural = entry.plural;
     if (plural !== undefined && (!isObject(plural) || typeof plural.arg !== "string" || !plural.arg)) {
-      fail(`key "${key}" plural.arg must be a non-empty string`);
+      bad(key, "", `key "${key}" plural.arg must be a non-empty string`);
+      continue;
     }
     if (entry.placeholders !== undefined) {
-      if (!isObject(entry.placeholders)) fail(`key "${key}" placeholders must be an object`);
-      for (const [name, def] of Object.entries(entry.placeholders)) {
-        if (!isObject(def)) fail(`key "${key}" placeholder "${name}" must be an object`);
-        for (const f of ["type", "format", "example"] as const) {
-          if (def[f] !== undefined && typeof def[f] !== "string") {
-            fail(`key "${key}" placeholder "${name}".${f} must be a string`);
+      if (!isObject(entry.placeholders)) {
+        bad(key, "", `key "${key}" placeholders must be an object`);
+      } else {
+        for (const [name, def] of Object.entries(entry.placeholders)) {
+          if (!isObject(def)) {
+            bad(key, "", `key "${key}" placeholder "${name}" must be an object`);
+            continue;
+          }
+          for (const f of ["type", "format", "example"] as const) {
+            if (def[f] !== undefined && typeof def[f] !== "string") {
+              bad(key, "", `key "${key}" placeholder "${name}".${f} must be a string`);
+            }
           }
         }
       }
     }
     for (const [loc, lv] of Object.entries(entry.values)) {
-      if (!isObject(lv)) fail(`key "${key}" locale "${loc}" must be an object`);
+      if (!isObject(lv)) {
+        bad(key, loc, `key "${key}" locale "${loc}" must be an object`);
+        continue;
+      }
       if (!STATES.includes(lv.state as LocaleState)) {
-        fail(`key "${key}" locale "${loc}" has invalid state "${String(lv.state)}"`);
+        bad(key, loc, `key "${key}" locale "${loc}" has invalid state "${String(lv.state)}"`);
       }
       if (plural) {
-        if (!isObject(lv.forms)) fail(`key "${key}" locale "${loc}" must have a forms object (plural key)`);
+        if (!isObject(lv.forms)) {
+          bad(key, loc, `key "${key}" locale "${loc}" must have a forms object (plural key)`);
+          continue;
+        }
         for (const [cat, body] of Object.entries(lv.forms)) {
           if (!isPluralForm(cat)) {
-            fail(`key "${key}" locale "${loc}" has invalid plural category "${cat}"`);
+            bad(key, loc, `key "${key}" locale "${loc}" has invalid plural category "${cat}"`);
           }
-          if (typeof body !== "string") fail(`key "${key}" locale "${loc}" form "${cat}" must be a string`);
+          if (typeof body !== "string") {
+            bad(key, loc, `key "${key}" locale "${loc}" form "${cat}" must be a string`);
+          }
         }
         if (typeof (lv.forms as Record<string, unknown>).other !== "string") {
-          fail(`key "${key}" locale "${loc}" plural must include the "other" form`);
+          bad(key, loc, `key "${key}" locale "${loc}" plural must include the "other" form`);
         }
       } else {
-        if (typeof lv.value !== "string") fail(`key "${key}" locale "${loc}" value must be a string`);
+        if (typeof lv.value !== "string") {
+          bad(key, loc, `key "${key}" locale "${loc}" value must be a string`);
+          continue;
+        }
         // Normalize on load: stored values never carry surrounding/whitespace-only content,
         // so legacy data folds to the same shape the setters produce on save.
         lv.value = lv.value.trim();
       }
     }
     if (entry.suppressions !== undefined) {
-      if (!Array.isArray(entry.suppressions)) fail(`key "${key}" suppressions must be an array`);
-      for (const s of entry.suppressions as unknown[]) {
-        if (!isObject(s) || typeof s.locale !== "string" || typeof s.source !== "string") {
-          fail(`key "${key}" has an invalid suppression (needs string rule, locale, source)`);
-        }
-        if (!RULE_IDS.includes(s.rule as RuleId)) {
-          fail(`key "${key}" suppression has unknown rule id "${String(s.rule)}"`);
+      if (!Array.isArray(entry.suppressions)) {
+        bad(key, "", `key "${key}" suppressions must be an array`);
+      } else {
+        for (const s of entry.suppressions as unknown[]) {
+          if (!isObject(s) || typeof s.locale !== "string" || typeof s.source !== "string") {
+            bad(key, "", `key "${key}" has an invalid suppression (needs string rule, locale, source)`);
+            continue;
+          }
+          if (!RULE_IDS.includes(s.rule as RuleId)) {
+            bad(key, "", `key "${key}" suppression has unknown rule id "${String(s.rule)}"`);
+          }
         }
       }
     }
     if (entry.notes !== undefined) {
-      if (!Array.isArray(entry.notes)) fail(`key "${key}" notes must be an array`);
-      for (const n of entry.notes as unknown[]) {
-        if (!isObject(n) || typeof n.id !== "string" || typeof n.text !== "string" || typeof n.at !== "string") {
-          fail(`key "${key}" has an invalid note (needs string id, text, at)`);
+      if (!Array.isArray(entry.notes)) {
+        bad(key, "", `key "${key}" notes must be an array`);
+      } else {
+        for (const n of entry.notes as unknown[]) {
+          if (!isObject(n) || typeof n.id !== "string" || typeof n.text !== "string" || typeof n.at !== "string") {
+            bad(key, "", `key "${key}" has an invalid note (needs string id, text, at)`);
+          }
         }
       }
     }
     if (entry.contextSource !== undefined && entry.contextSource !== "ai") {
-      fail(`key "${key}" contextSource must be "ai" if present`);
+      bad(key, "", `key "${key}" contextSource must be "ai" if present`);
     }
+  }
+  if (issues.length > 0) {
+    throw new GlotfileError(issues.map((i) => i.message).join("\n"), issues);
   }
   if (raw.glossary !== undefined && !Array.isArray(raw.glossary)) fail("glossary must be an array");
   if (raw.glossarySuggestions !== undefined && !Array.isArray(raw.glossarySuggestions)) fail("glossarySuggestions must be an array");

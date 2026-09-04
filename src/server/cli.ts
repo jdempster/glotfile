@@ -9,7 +9,7 @@ import { computeStats, type Stats } from "./stats.js";
 import { runGet, applyOps, parseOps } from "./agent-cli.js";
 import { EFFECTIVE_STATES, type EffectiveState } from "./cell-state.js";
 import { globToRegExp } from "./glob.js";
-import { STATES, type LocaleState, type State } from "./schema.js";
+import { STATES, GlotfileError, type LocaleState, type State } from "./schema.js";
 import { exportToDisk } from "./export-run.js";
 import { detectFormat, splitDirFor } from "./storage.js";
 import { makeProvider } from "./ai/index.js";
@@ -42,7 +42,7 @@ import { runLint, sortFindings, countSeverities } from "./lint/run.js";
 import { RULE_IDS, unknownRuleIds, suggestRuleId } from "./lint/registry.js";
 import { checkOutputs } from "./lint/outputs.js";
 import { formatText, formatJson, formatSarif, type SarifContext } from "./lint/report.js";
-import type { LintReport } from "./lint/types.js";
+import type { LintReport, Finding } from "./lint/types.js";
 
 export interface ParsedArgs {
   command: "serve" | "export" | "translate" | "lint" | "check" | "import" | "sync" | "build-context" | "suggest-glossary" | "suggest-guidance" | "scan" | "prune" | "split" | "skill" | "batch" | "prices" | "get" | "stats" | "set" | "set-state" | "clear" | "apply" | "help" | "version";
@@ -684,9 +684,13 @@ async function runCheck(args: ParsedArgs): Promise<void> {
   try {
     state = loadState(args.statePath);
   } catch (e) {
+    const issues = e instanceof GlotfileError ? e.issues : [];
+    const findings: Finding[] = issues.length > 0
+      ? issues.map((i) => ({ ruleId: "load-error", key: i.key, locale: i.locale, severity: "error" as const, message: i.message }))
+      : [{ ruleId: "load-error", key: "", locale: "", severity: "error", message: (e as Error).message }];
     const report: LintReport = {
-      findings: [{ ruleId: "load-error", key: "", locale: "", severity: "error", message: (e as Error).message }],
-      counts: { error: 1, warn: 0, suppressed: 0 }, ok: false,
+      findings,
+      counts: { error: findings.length, warn: 0, suppressed: 0 }, ok: false,
     };
     printReport(report, args.format, args.statePath);
     process.exitCode = 1;
