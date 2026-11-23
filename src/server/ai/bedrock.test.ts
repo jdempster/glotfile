@@ -62,7 +62,7 @@ describe("BedrockProvider", () => {
     expect(res!.forms).toEqual({ one: "{count} article", other: "{count} articles" });
   });
 
-  it("forces the emit_translations tool with BATCH_SCHEMA for Nova/Claude", async () => {
+  it("forces the emit_translations tool with BATCH_SCHEMA for Nova", async () => {
     const deps = fakeDeps([{ id: "0", translation: "Salut {name}" }]);
     await new BedrockProvider(config, deps).translate([baseReq]);
     const calls = deps.send.mock.calls as unknown as Array<[{ toolConfig?: { toolChoice: { tool: { name: string } }; tools: Array<{ toolSpec: { name: string; inputSchema: { json: unknown } } }> } }]>;
@@ -70,6 +70,39 @@ describe("BedrockProvider", () => {
     expect(input.toolConfig!.toolChoice.tool.name).toBe("emit_translations");
     expect(input.toolConfig!.tools[0]!.toolSpec.name).toBe("emit_translations");
     expect(input.toolConfig!.tools[0]!.toolSpec.inputSchema.json).toBe(BATCH_SCHEMA);
+  });
+
+  it("for a Claude model: asks for structured output instead of forcing a tool, and parses the JSON text reply", async () => {
+    const claude = { ...config, model: "us.anthropic.claude-sonnet-4-5-20250929-v1:0" };
+    const deps = fakeDeps(null, '{"items":[{"id":"0","translation":"Salut {name}"}]}');
+    const [res] = await new BedrockProvider(claude, deps).translate([baseReq]);
+    expect(res).toEqual({ id: "0", translation: "Salut {name}" });
+    const calls = deps.send.mock.calls as unknown as Array<[{
+      toolConfig?: unknown;
+      outputConfig?: { textFormat: { type: string; structure: { jsonSchema: { name: string; schema: string } } } };
+    }]>;
+    const input = calls[0]![0];
+    expect(input.toolConfig).toBeUndefined();
+    expect(input.outputConfig!.textFormat.type).toBe("json_schema");
+    expect(input.outputConfig!.textFormat.structure.jsonSchema.name).toBe("emit_translations");
+    expect(JSON.parse(input.outputConfig!.textFormat.structure.jsonSchema.schema)).toEqual(BATCH_SCHEMA);
+  });
+
+  it("complete() asks a Claude model for structured output in the request's schema", async () => {
+    const claude = { ...config, model: "anthropic.claude-sonnet-4-5-20250929-v1:0" };
+    const schema = { type: "object", properties: { summary: { type: "string" } }, required: ["summary"], additionalProperties: false };
+    const send = vi.fn(async () => ({ output: { message: { content: [{ text: '{"summary":"Watering reminders"}' }] } } }));
+    const provider = new BedrockProvider(claude, { client: { send }, makeCommand: (i: unknown) => i } as never);
+    const out = await provider.complete({ system: "Summarise.", content: [{ type: "text", text: "plant.water" }], schema });
+    expect(out).toEqual({ summary: "Watering reminders" });
+    const calls = send.mock.calls as unknown as Array<[{
+      toolConfig?: unknown;
+      outputConfig?: { textFormat: { structure: { jsonSchema: { name: string; schema: string } } } };
+    }]>;
+    const input = calls[0]![0];
+    expect(input.toolConfig).toBeUndefined();
+    expect(input.outputConfig!.textFormat.structure.jsonSchema.name).toBe("emit_completion");
+    expect(JSON.parse(input.outputConfig!.textFormat.structure.jsonSchema.schema)).toEqual(schema);
   });
 
   it("attaches a screenshot as a Converse image block for a vision model", async () => {
