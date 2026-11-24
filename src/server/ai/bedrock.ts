@@ -55,6 +55,34 @@ export class BedrockProvider implements TranslationProvider {
     return this.config.model.includes("meta.");
   }
 
+  private isClaude(): boolean {
+    return this.config.model.includes("anthropic.");
+  }
+
+  // How each model family is held to a JSON schema:
+  // - Claude takes Converse's structured output, and the reply arrives as a
+  //   JSON text block. Bedrock rejects a forced tool choice for the newer Claude
+  //   models ("tool_choice: type "tool" and "any" are not supported for this
+  //   model"), while every Claude model it serves accepts structured output.
+  // - Nova rejects `outputConfig`, so it is forced to call a single tool.
+  // - Meta has no reliable tool-use and rejects `outputConfig`: prompt and parse.
+  private structuredOutput(name: string, schema: unknown): Record<string, unknown> {
+    if (this.isMeta()) return {};
+    if (this.isClaude()) {
+      return {
+        outputConfig: {
+          textFormat: { type: "json_schema", structure: { jsonSchema: { name, schema: JSON.stringify(schema) } } },
+        },
+      };
+    }
+    return {
+      toolConfig: {
+        tools: [{ toolSpec: { name, inputSchema: { json: schema } } }],
+        toolChoice: { tool: { name } },
+      },
+    };
+  }
+
   supportsVision(): boolean {
     return !this.isMeta();
   }
@@ -86,17 +114,11 @@ export class BedrockProvider implements TranslationProvider {
         ? { image: { format: IMAGE_FORMATS[b.mediaType ?? ""] ?? "png", source: { bytes: Buffer.from(b.base64 ?? "", "base64") } } }
         : { text: b.text ?? "" },
     );
-    const SCHEMA_NAME = "emit_completion";
     const input = {
       modelId: this.config.model,
       system: [{ text: req.system }],
       messages: [{ role: "user", content: blocks }],
-      ...(this.isMeta() ? {} : {
-        toolConfig: {
-          tools: [{ toolSpec: { name: SCHEMA_NAME, inputSchema: { json: req.schema } } }],
-          toolChoice: { tool: { name: SCHEMA_NAME } },
-        },
-      }),
+      ...this.structuredOutput("emit_completion", req.schema),
     };
     const res = await this.client.send(this.makeCommand(input));
     const content = (res.output?.message?.content ?? []) as Array<{
@@ -114,20 +136,12 @@ export class BedrockProvider implements TranslationProvider {
   }
 
   private buildInput(batch: TranslationRequest[]): unknown {
-    const input: Record<string, unknown> = {
+    return {
       modelId: this.config.model,
       system: [{ text: buildSystemPrompt(batch) }],
       messages: [{ role: "user", content: this.buildContentBlocks(batch) }],
+      ...this.structuredOutput("emit_translations", BATCH_SCHEMA),
     };
-    // Force structured output via a single tool, except for models without
-    // reliable tool-use (Meta) — those rely on the prompt-and-parse fallback.
-    if (!this.isMeta()) {
-      input.toolConfig = {
-        tools: [{ toolSpec: { name: "emit_translations", inputSchema: { json: BATCH_SCHEMA } } }],
-        toolChoice: { tool: { name: "emit_translations" } },
-      };
-    }
-    return input;
   }
 
   private async callBatch(batch: TranslationRequest[], signal?: AbortSignal): Promise<ReplyItem[]> {
@@ -149,8 +163,8 @@ export class BedrockProvider implements TranslationProvider {
     // reply.map and crash the run. Anything else falls through to the text path
     // (and, ultimately, MalformedReplyError) like every other malformed reply.
     if (Array.isArray(tool?.input?.items)) return tool.input.items;
-    // Fallback for Meta (no tool-use) or a malformed reply: parse a JSON text
-    // block. An unparseable reply throws MalformedReplyError; runBatched logs
+    // Claude's structured output and Meta's prompted reply both arrive as a
+    // JSON text block, as does a malformed reply: parse it. An unparseable reply throws MalformedReplyError; runBatched logs
     // the raw reply and retries the batch once before degrading.
     return parseReplyItems(text);
   }
