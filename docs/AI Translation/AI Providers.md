@@ -60,9 +60,11 @@ Stored per-machine in `.glotfile/settings.json` (gitignored). The default:
 
 **AWS Bedrock — Claude or Meta Llama** (same provider, different model id):
 ```json
-"ai": { "provider": "bedrock", "model": "anthropic.claude-3-5-sonnet-20241022-v2:0", "region": "us-east-1", "endpoint": null, "batchSize": 25 }
-"ai": { "provider": "bedrock", "model": "meta.llama3-1-70b-instruct-v1:0",        "region": "us-east-1", "endpoint": null, "batchSize": 25 }
+"ai": { "provider": "bedrock", "model": "us.anthropic.claude-sonnet-5-5",  "region": "us-east-1", "endpoint": null, "batchSize": 25 }
+"ai": { "provider": "bedrock", "model": "meta.llama3-1-70b-instruct-v1:0", "region": "us-east-1", "endpoint": null, "batchSize": 25 }
 ```
+
+Claude on Bedrock needs Claude 4.5 or later. Glotfile asks Claude for structured output, which older Claude models don't support. Use a model id or cross-region inference profile that contains `anthropic.` (e.g. `us.anthropic.claude-sonnet-5-5`): Glotfile reads the model family from the id, so an application inference profile ARN isn't recognised as Claude and its requests fail.
 
 ## Vision (screenshots)
 
