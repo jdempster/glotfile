@@ -76,6 +76,95 @@ describe("validate", () => {
     ).toThrow(/invalid state "bogus"/);
   });
 
+  describe("a hand-edited value with a missing state", () => {
+    const base = {
+      version: 1,
+      config: {
+        sourceLocale: "en",
+        locales: ["en", "fr"],
+        outputs: [],
+        ai: { provider: "anthropic", model: "m", endpoint: null, batchSize: 1 },
+        format: { indent: 2, sortKeys: true, finalNewline: true },
+      },
+      glossary: [],
+    };
+    // A dropped "state" is the common hand-edit slip: the value is there, the
+    // metadata isn't. It must fail loudly, and name what to fix.
+    const missingState = () => ({
+      ...base,
+      keys: {
+        "plant.water": {
+          values: {
+            en: { value: "Water your plant, {gardener}", state: "source" },
+            fr: { value: "Arrosez votre plante, {gardener}" },
+          },
+        },
+        "plant.feed": {
+          values: {
+            en: { value: "Feed your plant", state: "source" },
+            fr: { value: "Nourrissez votre plante" },
+          },
+        },
+      },
+    });
+
+    it("names the key and locale of every offending value, not just the first", () => {
+      let err: GlotfileError | undefined;
+      try {
+        validate(missingState());
+      } catch (e) {
+        err = e as GlotfileError;
+      }
+      expect(err).toBeInstanceOf(GlotfileError);
+      expect(err!.issues.map((i) => [i.key, i.locale])).toEqual([
+        ["plant.water", "fr"],
+        ["plant.feed", "fr"],
+      ]);
+      // Both keys are named in the message, so one run tells you everything to fix.
+      expect(err!.message).toMatch(/key "plant.water" locale "fr" has invalid state "undefined"/);
+      expect(err!.message).toMatch(/key "plant.feed" locale "fr" has invalid state "undefined"/);
+    });
+
+    it("still loads once every missing state is supplied", () => {
+      const s = validate({
+        ...base,
+        keys: {
+          "plant.water": {
+            values: {
+              en: { value: "Water your plant, {gardener}", state: "source" },
+              fr: { value: "Arrosez votre plante, {gardener}", state: "needs-review" },
+            },
+          },
+        },
+      });
+      expect(s.keys["plant.water"]!.values.fr!.state).toBe("needs-review");
+    });
+
+    it("reports problems across different keys and reasons in one pass", () => {
+      let err: GlotfileError | undefined;
+      try {
+        validate({
+          ...base,
+          keys: {
+            "plant.water": { values: { en: { value: "Water your plant", state: "source" }, fr: { value: "Arrosez", state: "bogus" } } },
+            "plant.feed": { values: { en: { value: "Feed your plant", state: "source" }, fr: { value: 42, state: "reviewed" } } },
+            "plant.repot": { values: { en: { value: "Repot", state: "source" } }, contextSource: "human" },
+          },
+        });
+      } catch (e) {
+        err = e as GlotfileError;
+      }
+      expect(err!.issues).toHaveLength(3);
+      expect(err!.issues.map((i) => i.message)).toEqual([
+        'key "plant.water" locale "fr" has invalid state "bogus"',
+        'key "plant.feed" locale "fr" value must be a string',
+        'key "plant.repot" contextSource must be "ai" if present',
+      ]);
+      // Key-level problems carry no locale.
+      expect(err!.issues[2]!.locale).toBe("");
+    });
+  });
+
   it("accepts scan.keep globs and rejects a non-string-array scan.keep", () => {
     const base = {
       version: 1,
