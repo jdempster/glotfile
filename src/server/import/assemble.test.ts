@@ -55,6 +55,66 @@ describe("assemble", () => {
     expect(state.warnings.some((w) => w.includes("auth.orphan"))).toBe(true);
   });
 
+  // Locale tokens arrive raw (filename case, "en-US") while --source-locale is
+  // free-form ("en-us"). Every fixture above happens to use a locale whose raw and
+  // canonical forms are identical, which is why a case difference went unnoticed.
+  describe("source locale given in a different case than the locale files", () => {
+    const bcp47: ParseResult = {
+      locales: ["en-US", "fr-FR"],
+      keys: {
+        "plant.water": { values: { "en-US": "Water your plant", "fr-FR": "Arrosez votre plante" } },
+      },
+      warnings: [],
+    };
+
+    it("stamps the source value as 'source'", () => {
+      const state = assemble(bcp47, { sourceLocale: "en-us", format: "vue-i18n-json" });
+      expect(state.keys["plant.water"]!.values["en-us"]!.state).toBe("source");
+    });
+
+    it("stamps the other locales as 'reviewed'", () => {
+      const state = assemble(bcp47, { sourceLocale: "en-us", format: "vue-i18n-json" });
+      expect(state.keys["plant.water"]!.values["fr-fr"]!.state).toBe("reviewed");
+    });
+
+    it("does not warn that the source value is missing", () => {
+      const state = assemble(bcp47, { sourceLocale: "en-us", format: "vue-i18n-json" });
+      expect(state.warnings).toEqual([]);
+    });
+
+    it("still detects a plural whose source value is only reachable canonically", () => {
+      const plural: ParseResult = {
+        locales: ["en-US", "fr-FR"],
+        keys: {
+          "plant.count": {
+            values: {
+              "en-US": "{count, plural, one {# plant} other {# plants}}",
+              "fr-FR": "{count, plural, one {# plante} other {# plantes}}",
+            },
+          },
+        },
+        warnings: [],
+      };
+      const state = assemble(plural, { sourceLocale: "en-us", format: "vue-i18n-json" });
+      expect(state.keys["plant.count"]!.plural).toEqual({ arg: "count" });
+      expect(state.keys["plant.count"]!.values["en-us"]!.forms).toEqual({
+        one: "{count} plant",
+        other: "{count} plants",
+      });
+    });
+
+    it("still warns for a key that genuinely has no source value", () => {
+      const orphan: ParseResult = {
+        locales: ["en-US", "fr-FR"],
+        keys: { "plant.feed": { values: { "fr-FR": "Nourrissez votre plante, {gardener}" } } },
+        warnings: [],
+      };
+      const state = assemble(orphan, { sourceLocale: "en-us", format: "vue-i18n-json" });
+      expect(state.warnings.some((w) => w.includes("plant.feed"))).toBe(true);
+      expect(state.keys["plant.feed"]!.values["fr-fr"]!.state).toBe("reviewed");
+    });
+  });
+
   it("includes all locales sorted", () => {
     const state = assemble(parsed, { sourceLocale: "en", format: "flutter-arb" });
     expect(state.config.locales).toEqual(["en", "fr"]);
