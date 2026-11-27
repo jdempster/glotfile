@@ -10,10 +10,12 @@ import { railsYaml } from "../adapters/rails-yaml.js";
 import { i18nextJson } from "../adapters/i18next-json.js";
 import { gettextPo } from "../adapters/gettext-po.js";
 import { appleStringsdict } from "../adapters/apple-stringsdict.js";
+import { vueI18nJson } from "../adapters/vue-i18n-json.js";
 
 const ROOT = resolve("test/fixtures/import/arb-plural");
 const APPLE_ROOT = resolve("test/fixtures/import/apple");
 const ANGULAR_ROOT = resolve("test/fixtures/import/angular-xliff");
+const VUE_WS_ROOT = resolve("test/fixtures/import/vue-whitespace");
 
 // End-to-end proof for the user's requirement: a Flutter project whose plurals use
 // exact `=N` selectors (the kiosk case) imports into glotfile's structured plural
@@ -226,5 +228,38 @@ describe("apple-stringsdict round-trip", () => {
     const en = r.files.find((f) => f.path.includes("en.lproj"))!.contents;
     expect(en).toContain("<key>NSStringLocalizedFormatKey</key>");
     expect(en).toContain("<string>%d items</string>");
+  });
+});
+
+// Values that get concatenated at runtime — a list separator, a sentence fragment
+// joined in a template — carry their padding as meaning. The storage contract
+// trims by default, which silently runs those words together, so
+// config.preserveWhitespace has to survive the whole import -> export path.
+describe("preserveWhitespace round-trip (vue-i18n-json)", () => {
+  const outputs = { adapter: "vue-i18n-json", path: "src/locales/{locale}.json", localeCase: "bcp47-hyphen" } as const;
+
+  it("keeps leading and trailing padding byte-for-byte", () => {
+    const { state } = runImport({
+      projectRoot: VUE_WS_ROOT,
+      sourceLocale: "en-us",
+      preserveWhitespace: true,
+    });
+    expect(state.config.preserveWhitespace).toBe(true);
+    expect(state.keys["common.list_separator"]!.values["en-us"]!.value).toBe(", ");
+    expect(state.keys["common.pipe"]!.values["en-us"]!.value).toBe(" | ");
+    expect(state.keys["plant.watered_prefix"]!.values["fr-fr"]!.value).toBe(" Arrosée par {gardener}");
+
+    const r = vueI18nJson.export(state, outputs);
+    const en = JSON.parse(r.files.find((f) => f.path.endsWith("en-US.json"))!.contents);
+    expect(en.common.list_separator).toBe(", ");
+    expect(en.common.pipe).toBe(" | ");
+    expect(en.plant.watered_prefix).toBe(" Watered by {gardener}");
+  });
+
+  it("still trims by default, so the opt-out is what changes behaviour", () => {
+    const { state } = runImport({ projectRoot: VUE_WS_ROOT, sourceLocale: "en-us" });
+    expect(state.config.preserveWhitespace).toBeUndefined();
+    expect(state.keys["common.list_separator"]!.values["en-us"]!.value).toBe(",");
+    expect(state.keys["common.pipe"]!.values["en-us"]!.value).toBe("|");
   });
 });

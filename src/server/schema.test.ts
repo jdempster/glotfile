@@ -37,6 +37,43 @@ describe("validate", () => {
     expect(s.keys["auth.signIn"]!.values.en!.state).toBe("source");
   });
 
+  it("preserves surrounding whitespace on load when config.preserveWhitespace is set", () => {
+    const raw = (preserveWhitespace: boolean | undefined) => ({
+      version: 1,
+      config: {
+        sourceLocale: "en",
+        locales: ["en", "fr"],
+        outputs: [{ adapter: "vue-i18n-json", path: "src/locales/{locale}.json" }],
+        format: { indent: 2, sortKeys: true, finalNewline: true },
+        ...(preserveWhitespace === undefined ? {} : { preserveWhitespace }),
+      },
+      glossary: [],
+      keys: {
+        "common.list_separator": { values: { en: { value: ", ", state: "source" } } },
+      },
+    });
+    expect(validate(raw(true)).keys["common.list_separator"]!.values.en!.value).toBe(", ");
+    expect(validate(raw(false)).keys["common.list_separator"]!.values.en!.value).toBe(",");
+    expect(validate(raw(undefined)).keys["common.list_separator"]!.values.en!.value).toBe(",");
+  });
+
+  it("throws when preserveWhitespace is not a boolean", () => {
+    expect(() =>
+      validate({
+        version: 1,
+        config: {
+          sourceLocale: "en",
+          locales: ["en", "fr"],
+          outputs: [],
+          format: { indent: 2, sortKeys: true, finalNewline: true },
+          preserveWhitespace: "yes",
+        },
+        glossary: [],
+        keys: {},
+      }),
+    ).toThrow(/config.preserveWhitespace must be a boolean/);
+  });
+
   it("throws GlotfileError on a non-object root", () => {
     expect(() => validate(null)).toThrow(GlotfileError);
     expect(() => validate("x")).toThrow(/must be a JSON object/);

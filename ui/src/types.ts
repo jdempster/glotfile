@@ -98,6 +98,7 @@ export interface Config {
   outputs: OutputConfig[];
   format: { indent: number; sortKeys: boolean; finalNewline: boolean };
   autoExport?: boolean;
+  preserveWhitespace?: boolean;
   // Optional allow-list narrowing which locales every export writes. Empty/absent = all.
   exportLocales?: string[];
   spelling?: { customWords: string[] };

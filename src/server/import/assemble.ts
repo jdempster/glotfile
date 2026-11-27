@@ -49,7 +49,9 @@ export function assemble(
   // (Crowdin-style). Off by default — the lossless import keeps "=N" verbatim.
   // localeRootRel: project-root-relative offset of the detected locale root, used
   // for rootRelative formats so the output path points back at the source files.
-  opts: { sourceLocale: string; format: string; cldr?: boolean; localeRootRel?: string },
+  // preserveWhitespace: keep leading/trailing padding on imported values instead
+  // of letting the storage contract trim it (runtime-concatenated separators).
+  opts: { sourceLocale: string; format: string; cldr?: boolean; localeRootRel?: string; preserveWhitespace?: boolean },
 ): AssembleResult {
   const warnings = [...parsed.warnings];
   const base = OUTPUT_BY_FORMAT[opts.format];
@@ -126,6 +128,7 @@ export function assemble(
       locales,
       outputs: [output],
       format: { indent: 2, sortKeys: true, finalNewline: true },
+      ...(opts.preserveWhitespace ? { preserveWhitespace: true } : {}),
       spelling: { customWords: [] },
     },
     glossary: [],

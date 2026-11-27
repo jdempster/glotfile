@@ -77,6 +77,7 @@ export interface ParsedArgs {
   importFormat?: string;
   importSourceLocale?: string;
   importCldr?: boolean;
+  importPreserveWhitespace?: boolean;
   importForce?: boolean;
   // sync-specific
   prune?: boolean;
@@ -152,6 +153,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (flag === "--source-locale" && next) { args.importSourceLocale = next; i++; }
     else if (flag === "--force") args.importForce = true;
     else if (flag === "--cldr") args.importCldr = true;
+    else if (flag === "--preserve-whitespace") args.importPreserveWhitespace = true;
     else if (flag === "--prune") args.prune = true;
     else if (flag === "--dry-run") args.dryRun = true;
     else if (flag === "--rule" && next) { args.ruleIds = next.split(","); i++; }
@@ -723,6 +725,7 @@ async function runImportCmd(args: ParsedArgs): Promise<void> {
       sourceLocale: args.importSourceLocale,
       locales: args.locales,
       cldr: args.importCldr,
+      preserveWhitespace: args.importPreserveWhitespace,
     });
   } catch (e) {
     console.error((e as Error).message);
@@ -757,6 +760,7 @@ async function runSyncCmd(args: ParsedArgs): Promise<void> {
       sourceLocale: args.importSourceLocale,
       locales: args.locales,
       cldr: args.importCldr,
+      preserveWhitespace: args.importPreserveWhitespace,
       prune: args.prune,
     });
   } catch (e) {
@@ -1478,13 +1482,14 @@ const COMMAND_HELP: Record<Exclude<ParsedArgs["command"], "help" | "version">, {
   },
   import: {
     summary: "Create glotfile.json from existing locale files.",
-    usage: "glotfile import --format <name> [--source <dir>] [--source-locale <code>] [--locales <list>] [--cldr] [--force]",
+    usage: "glotfile import --format <name> [--source <dir>] [--source-locale <code>] [--locales <list>] [--cldr] [--preserve-whitespace] [--force]",
     options: [
       ["--format <name>", "Source layout adapter (e.g. laravel-php, flutter-arb)"],
       ["--source <dir>", "Directory to import from (default: the state file's directory)"],
       ["--source-locale <code>", "Locale to treat as the source"],
       ["--locales <list>", "Comma-separated locales to import"],
       ["--cldr", "Expand CLDR plural forms"],
+      ["--preserve-whitespace", "Keep leading/trailing whitespace in values (sets config.preserveWhitespace)"],
       ["--force", "Overwrite an existing glotfile.json"],
     ],
   },
@@ -1497,6 +1502,7 @@ const COMMAND_HELP: Record<Exclude<ParsedArgs["command"], "help" | "version">, {
       ["--source-locale <code>", "Locale to treat as the source"],
       ["--locales <list>", "Comma-separated locales to read"],
       ["--cldr", "Expand CLDR plural forms"],
+      ["--preserve-whitespace", "Keep leading/trailing whitespace in values (sets config.preserveWhitespace)"],
       ["--prune", "Delete keys that are gone from the import (default: report only)"],
       ["--dry-run", "Show the changeset without writing anything"],
     ],
