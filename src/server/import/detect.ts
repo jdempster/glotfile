@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 export interface Detection {
   format: string;
@@ -9,10 +9,29 @@ export interface Detection {
 }
 
 const LOCALE_RE = /^[a-z]{2,3}([_-][A-Za-z]{2,4}){0,2}$/;
-const VUE_DIR_CANDIDATES = ["src/locale", "src/locales", "src/i18n/locales", "locales", "lang"];
+// The search root itself, as a last-resort candidate. `--source` is documented as
+// the directory to read locale files from, but every detector looked only in
+// conventional subdirectories beneath it, so pointing it straight at the
+// directory holding the files found nothing. Ordered last so a conventional
+// subdirectory still wins at a project root.
+const SELF = ".";
+const VUE_DIR_CANDIDATES = ["src/locale", "src/locales", "src/i18n/locales", "locales", "lang", SELF];
 
 function safeIsDir(p: string): boolean {
   try { return statSync(p).isDirectory(); } catch { return false; }
+}
+
+// A split-storage catalog is `config.json` + `keys.json` alongside a `locales/`
+// directory of per-locale value files. Those files are glotfile's own
+// `{ value, state }` records, not framework locale files: parsing them as
+// translations shreds every entry into `<key>.value` / `<key>.state` and reports
+// the real keys as removed. Never search a catalog, or a directory inside one.
+function isCatalogDir(dir: string): boolean {
+  return existsSync(join(dir, "config.json")) && existsSync(join(dir, "keys.json"));
+}
+
+function isLocaleSearchDir(p: string): boolean {
+  return safeIsDir(p) && !isCatalogDir(p) && !isCatalogDir(dirname(p));
 }
 
 function listDirs(dir: string): string[] {
@@ -29,7 +48,9 @@ function pickSource(locales: string[], sizeOf: (loc: string) => number): string 
 }
 
 function detectLaravel(root: string): Detection | null {
-  const localeRoot = [join(root, "resources", "lang"), join(root, "lang")].find(safeIsDir);
+  // No `SELF` candidate: laravel locales are bare directory names, and LOCALE_RE
+  // matches plenty of ordinary ones ("src"), so the named parent is the only signal.
+  const localeRoot = [join(root, "resources", "lang"), join(root, "lang")].find(isLocaleSearchDir);
   if (!localeRoot) return null;
   const locales = listDirs(localeRoot).filter((d) => LOCALE_RE.test(d));
   if (locales.length === 0) return null;
@@ -40,7 +61,7 @@ function detectLaravel(root: string): Detection | null {
 function detectVue(root: string, forced = false): Detection | null {
   for (const rel of VUE_DIR_CANDIDATES) {
     const localeRoot = join(root, rel);
-    if (!safeIsDir(localeRoot)) continue;
+    if (!isLocaleSearchDir(localeRoot)) continue;
     const locales = readdirSync(localeRoot)
       .filter((f) => f.endsWith(".json"))
       .map((f) => f.slice(0, -5))
@@ -64,7 +85,7 @@ function detectVue(root: string, forced = false): Detection | null {
 // — to keep plain Vue projects out. Runs before detectVue for the same reason.
 const NEXT_INTL_CONFIG_CANDIDATES = ["src/i18n/request.ts", "i18n/request.ts", "src/i18n/request.js", "i18n/request.js"];
 const NEXT_INTL_ROUTING_CANDIDATES = ["src/i18n/routing.ts", "i18n/routing.ts", "src/i18n/routing.js", "i18n/routing.js"];
-const NEXT_INTL_DIR_CANDIDATES = ["messages", "src/messages", "locales", "src/locales", "src/i18n/messages"];
+const NEXT_INTL_DIR_CANDIDATES = ["messages", "src/messages", "locales", "src/locales", "src/i18n/messages", SELF];
 
 function hasNextIntlSignal(root: string): boolean {
   if (NEXT_INTL_CONFIG_CANDIDATES.some((rel) => existsSync(join(root, rel)))) return true;
@@ -91,7 +112,7 @@ function detectNextIntl(root: string, forced = false): Detection | null {
   if (!forced && !hasNextIntlSignal(root)) return null;
   for (const rel of NEXT_INTL_DIR_CANDIDATES) {
     const localeRoot = join(root, rel);
-    if (!safeIsDir(localeRoot)) continue;
+    if (!isLocaleSearchDir(localeRoot)) continue;
     const locales = readdirSync(localeRoot)
       .filter((f) => f.endsWith(".json"))
       .map((f) => f.slice(0, -5))
@@ -109,9 +130,9 @@ function detectNextIntl(root: string, forced = false): Detection | null {
 }
 
 function detectArb(root: string): Detection | null {
-  for (const rel of ["lib/l10n", "l10n", "lib/src/l10n"]) {
+  for (const rel of ["lib/l10n", "l10n", "lib/src/l10n", SELF]) {
     const localeRoot = join(root, rel);
-    if (!safeIsDir(localeRoot)) continue;
+    if (!isLocaleSearchDir(localeRoot)) continue;
     const locales = readdirSync(localeRoot)
       .map((f) => f.match(/^(?:app_)?(.+)\.arb$/)?.[1])
       .filter((l): l is string => !!l && LOCALE_RE.test(l));
@@ -133,7 +154,7 @@ function lprojLocales(dir: string): string[] {
 function detectApple(root: string): Detection | null {
   // .lproj dirs commonly sit one level down (e.g. "<App Name>/en.lproj"), so scan
   // the root and each immediate subdir, then pick the dir covering the most locales.
-  const candidates = [root, ...listDirs(root).map((d) => join(root, d))];
+  const candidates = [root, ...listDirs(root).map((d) => join(root, d))].filter(isLocaleSearchDir);
   let best: Detection | null = null;
   for (const dir of candidates) {
     const locales = lprojLocales(dir);
@@ -161,7 +182,7 @@ const ANGULAR_DIR_CANDIDATES = [".", "src/locale", "src/locales", "src/i18n", "l
 function detectAngularXliff(root: string): Detection | null {
   for (const rel of ANGULAR_DIR_CANDIDATES) {
     const localeRoot = rel === "." ? root : join(root, rel);
-    if (!safeIsDir(localeRoot)) continue;
+    if (!isLocaleSearchDir(localeRoot)) continue;
     const files = readdirSync(localeRoot).filter((f) => /^messages(\..+)?\.xlf$/.test(f)).sort();
     if (files.length === 0) continue;
     const locales = files
@@ -184,7 +205,7 @@ function detectAngularXliff(root: string): Detection | null {
 // (not the filename — devise.en.yml-style names exist) is the authoritative locale.
 function detectRails(root: string): Detection | null {
   const localeRoot = join(root, "config", "locales");
-  if (!safeIsDir(localeRoot)) return null;
+  if (!isLocaleSearchDir(localeRoot)) return null;
   const locales: string[] = [];
   for (const file of readdirSync(localeRoot).sort()) {
     if (!/\.ya?ml$/.test(file)) continue;
@@ -203,12 +224,12 @@ function detectRails(root: string): Detection | null {
 // i18next's per-locale-directory layout (public/locales/<lng>/<ns>.json). Flat
 // <lng>.json files are left to the vue-i18n detector / an explicit --format:
 // the dir shape is the only signal that distinguishes the two formats.
-const I18NEXT_DIR_CANDIDATES = ["public/locales", "static/locales", "locales", "src/locales", "src/i18n/locales"];
+const I18NEXT_DIR_CANDIDATES = ["public/locales", "static/locales", "locales", "src/locales", "src/i18n/locales", SELF];
 
 function detectI18next(root: string): Detection | null {
   for (const rel of I18NEXT_DIR_CANDIDATES) {
     const localeRoot = join(root, rel);
-    if (!safeIsDir(localeRoot)) continue;
+    if (!isLocaleSearchDir(localeRoot)) continue;
     const locales = listDirs(localeRoot).filter(
       (d) => LOCALE_RE.test(d) && readdirSync(join(localeRoot, d)).some((f) => f.endsWith(".json")),
     );
@@ -245,12 +266,12 @@ function gettextLocales(dir: string): string[] {
   return locales;
 }
 
-const GETTEXT_DIR_CANDIDATES = ["locale", "locales", "po", "translations"];
+const GETTEXT_DIR_CANDIDATES = ["locale", "locales", "po", "translations", SELF];
 
 function detectGettext(root: string): Detection | null {
   for (const rel of GETTEXT_DIR_CANDIDATES) {
     const localeRoot = join(root, rel);
-    if (!safeIsDir(localeRoot)) continue;
+    if (!isLocaleSearchDir(localeRoot)) continue;
     const locales = gettextLocales(localeRoot);
     if (locales.length === 0) continue;
     return { format: "gettext-po", localeRoot, locales, sourceLocale: pickSource(locales, () => 0) };
@@ -263,7 +284,7 @@ function detectGettext(root: string): Detection | null {
 // as apple-strings; stringsdict-only projects (or --format apple-stringsdict)
 // land here.
 function detectAppleStringsdict(root: string): Detection | null {
-  const candidates = [root, ...listDirs(root).map((d) => join(root, d))];
+  const candidates = [root, ...listDirs(root).map((d) => join(root, d))].filter(isLocaleSearchDir);
   let best: Detection | null = null;
   for (const dir of candidates) {
     const locales = listDirs(dir)
@@ -304,6 +325,7 @@ const BY_FORMAT: Record<string, (root: string) => Detection | null> = {
 
 export function detect(root: string, formatOverride?: string): Detection | null {
   if (!existsSync(root)) return null;
+  if (isCatalogDir(root)) return null;
   if (formatOverride) {
     const fn = BY_FORMAT[formatOverride];
     if (!fn) throw new Error(`Unknown format: ${formatOverride}`);
