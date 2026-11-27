@@ -609,7 +609,6 @@ describe("glotfile split", () => {
       version: 1,
       config: {
         sourceLocale: "en", locales: ["en", "fr"], outputs: [],
-        ai: { provider: "anthropic", model: "m", endpoint: null, batchSize: 25 },
         format: { indent: 2, sortKeys: true, finalNewline: true },
       },
       glossary: [],

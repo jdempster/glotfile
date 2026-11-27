@@ -8,7 +8,6 @@ function withConfig(lint: unknown) {
       sourceLocale: "en",
       locales: ["en", "fr"],
       outputs: [{ adapter: "flutter-arb", path: "lib/l10n/app_{locale}.arb" }],
-      ai: { provider: "anthropic", model: "claude-opus-4-8", endpoint: null, batchSize: 25 },
       format: { indent: 2, sortKeys: true, finalNewline: true },
       lint,
     },
@@ -25,7 +24,6 @@ describe("validate", () => {
         sourceLocale: "en",
         locales: ["en", "fr"],
         outputs: [{ adapter: "flutter-arb", path: "lib/l10n/app_{locale}.arb" }],
-        ai: { provider: "anthropic", model: "claude-opus-4-8", endpoint: null, batchSize: 25 },
         format: { indent: 2, sortKeys: true, finalNewline: true },
       },
       glossary: [],
@@ -50,7 +48,6 @@ describe("validate", () => {
           sourceLocale: "de",
           locales: ["en", "fr"],
           outputs: [],
-          ai: { provider: "anthropic", model: "m", endpoint: null, batchSize: 1 },
           format: { indent: 2, sortKeys: true, finalNewline: true },
         },
         glossary: [],
@@ -67,7 +64,6 @@ describe("validate", () => {
           sourceLocale: "en",
           locales: ["en"],
           outputs: [],
-          ai: { provider: "anthropic", model: "m", endpoint: null, batchSize: 1 },
           format: { indent: 2, sortKeys: true, finalNewline: true },
         },
         glossary: [],
@@ -83,7 +79,6 @@ describe("validate", () => {
         sourceLocale: "en",
         locales: ["en"],
         outputs: [],
-        ai: { provider: "anthropic", model: "m", endpoint: null, batchSize: 1 },
         format: { indent: 2, sortKeys: true, finalNewline: true },
       },
       glossary: [],
@@ -104,7 +99,6 @@ describe("validate", () => {
           sourceLocale: "en",
           locales: ["en"],
           outputs: [],
-          ai: { provider: "anthropic", model: "m", endpoint: null, batchSize: 1 },
           format: { indent: 2, sortKeys: true, finalNewline: true },
         },
         glossary: [],
@@ -121,7 +115,6 @@ describe("validate", () => {
           sourceLocale: "en",
           locales: ["en"],
           outputs: [],
-          ai: { provider: "anthropic", model: "m", endpoint: null, batchSize: 1 },
           format: { indent: "x", sortKeys: true, finalNewline: true },
         },
         glossary: [],
@@ -137,7 +130,6 @@ describe("validate", () => {
         sourceLocale: "en",
         locales: ["en"],
         outputs: [],
-        ai: { provider: "anthropic", model: "m", endpoint: null, batchSize: 1 },
         format: { indent: 2, sortKeys: true, finalNewline: true },
       },
       glossary: [],
@@ -159,7 +151,6 @@ describe("validate", () => {
           sourceLocale: "en",
           locales: ["en"],
           outputs: [],
-          ai: { provider: "anthropic", model: "m", endpoint: null, batchSize: 1 },
           format: { indent: 2, sortKeys: true, finalNewline: true },
         },
         glossary: [],
@@ -180,7 +171,6 @@ describe("validate", () => {
         sourceLocale: "en",
         locales: ["en", "pl"],
         outputs: [],
-        ai: { provider: "anthropic", model: "m", endpoint: null, batchSize: 1 },
         format: { indent: 2, sortKeys: true, finalNewline: true },
       },
       glossary: [],
@@ -204,7 +194,6 @@ describe("validate", () => {
         version: 2,
         config: {
           sourceLocale: "en", locales: ["en"], outputs: [],
-          ai: { provider: "anthropic", model: "m", endpoint: null, batchSize: 1 },
           format: { indent: 2, sortKeys: true, finalNewline: true },
         },
         glossary: [],
@@ -219,7 +208,6 @@ describe("validate", () => {
         version: 2,
         config: {
           sourceLocale: "en", locales: ["en"], outputs: [],
-          ai: { provider: "anthropic", model: "m", endpoint: null, batchSize: 1 },
           format: { indent: 2, sortKeys: true, finalNewline: true },
         },
         glossary: [],
@@ -233,7 +221,6 @@ describe("validate", () => {
       version: 2,
       config: {
         sourceLocale: "en", locales: ["en"], outputs: [],
-        ai: { provider: "anthropic", model: "m", endpoint: null, batchSize: 1 },
         format: { indent: 2, sortKeys: true, finalNewline: true },
       },
       glossary: [],
@@ -248,7 +235,6 @@ describe("validate", () => {
         version: 2,
         config: {
           sourceLocale: "en", locales: ["en"], outputs: [],
-          ai: { provider: "anthropic", model: "m", endpoint: null, batchSize: 1 },
           format: { indent: 2, sortKeys: true, finalNewline: true },
         },
         glossary: [],
@@ -299,7 +285,7 @@ describe("contextSource field", () => {
       version: 1,
       config: {
         sourceLocale: "en", locales: ["en"],
-        outputs: [], ai: { provider: "anthropic", model: "m", endpoint: null, batchSize: 1 },
+        outputs: [], 
         format: { indent: 2, sortKeys: true, finalNewline: true },
       },
       glossary: [],
@@ -453,7 +439,6 @@ function baseRaw() {
       sourceLocale: "en",
       locales: ["en"],
       outputs: [],
-      ai: { provider: "anthropic", model: "m", endpoint: null, batchSize: 25 },
       format: { indent: 2, sortKeys: true, finalNewline: true },
     },
     glossary: [],
@@ -505,5 +490,33 @@ describe("OutputConfig localeCase/localeMap validation", () => {
   it("accepts a localeMap key written with underscores matching a hyphen locale", () => {
     const s = stateWithOutput({ adapter: "flutter-arb", path: "app_{locale}.arb", localeMap: { "zh_hant": "zh_HK" } });
     expect(() => validate(s)).not.toThrow();
+  });
+});
+
+describe("config.ai", () => {
+  // AI provider settings are per-developer (.glotfile/settings.json). A committed
+  // `ai` block used to be silently ignored, which quietly translated with the
+  // default model instead of the one the project thought it had pinned.
+  it("rejects an ai block in the committed config", () => {
+    const raw = baseRaw();
+    (raw.config as Record<string, unknown>).ai = {
+      provider: "anthropic",
+      model: "claude-sonnet-5",
+      endpoint: null,
+      region: null,
+      batchSize: 25,
+    };
+    expect(() => validate(raw)).toThrow(GlotfileError);
+  });
+
+  it("names .glotfile/settings.json so the fix is obvious", () => {
+    const raw = baseRaw();
+    (raw.config as Record<string, unknown>).ai = { provider: "anthropic", model: "claude-sonnet-5" };
+    expect(() => validate(raw)).toThrow(/\.glotfile\/settings\.json/);
+  });
+
+  it("accepts a config with no ai block", () => {
+    expect(() => validate(baseRaw())).not.toThrow();
+    expect(validate(baseRaw()).config).not.toHaveProperty("ai");
   });
 });
