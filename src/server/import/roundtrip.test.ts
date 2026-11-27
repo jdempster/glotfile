@@ -10,6 +10,7 @@ import { railsYaml } from "../adapters/rails-yaml.js";
 import { i18nextJson } from "../adapters/i18next-json.js";
 import { gettextPo } from "../adapters/gettext-po.js";
 import { appleStringsdict } from "../adapters/apple-stringsdict.js";
+import { vueI18nJson } from "../adapters/vue-i18n-json.js";
 
 const ROOT = resolve("test/fixtures/import/arb-plural");
 const APPLE_ROOT = resolve("test/fixtures/import/apple");
@@ -226,5 +227,28 @@ describe("apple-stringsdict round-trip", () => {
     const en = r.files.find((f) => f.path.includes("en.lproj"))!.contents;
     expect(en).toContain("<key>NSStringLocalizedFormatKey</key>");
     expect(en).toContain("<string>%d items</string>");
+  });
+});
+
+// The reported build breaker: {'@'} is vue-i18n's escape for a literal @ (the
+// linked-message operator). Importing stripped the braces and exporting then
+// re-mangled the remains, so the emitted file no longer compiled —
+// unplugin-vue-i18n fails the build with error code 10. Composed through the
+// real import pipeline, not just the parser, because that is the path a user
+// runs.
+describe("vue-i18n-json {'@'} escape round-trip", () => {
+  it("survives import then export byte-for-byte", () => {
+    const root = mkdtempSync(join(tmpdir(), "glotfile-vue-at-e2e-"));
+    const localeDir = join(root, "src", "locale");
+    mkdirSync(localeDir, { recursive: true });
+    const original = { support: { email: "help{'@'}sprout.example" }, plant: { water: "Water {gardener}'s plant" } };
+    writeFileSync(join(localeDir, "en.json"), JSON.stringify(original, null, 2), "utf8");
+
+    const { state } = runImport({ projectRoot: root, sourceLocale: "en" });
+    expect(state.keys["support.email"]!.values.en!.value).toBe("help@sprout.example");
+
+    const r = vueI18nJson.export(state, { adapter: "vue-i18n-json", path: "src/locale/{locale}.json" });
+    const en = JSON.parse(r.files.find((f) => f.path.endsWith("en.json"))!.contents);
+    expect(en.support.email).toBe("help{'@'}sprout.example");
   });
 });
