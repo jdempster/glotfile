@@ -43,6 +43,22 @@ describe("detect", () => {
     expect(d).toBeNull();
   });
 
+  // ru-RU.json is the largest file in this fixture (Cyrillic costs two bytes a
+  // character), which is exactly the case where "biggest file wins" picked the
+  // wrong source locale.
+  it("prefers an en-US source locale over a larger non-English file", () => {
+    const d = detect(resolve("test/fixtures/import/vue-bcp47"));
+    expect(d).not.toBeNull();
+    expect(d!.format).toBe("vue-i18n-json");
+    expect(d!.locales.sort()).toEqual(["de-DE", "en-US", "ru-RU"]);
+    expect(d!.sourceLocale).toBe("en-US");
+  });
+
+  it("detects the src/locales locale root, not just src/locale", () => {
+    const d = detect(resolve("test/fixtures/import/vue-bcp47"));
+    expect(d!.localeRoot).toMatch(/src[/\\]locales$/);
+  });
+
   it("detects vue-i18n-json from a single en locale file", () => {
     const d = detect(resolve("test/fixtures/import/vue-single-en"));
     expect(d).not.toBeNull();
